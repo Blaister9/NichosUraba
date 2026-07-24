@@ -1,0 +1,22 @@
+id,semana,dia,accion,municipio,responsable,entregable_verificable,hipotesis_que_prueba,costo_COP,estado
+A01,1,1-2,Construir la lista nominal de 40 objetivos con cargo y telefono a partir de certificados del registro mercantil de la CCU directorio de Augura y directorio Direct+ de Fenalco Antioquia,Apartado,Socio comercial,Hoja con 40 contactos y telefono verificado,H10,350000,Pendiente
+A02,1,2,Reunion en la Camara de Comercio de Uraba (Calle 104 #101-15 Apartado, (604) 815 5990) para pedir presentacion a tres empresas,Apartado,Socio comercial,Acta de reunion y 2 referidos por escrito,H7,80000,Pendiente
+A03,1,3,Reunion o llamada con Augura para pedir acceso a comercializadoras y asociaciones,Apartado,Socio comercial,1 referido por escrito,H7,80000,Pendiente
+A04,1,4-5,Recorrido de reconocimiento por el eje Chigorodo-Carepa para ubicar y contar sitios de acopio activos,Chigorodo y Carepa,Socio comercial y socio tecnico,Mapa con acopios ubicados y contados,H10,420000,Pendiente
+A05,1,5,Preparar y ensayar el guion de descubrimiento del Archivo 7 con dos ensayos internos grabados,Apartado,Los 3 socios,Guion ajustado tras el ensayo,-,0,Pendiente
+A06,2,6-10,Ejecutar 12 entrevistas de descubrimiento. Prohibido preguntar si compraria la aplicacion,"Chigorodo, Carepa, Apartado",Los 3 socios,12 fichas de entrevista completas,H2 H3 H5 H7,900000,Pendiente
+A07,2,6-10,Visitar 5 sitios de acopio en dia de recepcion y fotografiar el formato en uso,Chigorodo y Carepa,Socio tecnico y comercial,5 fotografias del proceso real,H1,560000,Pendiente
+A08,2,6-10,Medir la senal movil en cada acopio visitado y registrar la ventana diaria de cobertura,Chigorodo y Carepa,Socio tecnico,Tabla de cobertura por acopio,H6,0,Pendiente
+A09,2,10,Presentar tres rangos de precio al cierre de al menos 10 entrevistas sin pedir compromiso,Varios,Socio comercial,Registro de reaccion al precio en 10 casos,H4,0,Pendiente
+A10,3,11-13,Construir prototipo navegable de 6 pantallas: recepcion calidad rechazo comprobante consolidado y liquidacion. Sin backend,Remoto,Ingeniero mecatronico y desarrollador,Prototipo navegable de 6 pantallas,-,0,Pendiente
+A11,3,14-15,8 sesiones de prueba del prototipo con recibidores reales cronometrando cada registro,Chigorodo y Carepa,Socio tecnico,Tiempo medio por registro y 8 registros de observacion,H8,640000,Pendiente
+A12,3,15,Consolidar hallazgos de las 12 entrevistas en una sintesis de una pagina con citas textuales,Remoto,Los 3 socios,Sintesis de hallazgos de una pagina,-,0,Pendiente
+A13,4,16-19,Prueba de humo: presentar propuesta de piloto de una cosecha con implementacion gratuita y carta de intencion sin obligacion de pago,"Chigorodo, Carepa, Apartado",Socio comercial,Numero de cartas de intencion firmadas,H9,700000,Pendiente
+A14,4,19,Estimacion detallada del MVP en horas por modulo con base en el prototipo probado,Remoto,Socio tecnico,Estimacion en horas y semanas,-,0,Pendiente
+A15,4,20,Comite de decision GO / VALIDATE-2 / NO-GO contra los criterios del informe ejecutivo,Apartado,Los 3 socios,Acta de decision de una pagina firmada por los tres,Todas,0,Pendiente
+A16,1-4,continuo,Reserva para imprevistos de desplazamiento y comunicaciones,Varios,Socio comercial,Registro de gastos,-,1000000,Pendiente
+,,,,,,,,,
+SUBTOTAL_CAMPO,,,Costos de trabajo de campo,,,,,=SUM(I2:I17),
+OTROS,,,"Herramientas, hosting de prueba, prototipo y revision juridica de la carta de intencion (detalle en el Archivo 8)",,,,,2170000,Pendiente
+TOTAL_VALIDACION,,,Presupuesto total de los 30 dias,,,,,=I19+I20,
+NOTA,"Todos los costos de campo son estimaciones de desplazamiento, alimentacion, telefonia e impresion en el triangulo Apartado-Chigorodo-Carepa. No incluyen salarios de los socios, que se asumen como aporte de capital de trabajo. El total debe coincidir con el presupuesto de validacion del Archivo 8: COP 6.900.000.",,,,,,,,

@@ -1,0 +1,58 @@
+id_dato,indicador,valor_numerico,unidad,ano,cobertura_geografica,municipio,sector,nivel_evidencia,id_fuente,nota
+D01,Empresas registradas (stock),12134,empresas,2024,Region - 10 municipios jurisdiccion CCU,Todos,Multisectorial,A,F01,Excluye establecimientos sucursales agencias y ESALES
+D02,Empresas registradas (stock),11671,empresas,2023,Region - 10 municipios,Todos,Multisectorial,A,F01,Base para calcular variacion
+D03,Variacion anual del stock empresarial,=(C2-C3)/C3*100,porcentaje,2024,Region - 10 municipios,Todos,Multisectorial,A,F01,Formula viva sobre D01 y D02; el estudio reporta 3.97
+D04,Microempresas,11651,empresas,2024,Region - 10 municipios,Todos,Multisectorial,A,F01,
+D05,Participacion de microempresas,=C5/C2*100,porcentaje,2024,Region - 10 municipios,Todos,Multisectorial,A,F01,Formula viva; el estudio reporta 96.02
+D06,Pequenas empresas,390,empresas,2024,Region - 10 municipios,Todos,Multisectorial,A,F01,
+D07,Medianas empresas,77,empresas,2024,Region - 10 municipios,Todos,Multisectorial,A,F01,
+D08,Grandes empresas,16,empresas,2024,Region - 10 municipios,Todos,Multisectorial,A,F01,
+D09,Empresas medianas y grandes (universo con capacidad de pago),=C8+C9,empresas,2024,Region - 10 municipios,Todos,Multisectorial,A,F01,Universo real de compradores solventes segun el registro mercantil
+D10,Empresas con 1 a 4 empleados,11084,empresas,2024,Region - 10 municipios,Todos,Multisectorial,A,F01,91.34 por ciento del total
+D11,Empresas con 5 a 9 empleados,525,empresas,2024,Region - 10 municipios,Todos,Multisectorial,A,F01,
+D12,Empresas con 10 a 19 empleados,240,empresas,2024,Region - 10 municipios,Todos,Multisectorial,A,F01,
+D13,Empresas con 20 a 49 empleados,117,empresas,2024,Region - 10 municipios,Todos,Multisectorial,A,F01,
+D14,Empresas con 50 a 249 empleados,79,empresas,2024,Region - 10 municipios,Todos,Multisectorial,A,F01,
+D15,Empresas con 250 o mas empleados,23,empresas,2024,Region - 10 municipios,Todos,Multisectorial,A,F01,
+D16,Empresas creadas,2592,empresas,2024,Region - 10 municipios,Todos,Multisectorial,A,F01,Aumento de 12.15 por ciento frente a 2023
+D17,Empresas que salieron del tejido,3149,empresas,2024,Region - 10 municipios,Todos,Multisectorial,A,F01,Disminucion de 5.86 por ciento frente a 2023
+D18,Saldo neto de empresas,"=C17-C18",empresas,2024,Region - 10 municipios,Todos,Multisectorial,A,F01,Formula viva; saldo negativo pese al crecimiento del stock por depuracion y renovaciones
+D19,Tasa de supervivencia a 5 anos (cohorte 2019),29.1,porcentaje,2024,Region - 10 municipios,Todos,Multisectorial,A,F01,Menos de un tercio de las empresas llega al quinto ano
+D20,Tasa de supervivencia a 5 anos en turismo (cohorte 2019),22.5,porcentaje,2024,Region - 10 municipios,Todos,Turismo,A,F01,Peor que el promedio regional
+D21,Empresas de comercio,6022,empresas,2024,Region - 10 municipios,Todos,Comercio,A,F01,
+D22,Empresas de alojamiento y servicios de comida,1887,empresas,2024,Region - 10 municipios,Todos,Turismo,A,F01,15.55 por ciento del total
+D23,Empresas de industria manufacturera,877,empresas,2024,Region - 10 municipios,Todos,Industria,A,F01,
+D24,Empresas de construccion,490,empresas,2024,Region - 10 municipios,Todos,Construccion,A,F01,
+D25,Empresas de agricultura ganaderia caza silvicultura y pesca,487,empresas,2024,Region - 10 municipios,Todos,Agro,A,F01,En descenso desde 536 en 2016
+D26,Empresas de transporte y almacenamiento,333,empresas,2024,Region - 10 municipios,Todos,Transporte,A,F01,Unico cluster con variacion negativa: -2.7 por ciento
+D27,Empresas de actividades profesionales cientificas y tecnicas,338,empresas,2024,Region - 10 municipios,Todos,Servicios profesionales,A,F01,
+D28,Empresas de informacion y comunicaciones,122,empresas,2024,Region - 10 municipios,Todos,TIC,A,F01,Descenso sostenido desde 178 en 2016: senal de que el sector TIC local se contrae
+D29,Empresas de atencion de la salud humana,90,empresas,2024,Region - 10 municipios,Todos,Salud,A,F01,Descenso desde 162 en 2016
+D30,Empresas de educacion,70,empresas,2024,Region - 10 municipios,Todos,Educacion,A,F01,
+D31,Hectareas de banano de exportacion,32465,hectareas,2025,Region,Uraba,Agro - banano,A,F06,Fuente Augura
+D32,Cajas de banano exportadas desde Uraba,82000000,cajas de 20 kg,2025,Region,Uraba,Agro - banano,A,F06,
+D33,Hectareas de banano zona Caribe (Magdalena La Guajira Cesar),20478,hectareas,2025,Otras regiones - contexto de expansion,No aplica,Agro - banano,A,F06,Mercado de expansion natural fuera de Uraba
+D34,Valor de las exportaciones de banano de Colombia,1309000000,dolares FOB,2025,Nacional - contexto,No aplica,Agro - banano,A,F06,Crecimiento de 21.6 por ciento
+D35,Fincas bananeras de exportacion,320,fincas,2023-2024,Region,Uraba,Agro - banano,B,F07,Mayoritariamente afiliadas a Augura
+D36,Fincas bananeras de Uniban,151,fincas,2023-2024,Region,Uraba,Agro - banano,B,F07,15.743 hectareas
+D37,Grupos empresariales bananeros en negociacion colectiva,85,grupos,2019-2023,Region,Uraba,Agro - banano,A,F08,Universo real de compradores para software de finca bananera
+D38,Fincas cubiertas por la convencion colectiva,275,fincas,2019-2023,Region,Uraba,Agro - banano,A,F08,Cada finca con su propia convencion
+D39,Trabajadores cubiertos por la convencion colectiva,22000,trabajadores,2019-2023,Region,Uraba,Agro - banano,A,F08,
+D40,Labores comunes negociadas en todas las fincas,10,labores,2019,Region,Uraba,Agro - banano,A,F08,Mas 28 labores adicionales con procedimiento de negociacion
+D41,Hectareas de platano,8000,hectareas,2023-2025,Region,Uraba,Agro - platano,B,F10,
+D42,Pequenos productores de platano,2000,productores,2023-2025,Region,Uraba,Agro - platano,B,F10,Promedio de 3.6 hectareas por productor
+D43,Pequenos agricultores independientes integrados por Uniban,2440,productores,2025,Municipios,Chigorodo Necocli Belen de Bajira Sta Maria la Antigua,Agro - platano,A,F09,Declaracion del presidente de Uniban
+D44,Cajas de platano exportadas por Uniban de pequenos productores,4000000,cajas al ano,2025,Municipios,Chigorodo Necocli Belen de Bajira Sta Maria la Antigua,Agro - platano,A,F09,
+D45,Cajas de platano recibidas por semana (derivado),=C45/52,cajas por semana,2025,Municipios,Idem D44,Agro - platano,A,F09,Formula viva sobre D44: volumen del proceso que la oportunidad 1 pretende digitalizar
+D46,Sitios de acopio estimados en Uraba,25,acopios,2026,Region,Uraba,Agro - platano y banano,C,Inferencia,INFERENCIA NO VERIFICADA: 2.440 productores dividido por ~150 productores por acopio da ~16 acopios en Uniban y se extrapola al resto del sector
+D47,Pasajeros movilizados en el aeropuerto de Carepa,186174,pasajeros,2024,Municipio,Carepa,Transporte aereo,A,F30,En 20.890 operaciones aereas
+D48,Participacion de Necocli en los visitantes de Uraba,25.53,porcentaje,2025 T1,Municipio,Necocli,Turismo,A,F28,Seguido de Arboletes 25.04 Mutata 20.5 Turbo 19.17 y Apartado 9.76
+D49,Ocupacion hotelera en Semana Santa,100,porcentaje,2025,Region,Uraba,Turismo,A,F29,Dato de pico estacional: no representa la ocupacion promedio anual
+D50,MYPES de Apartado con procedimientos formales de gestion,25,porcentaje aproximado,2025,Municipio,Apartado,Multisectorial,A,F03,
+D51,MYPES de Apartado dispuestas a participar en programas incluida digitalizacion,85,porcentaje aproximado,2025,Municipio,Apartado,Multisectorial,A,F03,Pero solo ~30 por ciento se considera preparado y las barreras principales son financieras
+D52,Contrato publico de software SINAP V6 CORPOURABA,44629200,pesos colombianos,2025,Municipio,Apartado,Contratacion publica,A,F19,Contrato 200-10-01-12-0161-2025 proveedor Integral V6 SAS
+D53,Contrato publico de software INTEGRA y facturacion electronica Terminal de Transporte,33476280,pesos colombianos,2025,Municipio,Apartado,Contratacion publica,A,F19,Contrato PS08-2025 proveedor Consultores Tecnologicos SAS
+D54,Gasto publico anual verificado en software en Apartado (parcial),"=C53+C54",pesos colombianos,2025,Municipio,Apartado,Contratacion publica,A,F19,Formula viva; suma parcial y no exhaustiva de la consulta a SECOP II
+D55,Inicio de operacion comercial de Puerto Antioquia,2026-02-05,fecha,2026,Municipio,Turbo,Logistica portuaria,A,F11,Resolucion MinTransporte 20263040003075 del 29-01-2026
+D56,Empresas nuevas proyectadas por Puerto Antioquia,800,empresas,proyeccion,Region,Uraba,Logistica,C,F11,PROYECCION DEL PROYECTO no resultado observado. No usar como base de dimensionamiento
+D57,Empleos indirectos proyectados por Puerto Antioquia,17000,empleos,proyeccion,Region,Uraba,Logistica,C,F11,PROYECCION DEL PROYECTO no resultado observado

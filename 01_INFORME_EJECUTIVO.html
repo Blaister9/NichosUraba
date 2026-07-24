@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="es-CO">
+<head>
+<meta charset="utf-8">
+<title>Informe Ejecutivo — Nicho tecnológico en Urabá (julio 2026)</title>
+<style>
+:root{--tx:#16191d;--mut:#5b6470;--ln:#d7dbe0;--bg:#fff;--acc:#0b4f6c;--warn:#b45309;--ok:#15803d;--bad:#b91c1c}
+*{box-sizing:border-box}
+body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:var(--tx);background:var(--bg);max-width:960px;margin:0 auto;padding:32px 28px;line-height:1.5;font-size:14.5px}
+h1{font-size:25px;margin:0 0 4px;letter-spacing:-.3px}
+h2{font-size:18px;margin:34px 0 10px;padding-bottom:6px;border-bottom:2px solid var(--acc);color:var(--acc)}
+h3{font-size:15px;margin:22px 0 6px}
+.sub{color:var(--mut);font-size:13px;margin-bottom:22px}
+pre.decision{background:#0b4f6c;color:#fff;padding:18px 20px;border-radius:6px;font-family:ui-monospace,Consolas,monospace;font-size:13px;line-height:1.65;white-space:pre-wrap;overflow-x:auto}
+table{border-collapse:collapse;width:100%;margin:12px 0;font-size:12.5px}
+th,td{border:1px solid var(--ln);padding:6px 8px;text-align:left;vertical-align:top}
+th{background:#eef2f5;font-weight:600}
+td.n,th.n{text-align:right;white-space:nowrap}
+.badge{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:700;color:#fff}
+.A{background:#15803d}.B{background:#0b4f6c}.C{background:#b45309}
+.box{border-left:4px solid var(--acc);background:#f6f9fb;padding:12px 16px;margin:14px 0;border-radius:0 4px 4px 0}
+.box.warn{border-color:var(--warn);background:#fffbeb}
+.box.bad{border-color:var(--bad);background:#fef2f2}
+small{color:var(--mut)}
+ul,ol{margin:8px 0 8px 20px;padding:0}li{margin:3px 0}
+.foot{margin-top:40px;padding-top:14px;border-top:1px solid var(--ln);font-size:12px;color:var(--mut)}
+@media print{body{padding:0;font-size:11pt;max-width:none}h2{page-break-after:avoid}table{page-break-inside:avoid}pre.decision{background:#eef2f5;color:#16191d;border:1px solid var(--ln)}}
+</style>
+</head>
+<body>
+
+<h1>Investigación de mercado y selección de nicho tecnológico en Urabá</h1>
+<div class="sub">Informe ejecutivo · Archivo 1 de 8 · Elaborado el 24 de julio de 2026 · Documento autosuficiente</div>
+
+<pre class="decision">DECISIÓN:            VALIDATE — no invertir todavía en construcción completa; financiar 30 días de validación presencial acotada.
+NICHO:               Comercializadoras exportadoras de plátano y banano de Urabá que compran fruta a pequeños
+                     productores independientes bajo modelo agregador (Uniban y sus pares), y las asociaciones
+                     y sitios de acopio que les entregan.
+PROBLEMA:            El registro de recepción de fruta en el sitio de acopio (productor, lote, cajas recibidas,
+                     rechazo/calidad) y su posterior liquidación de pago al productor se ejecuta en un punto sin
+                     conectividad estable y se consolida después en oficina. Hipótesis a validar: hoy se hace con
+                     planilla física + transcripción a Excel, con reprocesos, disputas de pago y esfuerzo adicional
+                     para reconstruir la trazabilidad que exigen las certificaciones y el comprador extranjero.
+COMPRADOR:           Gerente de Operaciones / Director de Fruta de la comercializadora (aprueba y paga).
+                     Usuario directo: recibidor o inspector de calidad en el acopio. Sufre el problema:
+                     coordinador de acopio y auxiliar administrativo que liquida.
+PRODUCTO:            Aplicación de captura offline-first (PWA/Android) en el punto de acopio + panel web de
+                     consolidación y liquidación, con importación/exportación Excel y sin reemplazar el ERP,
+                     la contabilidad ni la nómina que la empresa ya tiene.
+MUNICIPIO INICIAL:   Chigorodó (eje Chigorodó–Carepa–Apartadó), por concentración documentada de proveedores
+                     pequeños de plátano y cercanía operativa a las comercializadoras.
+INVERSIÓN RECOMENDADA: COP 6.900.000 en 30 días (validación) — NO los COP 46–58 millones del MVP completo,
+                     que se liberan solo si se cumplen los criterios GO definidos en la sección 12.
+NIVEL DE CONFIANZA:  Medio-bajo (55%). Alto en la existencia y el tamaño de la cadena; bajo en la forma exacta
+                     del proceso actual y en la disposición a pagar.
+ESTADO:              VALIDATE
+PRINCIPAL EVIDENCIA: El presidente de Uniban declaró públicamente (sept-2025) que la empresa exporta ~4 millones
+                     de cajas de plátano al año provenientes de 2.440 pequeños agricultores independientes de
+                     Chigorodó, Belén de Bajirá, Necoclí y Santa María la Antigua del Darién. Es un flujo
+                     documentado de ~77.000 cajas semanales que debe registrarse, calificarse y liquidarse
+                     productor por productor. Nivel de evidencia A para la existencia y escala del flujo.
+PRINCIPAL INCERTIDUMBRE: No existe evidencia pública de CÓMO se registra y liquida hoy ese flujo. Es posible que
+                     ya esté resuelto con software propio de Uniban o con un proveedor especializado
+                     (Agrosoft LATAM comercializa un módulo SCM1 de "liquidación de fruta"). Esta única
+                     incógnita decide si la oportunidad vale o no vale nada.
+SIGUIENTE ACCIÓN:    Semana 1 — conseguir tres visitas presenciales a sitios de acopio en Chigorodó/Carepa y
+                     fotografiar el formato físico o la pantalla que se usa hoy en la recepción de fruta.
+                     Contacto de entrada: Cámara de Comercio de Urabá (Apartadó, (604) 815 5990) y Augura.</pre>
+
+<div class="box warn">
+<strong>Por qué no es GO.</strong> El umbral definido para recomendar construcción exige simultáneamente once condiciones. La oportunidad líder cumple nueve. Falla en dos que son precisamente las que protegen el capital: <em>(a) solución actual verificable</em> — no se pudo comprobar con fuentes públicas qué usa hoy una comercializadora de Urabá para liquidar fruta de pequeños productores; y <em>(b) al menos tres señales independientes de demanda</em> — se documentaron dos sólidas. Ambas se resuelven con visitas de campo que cuestan menos del 15% del MVP. Construir antes de resolverlas sería invertir sobre una inferencia.
+</div>
+
+<h2>1. Delimitación territorial y niveles de evidencia</h2>
+
+<p><strong>Delimitación adoptada:</strong> la jurisdicción de la Cámara de Comercio de Urabá, que agrupa diez municipios — Apartadó, Arboletes, Carepa, Chigorodó, Dabeiba, Mutatá, Necoclí, San Juan de Urabá, San Pedro de Urabá y Turbo — con más de 543.000 habitantes y 11.664 km² (Cámara de Comercio de Urabá, <em>Estudio Económico 2024</em>, enero 2025). Se usa esta delimitación porque es la que produce las cifras empresariales citadas; no coincide exactamente con la subregión administrativa de la Gobernación de Antioquia, que incluye también Murindó, Vigía del Fuerte y Turbo con otros límites. Toda cifra de este informe indica su cobertura.</p>
+
+<table>
+<tr><th style="width:70px">Nivel</th><th>Definición</th><th>Uso permitido</th></tr>
+<tr><td><span class="badge A">A</span></td><td>Dato o problema documentado explícitamente para Urabá o uno de sus municipios por fuente institucional.</td><td>Sustenta recomendación de inversión.</td></tr>
+<tr><td><span class="badge B">B</span></td><td>Varias fuentes locales permiten inferirlo razonablemente; ninguna lo mide directamente.</td><td>Sustenta recomendación de inversión junto con A.</td></tr>
+<tr><td><span class="badge C">C</span></td><td>Hipótesis lógica sin evidencia local suficiente.</td><td>Solo validación. Nunca inversión.</td></tr>
+</table>
+
+<h2>2. Principales cifras (evidencia de contexto)</h2>
+
+<table>
+<tr><th>Indicador</th><th class="n">Valor</th><th>Año</th><th>Cobertura</th><th>Fuente</th><th>Nivel</th></tr>
+<tr><td>Empresas registradas</td><td class="n">12.134</td><td>2024</td><td>10 municipios (jurisdicción CCU)</td><td>CCU, Estudio Económico 2024</td><td><span class="badge A">A</span></td></tr>
+<tr><td>Microempresas sobre el total</td><td class="n">96,02 %</td><td>2024</td><td>10 municipios</td><td>CCU / Fenalco Antioquia</td><td><span class="badge A">A</span></td></tr>
+<tr><td>Empresas con 1 a 4 empleados</td><td class="n">91,34 %</td><td>2024</td><td>10 municipios</td><td>CCU, tabla 2</td><td><span class="badge A">A</span></td></tr>
+<tr><td>Empresas medianas + grandes</td><td class="n">93 (0,76 %)</td><td>2024</td><td>10 municipios</td><td>CCU, gráfica 2</td><td><span class="badge A">A</span></td></tr>
+<tr><td>Supervivencia empresarial a 5 años (cohorte 2019)</td><td class="n">29,1 %</td><td>2024</td><td>10 municipios</td><td>CCU, gráfica 7</td><td><span class="badge A">A</span></td></tr>
+<tr><td>Empresas creadas / salidas del tejido</td><td class="n">2.592 / 3.149</td><td>2024</td><td>10 municipios</td><td>CCU</td><td><span class="badge A">A</span></td></tr>
+<tr><td>Empresas de comercio</td><td class="n">6.022</td><td>2024</td><td>10 municipios</td><td>CCU, tabla 1</td><td><span class="badge A">A</span></td></tr>
+<tr><td>Empresas de alojamiento y servicios de comida</td><td class="n">1.887</td><td>2024</td><td>10 municipios</td><td>CCU, tabla 1</td><td><span class="badge A">A</span></td></tr>
+<tr><td>Empresas de transporte y almacenamiento</td><td class="n">333 (−2,7 % vs 2023)</td><td>2024</td><td>10 municipios</td><td>CCU / Fenalco</td><td><span class="badge A">A</span></td></tr>
+<tr><td>Empresas de información y comunicaciones</td><td class="n">122 (era 178 en 2016)</td><td>2024</td><td>10 municipios</td><td>CCU, tabla 1</td><td><span class="badge A">A</span></td></tr>
+<tr><td>Hectáreas de banano de exportación</td><td class="n">32.465 ha · 82 M cajas</td><td>2025</td><td>Urabá</td><td>Augura (abril 2026)</td><td><span class="badge A">A</span></td></tr>
+<tr><td>Fincas bananeras de exportación</td><td class="n">~320 (Uniban: 151)</td><td>2023–2025</td><td>Urabá</td><td>Augura / prensa económica</td><td><span class="badge A">A</span></td></tr>
+<tr><td>Grupos empresariales bananeros en negociación colectiva</td><td class="n">85 grupos · 275 fincas · 22.000 trabajadores</td><td>2019–2023</td><td>Urabá</td><td>Sintrainagro / MinTrabajo / Colsiba</td><td><span class="badge A">A</span></td></tr>
+<tr><td>Plátano: pequeños productores integrados por Uniban</td><td class="n">2.440 · ~4 M cajas/año</td><td>2025</td><td>Chigorodó, Necoclí, Belén de Bajirá, Sta. María la Antigua</td><td>Presidente de Uniban, sept. 2025</td><td><span class="badge A">A</span></td></tr>
+<tr><td>Puerto Antioquia — inicio de operación comercial</td><td class="n">5 de febrero de 2026</td><td>2026</td><td>Turbo</td><td>Prensa económica nacional</td><td><span class="badge A">A</span></td></tr>
+<tr><td>Empresas nuevas proyectadas por Puerto Antioquia</td><td class="n">~800 · ~17.000 empleos indirectos</td><td>proyección</td><td>Urabá</td><td>Proyecciones oficiales del proyecto</td><td><span class="badge C">C</span></td></tr>
+<tr><td>MYPES de Apartadó con procedimientos formales de gestión</td><td class="n">~25 %</td><td>2025</td><td>Apartadó</td><td>CCU + SENA, Diagnóstico Sostenibilidad</td><td><span class="badge A">A</span></td></tr>
+<tr><td>MYPES de Apartadó dispuestas a participar en programas (incl. digitalización)</td><td class="n">&gt;85 % · pero solo ~30 % se considera preparado</td><td>2025</td><td>Apartadó</td><td>CCU + SENA</td><td><span class="badge A">A</span></td></tr>
+</table>
+
+<div class="box bad">
+<strong>Lectura contraintuitiva de estas cifras.</strong> El tejido empresarial de Urabá es grande en número y diminuto en tamaño: 96 % microempresas, 91 % con menos de cinco empleados, y menos de un tercio sobrevive cinco años. El propio diagnóstico CCU–SENA identifica las barreras financieras como principal limitante. Vender software por suscripción a ese universo es un mal negocio: alta rotación de clientes, tickets bajos, costo de adquisición desproporcionado. <strong>El dinero en Urabá no está en las 12.134 empresas del registro mercantil; está en las ~93 empresas medianas y grandes y en la cadena agroexportadora que las rodea.</strong> Toda la investigación se reorientó a partir de este hallazgo.
+</div>
+
+<h2>3. Top 10 de oportunidades</h2>
+
+<table>
+<tr><th style="width:26px">#</th><th>Nicho y problema</th><th>Comprador</th><th class="n">Puntaje /100</th><th>Evid.</th><th>Decisión</th></tr>
+<tr><td>1</td><td><strong>Recepción y liquidación de fruta de pequeños productores</strong> — registrar entrega, calidad y rechazo en el acopio y liquidar el pago por productor</td><td>Gerente de Operaciones de comercializadora exportadora</td><td class="n">76</td><td><span class="badge A">A</span>/<span class="badge C">C</span></td><td>Validar</td></tr>
+<tr><td>2</td><td><strong>Liquidación semanal de nómina de campo por labores</strong> bajo convención colectiva Sintrainagro (tarifas por labor, cuadrilla y lote)</td><td>Gerente administrativo de grupo bananero</td><td class="n">71</td><td><span class="badge A">A</span></td><td>Validar</td></tr>
+<tr><td>3</td><td><strong>Expediente digital de auditoría</strong> para GlobalGAP, GRASP, Rainforest Alliance y Fairtrade en finca y empacadora</td><td>Jefe de Calidad / HSEQ del grupo bananero</td><td class="n">70</td><td><span class="badge B">B</span></td><td>Validar</td></tr>
+<tr><td>4</td><td><strong>Bitácora digital de bioseguridad fitosanitaria</strong> (mantenimiento del estatus de área libre de Foc R4T)</td><td>Jefe de Sanidad Vegetal / Augura</td><td class="n">69</td><td><span class="badge A">A</span>/<span class="badge B">B</span></td><td>Validar</td></tr>
+<tr><td>5</td><td><strong>Consola multiempresa de SG-SST</strong> para consultores que administran carteras de 10–30 mipymes</td><td>Consultor SST independiente</td><td class="n">67</td><td><span class="badge B">B</span></td><td>Validar</td></tr>
+<tr><td>6</td><td><strong>Habilitación documental de contratistas</strong> para ingreso a fincas, empacadoras y zona portuaria</td><td>Coordinador HSEQ / Compras</td><td class="n">65</td><td><span class="badge C">C</span></td><td>Descartar (mercado saturado)</td></tr>
+<tr><td>7</td><td><strong>Coordinación de transporte de fruta finca → Puerto Antioquia</strong> (turnos, guías, báscula)</td><td>Jefe de Logística de exportadora</td><td class="n">63</td><td><span class="badge A">A</span>/<span class="badge C">C</span></td><td>Vigilar 12 meses</td></tr>
+<tr><td>8</td><td><strong>Gestión de transporte de personal a fincas</strong> (rutas, cupos, novedades diarias)</td><td>Jefe de Talento Humano de grupo bananero</td><td class="n">63</td><td><span class="badge C">C</span></td><td>Vigilar</td></tr>
+<tr><td>9</td><td><strong>Mantenimiento de activos (GMAO)</strong> en empacadoras, cable vías y flota agrícola</td><td>Jefe de Mantenimiento</td><td class="n">63</td><td><span class="badge C">C</span></td><td>Vigilar</td></tr>
+<tr><td>10</td><td><strong>Tablero de indicadores multi-finca sobre los Excel existentes</strong> (capa de análisis, no de captura)</td><td>Gerente General de grupo con 3+ fincas</td><td class="n">63</td><td><span class="badge B">B</span></td><td>Producto puente / servicio de entrada</td></tr>
+</table>
+
+<p><small>Puntajes ya ajustados tras las pruebas de falsación (sección 6). Ninguna oportunidad supera 75 sin evidencia A o B sobre demanda; ninguna supera 80 sin comprador concreto; ninguna supera 85 sin evidencia verificada de gasto o solución actual. Ninguna alcanzó 85. Detalle criterio por criterio en <em>03_HOJA_07_Scoring.csv</em>.</small></p>
+
+<h2>4. Comparación de las tres mejores</h2>
+
+<table>
+<tr><th>Criterio</th><th>#1 Liquidación de fruta</th><th>#2 Nómina por labores</th><th>#3 Expediente de auditoría</th></tr>
+<tr><td>Compradores en Urabá</td><td>~6 comercializadoras + ~20–30 asociaciones y acopios</td><td>85 grupos empresariales</td><td>~85 grupos / 320 fincas</td></tr>
+<tr><td>Frecuencia del proceso</td><td>Diaria en cosecha; liquidación semanal</td><td>Semanal, sin excepción</td><td>Registro diario; auditoría anual</td></tr>
+<tr><td>Consecuencia del error</td><td>Disputa de pago con el productor, reproceso, hueco de trazabilidad</td><td>Conflicto laboral con sindicato, retroactivos, sanción</td><td>Pérdida de certificación → pérdida de acceso a supermercados europeos</td></tr>
+<tr><td>¿Reemplaza un sistema crítico?</td><td><strong>No</strong> — se conecta antes de la contabilidad</td><td><strong>Sí</strong> — la nómina es el sistema crítico</td><td>No</td></tr>
+<tr><td>Competencia identificada</td><td>Agrosoft LATAM (módulo SCM1 "liquidación de fruta"); desarrollos propios</td><td>Agrosoft XASS Nómina, SM Solución, ERP colombianos, desarrollos internos</td><td>Plataforma MyRA de Rainforest Alliance (incluida en la certificación), consultores</td></tr>
+<tr><td>MVP en ≤ 8 semanas</td><td>Sí</td><td>No (PILA, nómina electrónica DIAN, convención por finca)</td><td>Sí</td></tr>
+<tr><td>Riesgo dominante</td><td>Que ya esté resuelto y no se sepa</td><td>Sustituir un sistema crítico; ciclo de venta largo</td><td>Que el certificador regale la herramienta</td></tr>
+<tr><td><strong>Veredicto</strong></td><td><strong>Hipótesis líder</strong></td><td>Segunda; solo como módulo complementario, nunca como reemplazo</td><td>Tercera; buena si la #1 se cae</td></tr>
+</table>
+
+<h2>5. Nicho ganador, producto y modelo comercial</h2>
+
+<h3>5.1 Definición precisa del comprador</h3>
+<ul>
+<li><strong>Usuario directo:</strong> recibidor / inspector de calidad en el sitio de acopio. Trabaja de pie, con guantes, sin señal estable, en jornadas de 4–8 horas de recepción.</li>
+<li><strong>Quien sufre el problema:</strong> coordinador del acopio y auxiliar administrativo que transcribe y arma la liquidación semanal.</li>
+<li><strong>Quien aprueba la compra:</strong> Gerente de Operaciones o Director de Fruta de la comercializadora.</li>
+<li><strong>Quien paga:</strong> la comercializadora exportadora (no el pequeño productor — el productor no tiene presupuesto y no debe ser el cliente).</li>
+<li><strong>Beneficiario económico:</strong> la comercializadora (menos reprocesos y disputas) y, secundariamente, el productor (comprobante inmediato).</li>
+<li><strong>Canal de contacto:</strong> Cámara de Comercio de Urabá (Apartadó, Calle 104 #101-15, (604) 815 5990), Augura, Fenalco Antioquia seccional Urabá, y visita directa a acopios en Chigorodó y Carepa.</li>
+</ul>
+
+<h3>5.2 MVP — qué se construye y qué no</h3>
+<table>
+<tr><th style="width:50%">Sí entra en el MVP (8 semanas)</th><th>NO entra en el MVP</th></tr>
+<tr><td>
+<ul>
+<li>Captura offline-first en Android/PWA: productor, lote, cajas, calidad, causal de rechazo, foto.</li>
+<li>Sincronización diferida al recuperar señal, con resolución de conflictos.</li>
+<li>Comprobante de recibo para el productor (PDF o mensaje de WhatsApp) firmado en pantalla.</li>
+<li>Panel web: consolidado por acopio, productor, semana y calidad.</li>
+<li>Motor de liquidación con tarifa por calidad, descuentos de insumos y anticipos.</li>
+<li>Exportación a Excel/CSV con el layout que hoy usa el cliente.</li>
+<li>Bitácora inmutable de cambios (requisito de auditoría).</li>
+</ul></td>
+<td>
+<ul>
+<li>Contabilidad, facturación electrónica DIAN, nómina y PILA.</li>
+<li>Inventarios y compras.</li>
+<li>Integración con el ERP del cliente (solo Excel en la fase 1).</li>
+<li>Pesaje automatizado con hardware.</li>
+<li>App para el productor final.</li>
+<li>Módulo de certificaciones (fase 2, si la #3 se confirma).</li>
+<li>Multi-idioma, multi-moneda, multi-país.</li>
+</ul></td></tr>
+</table>
+<p><strong>Formato tecnológico:</strong> PWA offline-first (IndexedDB + cola de sincronización) sobre .NET 8 / PostgreSQL, con panel web. No es aplicación de escritorio: el punto de dolor está en campo. No es app nativa en fase 1: la PWA reduce a la mitad el tiempo de MVP y el equipo ya domina el stack.</p>
+<p><strong>Integraciones mínimas:</strong> importación y exportación de Excel/CSV. Nada más en fase 1. Es deliberado: permite pilotar sin tocar el sistema crítico del cliente.</p>
+
+<h3>5.3 Precio hipotético y forma de cobro</h3>
+<table>
+<tr><th>Plan</th><th>Alcance</th><th class="n">Precio mensual (COP)</th><th class="n">Implementación única (COP)</th></tr>
+<tr><td>Acopio</td><td>1 sitio, hasta 150 productores, 3 usuarios</td><td class="n">690.000</td><td class="n">2.500.000</td></tr>
+<tr><td>Comercializadora</td><td>Hasta 10 sitios, hasta 500 productores, usuarios ilimitados</td><td class="n">2.900.000</td><td class="n">8.000.000</td></tr>
+</table>
+<p><small>Anclajes de mercado usados (todos verificables, ninguno inventado): asesoría SG-SST mensual en Colombia desde COP 349.000 y mantenimiento mensual entre COP 250.000 y 680.000; software contable Alegra plan Pyme COP 149.900/mes; contratos públicos de software en Urabá entre COP 33,5 y 44,6 millones anuales (Terminal de Transporte de Apartadó y CORPOURABÁ, SECOP II, 2025). El precio propuesto se ubica por encima del software genérico y por debajo del contrato público típico. <strong>Es una hipótesis, no un dato: debe probarse en las entrevistas.</strong></small></p>
+
+<h3>5.4 Argumento de venta</h3>
+<p class="box">«Ustedes reciben fruta de cientos de productores cada semana. Nosotros no tocamos su contabilidad ni su nómina. Ponemos el registro de esa recepción en el celular del recibidor, funciona sin señal, y el lunes el consolidado y la liquidación ya están en el mismo Excel que ustedes usan hoy — sin que nadie tenga que transcribir la planilla. Lo probamos en un solo acopio durante una cosecha completa, sin costo de implementación, y ustedes deciden.»</p>
+
+<h2>6. Pruebas de falsación aplicadas al top 5</h2>
+<table>
+<tr><th style="width:30px">#</th><th>Intento de demostrar que es mala inversión</th><th>Resultado</th><th class="n">Ajuste</th></tr>
+<tr><td>1</td><td>Agrosoft LATAM comercializa SCM1, que explícitamente incluye «tarja (guía de despacho), asignación de precios y liquidación de fruta», con 30 años de trayectoria y presencia en 7 países. Además Uniban es una empresa grande con capacidad de desarrollo propio.</td><td><strong>Falsación parcialmente exitosa.</strong> La brecha real no es el proceso sino el segmento: Agrosoft está orientado a la finca grande y a la exportadora, con contabilidad y nómina bajo normativa ecuatoriana (calcula IESS). No hay evidencia de que resuelva la captura offline en acopios rurales con miles de productores minúsculos. La brecha existe pero es más estrecha de lo que parecía.</td><td class="n">−6</td></tr>
+<tr><td>2</td><td>La nómina es un sistema crítico. Ningún grupo bananero cambia su nómina por un proveedor nuevo de tres personas, y el cálculo exige PILA, nómina electrónica DIAN y una convención colectiva distinta por finca.</td><td><strong>Falsación exitosa.</strong> Se degrada de candidata principal a módulo complementario de captura de labores en campo que alimenta la nómina existente.</td><td class="n">−9</td></tr>
+<tr><td>3</td><td>Rainforest Alliance ofrece su propia plataforma (MyRA) a los titulares de certificado, y las consultoras de certificación ya venden el acompañamiento documental.</td><td><strong>Falsación parcial.</strong> MyRA cubre el trámite ante el certificador, no la generación diaria de la evidencia en finca. Se mantiene, con puntaje reducido.</td><td class="n">−5</td></tr>
+<tr><td>4</td><td>La bioseguridad fitosanitaria contra Foc R4T es un bien público sectorial: probablemente lo financie el ICA o Augura de forma centralizada, no cada finca. Sin autoridad de compra privada no hay negocio.</td><td><strong>Falsación exitosa en el modelo de ingresos.</strong> Se mantiene como oportunidad técnica pero se reclasifica: solo viable como contrato único con Augura o el ICA, no como SaaS por finca. Ciclo de venta institucional, largo.</td><td class="n">−7</td></tr>
+<tr><td>5</td><td>El mercado de software SG-SST en Colombia está saturado: CTAIMA, Verifty, GCG Control, Twind y decenas de productos listados en comparadores comerciales. Precios de referencia ya bajos.</td><td><strong>Falsación exitosa.</strong> Entrar sería competir en precio contra actores con red instalada de más de 100.000 contratistas. Se descarta como apuesta principal.</td><td class="n">−10</td></tr>
+</table>
+
+<h2>7. Estimación de mercado — oportunidad #1</h2>
+<p><strong>Fórmula:</strong> Ingreso anual = (N.º de compradores × precio mensual del plan) × 12 + (N.º de implementaciones × tarifa de implementación). Moneda: pesos colombianos.</p>
+
+<table>
+<tr><th>Variable</th><th class="n">Valor</th><th>Origen</th><th>Nivel</th></tr>
+<tr><td>Comercializadoras exportadoras de banano/plátano en Urabá</td><td class="n">6</td><td>Uniban, Banacol, Banafrut, Tropical y pares citados en prensa económica</td><td><span class="badge B">B</span></td></tr>
+<tr><td>Asociaciones y sitios de acopio con volumen suficiente</td><td class="n">20–30</td><td><strong>Inferencia:</strong> 2.440 productores Uniban ÷ ~150 productores por acopio ≈ 16 acopios; se extrapola al resto del sector</td><td><span class="badge C">C</span></td></tr>
+<tr><td>Precio plan Comercializadora</td><td class="n">2.900.000 /mes</td><td>Hipótesis anclada en precios públicos de software y consultoría en Colombia</td><td><span class="badge C">C</span></td></tr>
+<tr><td>Precio plan Acopio</td><td class="n">690.000 /mes</td><td>Hipótesis</td><td><span class="badge C">C</span></td></tr>
+</table>
+
+<table>
+<tr><th>Métrica</th><th class="n">Conservador</th><th class="n">Base</th><th class="n">Optimista</th></tr>
+<tr><td>TAM — Colombia (banano + plátano de exportación, 52.943 ha, ~120 compradores)</td><td class="n" colspan="3" style="text-align:center">COP 1.080 millones/año</td></tr>
+<tr><td>SAM — Urabá (6 comercializadoras + 25 acopios)</td><td class="n" colspan="3" style="text-align:center">COP 415 millones/año</td></tr>
+<tr><td>Clientes a 24 meses</td><td class="n">1 comerc. + 3 acopios</td><td class="n">2 comerc. + 6 acopios</td><td class="n">3 comerc. + 10 acopios</td></tr>
+<tr><td>SOM — ingreso recurrente anual a 24 meses</td><td class="n">COP 59,6 M</td><td class="n">COP 119,3 M</td><td class="n">COP 187,2 M</td></tr>
+<tr><td>Ingresos por implementación (acumulados)</td><td class="n">COP 15,5 M</td><td class="n">COP 31,0 M</td><td class="n">COP 49,0 M</td></tr>
+<tr><td>Margen bruto estimado</td><td class="n">70 %</td><td class="n">76 %</td><td class="n">80 %</td></tr>
+<tr><td>Costo de adquisición por cliente</td><td class="n">COP 3,5 M</td><td class="n">COP 2,4 M</td><td class="n">COP 1,6 M</td></tr>
+<tr><td>Tiempo de venta (primer contrato pago)</td><td class="n">7 meses</td><td class="n">4 meses</td><td class="n">2 meses</td></tr>
+<tr><td>Nivel de confianza de la estimación</td><td class="n" colspan="3" style="text-align:center">Bajo — depende de un precio no validado y de un conteo de acopios inferido</td></tr>
+</table>
+
+<div class="box warn"><strong>Advertencia sobre el tamaño.</strong> Incluso el escenario optimista deja un ingreso recurrente inferior a COP 190 millones anuales en Urabá. Esto no sostiene a tres personas a tiempo completo con salarios de mercado. La oportunidad es una cabeza de playa defendible, no un negocio grande por sí sola. Su valor está en (a) generar caja temprana, (b) construir la relación con las comercializadoras y (c) abrir la ruta a Magdalena–La Guajira (20.478 ha adicionales) y a Ecuador. Quien busque un mercado grande <em>dentro</em> de Urabá no lo va a encontrar en software.</div>
+
+<h2>8. Riesgos principales</h2>
+<table>
+<tr><th>Riesgo</th><th>Prob.</th><th>Impacto</th><th>Mitigación</th></tr>
+<tr><td>El proceso ya está digitalizado y la brecha no existe</td><td>Media-alta</td><td>Fatal</td><td>Es exactamente lo que resuelven los 30 días de validación. Criterio de abandono explícito.</td></tr>
+<tr><td>El mercado local es demasiado pequeño para sostener tres socios</td><td>Alta</td><td>Alto</td><td>Asumido: se plantea como cabeza de playa con ruta de expansión, no como negocio final.</td></tr>
+<tr><td>Concentración: perder a Uniban equivale a perder el mercado</td><td>Media</td><td>Alto</td><td>Vender primero a asociaciones y acopios independientes; no depender de un solo logo.</td></tr>
+<tr><td>Ciclo de decisión largo en empresa grande</td><td>Alta</td><td>Medio</td><td>Piloto gratuito de una cosecha en un solo acopio, con decisor operativo y no comité.</td></tr>
+<tr><td>Conectividad rural insuficiente incluso para sincronización diferida</td><td>Media</td><td>Medio</td><td>Arquitectura offline-first desde el primer día; sincronización por lote al volver a zona con cobertura.</td></tr>
+<tr><td>Agrosoft LATAM baja de segmento y ocupa el nicho</td><td>Baja-media</td><td>Alto</td><td>Velocidad y precio local; foco en un caso de uso que a ellos les resulta marginal.</td></tr>
+<tr><td>Estacionalidad climática de la cosecha reduce ventanas de piloto</td><td>Media</td><td>Bajo</td><td>Planear el piloto contra el calendario de cosecha, no contra el calendario del equipo.</td></tr>
+</table>
+
+<h2>9. Validaciones pendientes (hipótesis críticas)</h2>
+<ol>
+<li><strong>H1 — Proceso.</strong> En al menos 3 de 5 acopios visitados, la recepción de fruta se registra hoy en papel o en una hoja de Excel sin control de versiones. <em>Falsable con una fotografía.</em></li>
+<li><strong>H2 — Costo.</strong> La transcripción y la corrección de errores de liquidación consumen al menos 6 horas-persona por semana por comercializadora. <em>Falsable preguntando por el tiempo de cierre de la liquidación semanal.</em></li>
+<li><strong>H3 — Autoridad.</strong> Existe un cargo con presupuesto propio que puede aprobar un piloto sin pasar por junta directiva. <em>Falsable preguntando quién firmó la última compra de software.</em></li>
+<li><strong>H4 — Precio.</strong> El rango COP 690.000–2.900.000/mes no provoca rechazo inmediato. <em>Falsable con la técnica de rango en la entrevista.</em></li>
+<li><strong>H5 — Sustituto.</strong> Ninguno de los entrevistados menciona espontáneamente un software que ya haga esto. <em>Falsable en la primera conversación.</em></li>
+</ol>
+
+<h2>10. Plan de 30 días</h2>
+<table>
+<tr><th>Semana</th><th>Acción concreta</th><th>Responsable</th><th>Entregable verificable</th></tr>
+<tr><td>1</td><td>Construir la lista nominal de 40 objetivos: comercializadoras, asociaciones plataneras y acopios, con nombre de cargo y teléfono. Fuentes: certificados del registro mercantil de la CCU, directorio de Augura, directorio Direct+ de Fenalco Antioquia.</td><td>Socio comercial</td><td>Hoja de 40 contactos con teléfono verificado</td></tr>
+<tr><td>1</td><td>Reunión de presentación en la Cámara de Comercio de Urabá (Apartadó) y en Augura para pedir presentación a tres empresas.</td><td>Socio comercial</td><td>2 reuniones realizadas, 3 referidos por escrito</td></tr>
+<tr><td>2</td><td>Ejecutar 12 entrevistas de descubrimiento con el guion del Archivo 7. Prohibido preguntar «¿compraría esta aplicación?».</td><td>Los 3 socios</td><td>12 fichas de entrevista completas</td></tr>
+<tr><td>2</td><td>Visitar presencialmente 5 sitios de acopio en Chigorodó y Carepa en día de recepción. Fotografiar el formato que se usa hoy.</td><td>Socio técnico + comercial</td><td>5 fotografías del proceso real</td></tr>
+<tr><td>3</td><td>Prototipo navegable (Figma o HTML estático) de la pantalla de recepción y del comprobante al productor. Sin backend.</td><td>Ingeniero mecatrónico/desarrollador</td><td>Prototipo de 6 pantallas</td></tr>
+<tr><td>3</td><td>8 sesiones de prueba del prototipo con recibidores reales, cronometradas.</td><td>Socio técnico</td><td>Tiempo medio por registro; 8 registros de observación</td></tr>
+<tr><td>4</td><td>Prueba de humo: propuesta de piloto de una cosecha, gratuita en implementación, con carta de intención sin obligación de pago.</td><td>Socio comercial</td><td>N.º de cartas de intención firmadas</td></tr>
+<tr><td>4</td><td>Comité de decisión GO / VALIDATE-2 / NO-GO contra los criterios de la sección 12.</td><td>Los 3 socios</td><td>Acta de decisión de una página</td></tr>
+</table>
+<p><strong>Presupuesto de los 30 días: COP 6.900.000.</strong> Desglose en el Archivo 8.</p>
+
+<h2>11. Ruta de expansión (solo si hay GO)</h2>
+<ol>
+<li><strong>Meses 0–6.</strong> Chigorodó y Carepa. Plátano de pequeños productores. 2 a 4 clientes pagos.</li>
+<li><strong>Meses 6–12.</strong> Ampliar al banano de Urabá y añadir el módulo de expediente de auditoría (oportunidad #3) al mismo comprador, que ya confía.</li>
+<li><strong>Meses 12–24.</strong> Zona bananera de Magdalena, La Guajira y Cesar: 20.478 hectáreas adicionales con la misma cadena y la misma normativa colombiana.</li>
+<li><strong>Meses 24+.</strong> Ecuador y Costa Rica, donde el modelo de pequeños productores integrados también existe — pero enfrentando ahí a Agrosoft en su terreno.</li>
+</ol>
+
+<h2>12. Decisión: GO / VALIDATE / NO-GO</h2>
+<table>
+<tr><th>Condición del umbral</th><th>Estado hoy</th></tr>
+<tr><td>Evidencia local directa o indirecta fuerte</td><td>Parcial — A sobre la cadena, C sobre el proceso</td></tr>
+<tr><td>Problema frecuente</td><td>Cumple</td></tr>
+<tr><td>Consecuencia económica identificable</td><td>Cumple cualitativamente; no cuantificada localmente</td></tr>
+<tr><td>Comprador concreto</td><td>Cumple</td></tr>
+<tr><td><strong>Solución actual verificable</strong></td><td><strong>NO CUMPLE</strong></td></tr>
+<tr><td>Brecha defendible frente a alternativas</td><td>Parcial</td></tr>
+<tr><td>Acceso razonable a usuarios</td><td>Cumple</td></tr>
+<tr><td>MVP construible en ≤ 8 semanas</td><td>Cumple</td></tr>
+<tr><td>Piloto sin reemplazar el sistema actual</td><td>Cumple</td></tr>
+<tr><td><strong>Al menos 3 señales independientes de demanda</strong></td><td><strong>NO CUMPLE</strong> — se documentaron 2</td></tr>
+<tr><td>Riesgos principales conocidos</td><td>Cumple</td></tr>
+</table>
+
+<div class="box">
+<p><strong>ESTADO: VALIDATE.</strong> Se autoriza gasto de COP 6.900.000 y 30 días de trabajo de campo. No se autoriza construcción del MVP.</p>
+<p><strong>Se pasa a GO</strong> si al día 30 se cumplen simultáneamente: (a) 3 o más de 5 acopios visitados registran hoy en papel o Excel sin control de versiones; (b) al menos 8 de 12 entrevistados describen espontáneamente reprocesos, disputas de pago o demoras en la liquidación; (c) al menos 2 cartas de intención de piloto firmadas por alguien con autoridad presupuestal; (d) ningún entrevistado menciona espontáneamente un software que ya resuelva esto.</p>
+<p><strong>Criterio de abandono (NO-GO).</strong> Se archiva la hipótesis, sin negociación ni prórroga, si ocurre cualquiera de estas: 3 o más entrevistados nombran un software específico que ya lo resuelve; ninguna carta de intención al día 30; o el precio mínimo tolerado por el mercado resulta inferior a COP 400.000/mes, cifra bajo la cual el negocio no cubre soporte en campo. En ese caso se activa la oportunidad #3 (expediente digital de auditoría) con el mismo protocolo de 30 días.</p>
+</div>
+
+<div class="foot">
+<p><strong>Limitaciones de este informe.</strong> (1) Toda la investigación es documental; no se realizaron entrevistas, y ninguna cita de este informe es una entrevista — las declaraciones citadas son públicas y verificables. (2) La Cámara de Comercio de Urabá no publica cifras desagregadas por municipio en su Estudio Económico 2024; las cifras empresariales corresponden al conjunto de los diez municipios de su jurisdicción y no deben atribuirse a Apartadó ni a Turbo por separado. (3) No se localizó el Estudio Económico 2025 de la CCU en su portal público a la fecha de consulta; el dato más reciente disponible es el de 2024, publicado en enero de 2025. (4) El número de sitios de acopio es una inferencia explícitamente marcada, no un dato. (5) Los precios propuestos son hipótesis, no cotizaciones. (6) La consulta a SECOP II se limitó a contratos con la palabra «software» y ciudad Apartadó; una búsqueda exhaustiva por objeto contractual arrojaría más casos.</p>
+<p><strong>Archivos que acompañan a este informe:</strong> 00_LEEME.md · 02_INFORME_TECNICO.md · 03_HOJA_01 a 03_HOJA_12 (libro de datos, 12 hojas CSV con fórmulas vivas) · 04_FUENTES.csv (36 fuentes) · 05_GRAFICAS.html · 06_FICHAS_TOP10.md · 07_KIT_VALIDACION.md · 08_PLAN_INVERSION.md</p>
+<p><strong>Nota sobre formatos.</strong> El entorno de ejecución no permitió compilar archivos binarios, por lo que el informe ejecutivo se entrega en HTML (imprimible a PDF desde el navegador con Ctrl+P → Guardar como PDF, con estilos de impresión ya incluidos) en lugar de PDF y DOCX, y el libro de datos se entrega como doce hojas CSV con fórmulas vivas de Excel en lugar de un único XLSX. Todo el contenido es equivalente y abre sin software adicional.</p>
+<p>Fecha de elaboración y de consulta de todas las fuentes: 24 de julio de 2026.</p>
+</div>
+
+</body>
+</html>

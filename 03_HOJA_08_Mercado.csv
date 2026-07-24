@@ -1,0 +1,24 @@
+seccion,concepto,conservador,base,optimista,unidad,formula_o_fuente,nivel_evidencia,nota
+VARIABLES,Comercializadoras exportadoras de banano y platano en Uraba,6,6,6,compradores,"Uniban Banacol Banafrut Tropical y pares citados en prensa economica (F07)",B,Universo pequeno y concentrado
+VARIABLES,Asociaciones y sitios de acopio con volumen suficiente,20,25,30,compradores,INFERENCIA a partir de 2.440 productores Uniban / ~150 por acopio,C,No verificado. Es la variable mas fragil del modelo
+VARIABLES,Precio mensual plan Comercializadora,2900000,2900000,2900000,COP/mes,Hipotesis anclada en F17 F18 y F19,C,Debe validarse en entrevistas
+VARIABLES,Precio mensual plan Acopio,690000,690000,690000,COP/mes,Hipotesis anclada en F17 y F18,C,Debe validarse en entrevistas
+VARIABLES,Implementacion unica plan Comercializadora,8000000,8000000,8000000,COP,Hipotesis,C,
+VARIABLES,Implementacion unica plan Acopio,2500000,2500000,2500000,COP,Hipotesis,C,
+TAM,Compradores potenciales en Colombia (banano + platano de exportacion),120,120,120,compradores,"52.943 ha nacionales; ~600 fincas mas comercializadoras y asociaciones",C,Estimacion de orden de magnitud
+TAM,Ingreso anual potencial en Colombia,=C8*9000000,=D8*9000000,=E8*9000000,COP/ano,Compradores x ticket medio anual de 9.000.000 COP,C,Ticket medio ponderado entre los dos planes
+SAM,Compradores direccionables en Uraba,=C2+C3,=D2+D3,=E2+E3,compradores,Suma de comercializadoras y acopios,B/C,
+SAM,Ingreso anual direccionable en Uraba,=C2*C4*12+C3*C5*12,=D2*D4*12+D3*D5*12,=E2*E4*12+E3*E5*12,COP/ano,Formula viva sobre las variables anteriores,C,
+SOM,Comercializadoras ganadas a 24 meses,1,2,3,clientes,Supuesto de conversion,C,
+SOM,Acopios ganados a 24 meses,3,6,10,clientes,Supuesto de conversion,C,
+SOM,Ingreso recurrente anual a 24 meses,=C12*C4*12+C13*C5*12,=D12*D4*12+D13*D5*12,=E12*E4*12+E13*E5*12,COP/ano,Formula viva,C,Resultado clave del modelo
+SOM,Ingresos por implementacion acumulados,=C12*C6+C13*C7,=D12*D6+D13*D7,=E12*E6+E13*E7,COP,Formula viva,C,Ingreso no recurrente
+SOM,Ingreso total acumulado a 24 meses (aprox),=C14*3/2+C15,=D14*3/2+D15,=E14*3/2+E15,COP,"Supone que la base de clientes se completa a mitad del periodo, por lo que se factura ~1,5 anos de recurrente",C,Aproximacion deliberadamente conservadora
+ECONOMIA,Margen bruto,70,76,80,porcentaje,Supuesto,C,Costo de soporte en campo alto por dispersion geografica
+ECONOMIA,Costo de adquisicion por cliente,3500000,2400000,1600000,COP,Supuesto: visitas presenciales en Uraba,C,Incluye desplazamientos Apartado-Chigorodo-Carepa-Turbo
+ECONOMIA,Tiempo hasta el primer contrato pago,7,4,2,meses,Supuesto,C,
+ECONOMIA,Costo de implementacion interno por cliente,4500000,3200000,2200000,COP,"Supuesto: 2 a 4 semanas-persona de configuracion, carga de maestros y formacion",C,
+ECONOMIA,Ingreso anual por cliente (promedio ponderado),=C14/(C12+C13),=D14/(D12+D13),=E14/(E12+E13),COP/ano,Formula viva,C,
+ECONOMIA,Relacion ingreso anual sobre CAC,=C21/C18,=D21/D18,=E21/E18,veces,Formula viva,C,"Si el resultado es menor que 3 el modelo comercial no se sostiene: verificar en el escenario conservador"
+CONTROL,Nivel de confianza global de la estimacion,Bajo,Bajo,Bajo,cualitativo,,C,"Depende de un precio no validado y de un conteo de acopios inferido. NO usar como proyeccion financiera hasta completar la validacion de 30 dias"
+CONTROL,Advertencia,"Ni siquiera el escenario optimista sostiene tres salarios de mercado a tiempo completo dentro de Uraba. La oportunidad es una cabeza de playa, no un negocio final.",,,,,,

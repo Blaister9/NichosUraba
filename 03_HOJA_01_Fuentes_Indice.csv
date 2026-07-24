@@ -1,0 +1,41 @@
+id_fuente,titulo_corto,institucion,ano,nivel,cobertura,cifras_que_soporta,ver_detalle_completo_en
+F01,Estudio Economico 2024,Camara de Comercio de Uraba,2025,A,Region 10 municipios,"D01 D02 D04 D06 D07 D08 D10 a D17 D19 a D30",04_FUENTES.csv
+F02,Cluster comercio 67.9%,Fenalco Antioquia,2025,A,Region,D21 D22 D26,04_FUENTES.csv
+F03,Diagnostico Sostenibilidad MYPES Apartado,CCU y SENA,2026,A,Apartado,D50 D51,04_FUENTES.csv
+F04,Datos abiertos y jurisdiccion,Camara de Comercio de Uraba,2022,A,Region,Delimitacion territorial,04_FUENTES.csv
+F05,Centro de Transformacion Digital Empresarial,CCU MinTIC MinCIT,2021,A,Apartado,Canal comercial,04_FUENTES.csv
+F06,Cifras del banano 2025,Augura via AgroNET,2026,A,Region y nacional,D31 D32 D33 D34,04_FUENTES.csv
+F07,Fincas bananeras de Uraba,Prensa economica,2024,B,Region,D35 D36,04_FUENTES.csv
+F08,Convencion colectiva Sintrainagro,Sintrainagro MinTrabajo Colsiba,2023,A,Region,D37 D38 D39 D40,04_FUENTES.csv
+F09,4 millones de cajas de platano de 2.440 productores,Presidente de Uniban via RCN,2025,A,4 municipios,D43 D44 D45,04_FUENTES.csv
+F10,Exportacion platanera de pequenos productores,Agronegocios,2025,B,Region,D41 D42,04_FUENTES.csv
+F11,Puerto Antioquia inicia operacion comercial,Prensa economica nacional,2026,A,Turbo,D55 D56 D57,04_FUENTES.csv
+F12,Via de acceso al puerto sin resolver,Diario ADN,2026,A,Turbo,Problema P08,04_FUENTES.csv
+F13,Agrosoft LATAM XASS,Agrosoft LATAM,2026,A,LATAM,Competidor K01,04_FUENTES.csv
+F14,SM Solucion,SM Solucion,sin fecha,C,No especificada,Competidor K02,04_FUENTES.csv
+F15,Verifty,Verifty Colombia,2026,A,Colombia,Competidor K04,04_FUENTES.csv
+F16,CTAIMA,CTAIMA Colombia,2026,A,Colombia,Competidor K03,04_FUENTES.csv
+F17,Precios SG-SST en Colombia,Mentora Colombia,2026,B,Nacional,PR01 a PR06,04_FUENTES.csv
+F18,Precios Alegra,Alegra,2026,A,Nacional,PR07,04_FUENTES.csv
+F19,SECOP II contratos de software en Apartado,Colombia Compra Eficiente,2026,A,Apartado,D52 D53 D54 PR08 PR09 PR10,04_FUENTES.csv
+F20,Uraba area libre de Foc R4T,ICA y MinAgricultura,2021 y 2026,A,Region,Problema P05,04_FUENTES.csv
+F21,Plan nacional Foc R4T,ICA,2024,A,Nacional,Contexto normativo,04_FUENTES.csv
+F22,Caso de Foc R4T en Ecuador,Portal Fruticola,2025,B,Internacional,Contexto de riesgo,04_FUENTES.csv
+F23,Certificacion RA y GlobalGAP,Kiwa Colombia,2026,A,Nacional,Problema P04,04_FUENTES.csv
+F24,Plataforma MyRA,Rainforest Alliance,2026,A,Internacional,Competidor K07 y falsacion de O3,04_FUENTES.csv
+F25,Certificaciones del banano colombiano,FreshPlaza y Agrolatam,2026,B,Nacional,Problema P04,04_FUENTES.csv
+F26,Reglamento EUDR,Comision Europea,2026,A,Internacional,Falsacion transversal y S14,04_FUENTES.csv
+F27,Retos del sector bananero en 2026,Portafolio y Augura,2026,A,Region y nacional,Riesgo R08,04_FUENTES.csv
+F28,Inteligencia turistica de Uraba,Secretaria de Turismo de Antioquia,2025,A,Region y municipios,D48,04_FUENTES.csv
+F29,Ocupacion hotelera Semana Santa,Gobernacion de Antioquia,2025,A,Region,D49,04_FUENTES.csv
+F30,Cifras del aeropuerto de Carepa,Aeropuerto de Carepa,2025,A,Carepa,D47,04_FUENTES.csv
+F31,Plan de Desarrollo de Apartado,Alcaldia de Apartado,2024,B,Apartado,Contexto,04_FUENTES.csv
+F32,Plan de Desarrollo de Antioquia,Gobernacion de Antioquia,2024,B,Departamental,Contexto,04_FUENTES.csv
+F33,Manual de labores en fincas bananeras,Augura,sin fecha,B,Region,Problema P03,04_FUENTES.csv
+F34,Estado de las vias en Antioquia 2026,Gobernacion de Antioquia,2026,A,Departamental,Problema P08,04_FUENTES.csv
+F35,Comparador de software SG-SST,ComparaSoftware,2025,C,Nacional,Falsacion de O5 y O6,04_FUENTES.csv
+F36,Comparador de software agropecuario,ComparaSoftware,2025,C,Nacional,Falsacion de O1 O11 O10,04_FUENTES.csv
+RESUMEN,Total de fuentes,36,,,,,
+RESUMEN,Fuentes de nivel A,25,,,,,
+RESUMEN,Fuentes de nivel B,8,,,,,
+RESUMEN,Fuentes de nivel C,3,,,,,
