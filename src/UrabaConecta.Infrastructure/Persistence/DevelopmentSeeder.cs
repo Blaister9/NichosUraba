@@ -11,6 +11,7 @@ public static class DevelopmentSeeder
 {
     public const string BellaOwnerEmail = "propietaria@bella.demo";
     public const string OtherOwnerEmail = "propietario@otro.demo";
+    public const string BellaWorkerEmail = "trabajadora@bella.demo";
     public const string DemoPassword = "UrabaDemo!2026";
     public static readonly Guid BellaBusinessId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     public static readonly Guid OtherBusinessId = Guid.Parse("22222222-2222-2222-2222-222222222222");
@@ -29,10 +30,19 @@ public static class DevelopmentSeeder
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
         var bellaOwner = await EnsureUser(userManager, BellaOwnerEmail);
         var otherOwner = await EnsureUser(userManager, OtherOwnerEmail);
+        var bellaWorker = await EnsureUser(userManager, BellaWorkerEmail);
         if (!await userManager.IsInRoleAsync(bellaOwner, "BusinessOwner")) await userManager.AddToRoleAsync(bellaOwner, "BusinessOwner");
         if (!await userManager.IsInRoleAsync(otherOwner, "BusinessOwner")) await userManager.AddToRoleAsync(otherOwner, "BusinessOwner");
+        if (!await userManager.IsInRoleAsync(bellaWorker, "BusinessWorker")) await userManager.AddToRoleAsync(bellaWorker, "BusinessWorker");
 
-        if (await db.Businesses.AnyAsync()) return;
+        if (await db.Businesses.AnyAsync())
+        {
+            await EnsureMembership(db, BellaBusinessId, bellaOwner.Id, MembershipRole.Owner);
+            await EnsureMembership(db, OtherBusinessId, otherOwner.Id, MembershipRole.Owner);
+            await EnsureMembership(db, BellaBusinessId, bellaWorker.Id, MembershipRole.Worker);
+            await db.SaveChangesAsync();
+            return;
+        }
         var apartado = new Municipality(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), "apartado", "Apartadó");
         var turbo = new Municipality(Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), "turbo", "Turbo");
         var beauty = new Category(Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"), "belleza-cuidado-personal", "Belleza y cuidado personal");
@@ -47,7 +57,8 @@ public static class DevelopmentSeeder
         db.AddRange(bella, other);
         db.AddRange(
             new BusinessMembership(Guid.NewGuid(), bella.Id, bellaOwner.Id, MembershipRole.Owner),
-            new BusinessMembership(Guid.NewGuid(), other.Id, otherOwner.Id, MembershipRole.Owner));
+            new BusinessMembership(Guid.NewGuid(), other.Id, otherOwner.Id, MembershipRole.Owner),
+            new BusinessMembership(Guid.NewGuid(), bella.Id, bellaWorker.Id, MembershipRole.Worker));
         foreach (var day in new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday,
                      DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday })
             db.BusinessHours.Add(new BusinessHour(Guid.NewGuid(), bella.Id, day, new TimeOnly(8, 0), new TimeOnly(18, 0)));
@@ -72,5 +83,11 @@ public static class DevelopmentSeeder
         var result = await manager.CreateAsync(user, DemoPassword);
         if (!result.Succeeded) throw new InvalidOperationException(string.Join("; ", result.Errors.Select(x => x.Description)));
         return user;
+    }
+
+    private static async Task EnsureMembership(AppDbContext db, Guid businessId, Guid userId, MembershipRole role)
+    {
+        if (!await db.BusinessMemberships.AnyAsync(x => x.BusinessId == businessId && x.UserId == userId))
+            db.BusinessMemberships.Add(new BusinessMembership(Guid.NewGuid(), businessId, userId, role));
     }
 }

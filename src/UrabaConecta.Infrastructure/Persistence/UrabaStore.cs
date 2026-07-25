@@ -141,6 +141,45 @@ public sealed class UrabaStore(AppDbContext db) : IUrabaStore
         => db.Services.SingleOrDefaultAsync(x => x.BusinessId == businessId && x.Id == serviceId, cancellationToken);
     public void AddService(Service service) => db.Services.Add(service);
 
+    public async Task<IReadOnlyList<StaffMemberDto>> GetStaffAsync(Guid businessId, CancellationToken cancellationToken)
+    {
+        var staff = await db.StaffMembers.AsNoTracking().Where(x => x.BusinessId == businessId)
+            .OrderBy(x => x.DisplayName).ToListAsync(cancellationToken);
+        var links = await db.StaffServices.AsNoTracking().Where(x => x.BusinessId == businessId)
+            .ToListAsync(cancellationToken);
+        return staff.Select(x => new StaffMemberDto(x.Id, x.DisplayName, x.IsActive,
+            links.Where(link => link.StaffMemberId == x.Id).Select(link => link.ServiceId).ToArray())).ToArray();
+    }
+    public Task<StaffMember?> GetStaffMemberAsync(Guid businessId, Guid staffId, CancellationToken cancellationToken)
+        => db.StaffMembers.SingleOrDefaultAsync(x => x.BusinessId == businessId && x.Id == staffId, cancellationToken);
+    public async Task<bool> SetStaffServicesAsync(Guid businessId, Guid staffId,
+        IReadOnlyCollection<Guid> serviceIds, CancellationToken cancellationToken)
+    {
+        var validCount = await db.Services.CountAsync(x => x.BusinessId == businessId && serviceIds.Contains(x.Id),
+            cancellationToken);
+        if (validCount != serviceIds.Count) return false;
+        var existing = await db.StaffServices.Where(x => x.BusinessId == businessId && x.StaffMemberId == staffId)
+            .ToListAsync(cancellationToken);
+        db.StaffServices.RemoveRange(existing);
+        db.StaffServices.AddRange(serviceIds.Select(id => new StaffService(businessId, staffId, id)));
+        return true;
+    }
+    public void AddStaffMember(StaffMember staff) => db.StaffMembers.Add(staff);
+    public Task<BusinessHour?> GetBusinessHourAsync(Guid businessId, DayOfWeek day, CancellationToken cancellationToken)
+        => db.BusinessHours.SingleOrDefaultAsync(x => x.BusinessId == businessId && x.Day == day, cancellationToken);
+    public void AddBusinessHour(BusinessHour hour) => db.BusinessHours.Add(hour);
+    public void RemoveBusinessHour(BusinessHour hour) => db.BusinessHours.Remove(hour);
+    public async Task<IReadOnlyList<AvailabilityException>> GetAvailabilityExceptionsAsync(Guid businessId,
+        CancellationToken cancellationToken) => await db.AvailabilityExceptions.Where(x => x.BusinessId == businessId)
+        .OrderBy(x => x.Date).ToListAsync(cancellationToken);
+    public Task<AvailabilityException?> GetAvailabilityExceptionAsync(Guid businessId, Guid exceptionId,
+        CancellationToken cancellationToken) => db.AvailabilityExceptions.SingleOrDefaultAsync(
+        x => x.BusinessId == businessId && x.Id == exceptionId, cancellationToken);
+    public Task<bool> StaffBelongsToBusinessAsync(Guid businessId, Guid staffId, CancellationToken cancellationToken)
+        => db.StaffMembers.AsNoTracking().AnyAsync(x => x.BusinessId == businessId && x.Id == staffId, cancellationToken);
+    public void AddAvailabilityException(AvailabilityException exception) => db.AvailabilityExceptions.Add(exception);
+    public void RemoveAvailabilityException(AvailabilityException exception) => db.AvailabilityExceptions.Remove(exception);
+
     private async Task<AppointmentRecord> BuildRecord(Appointment appointment, CancellationToken cancellationToken)
     {
         var business = await db.Businesses.AsNoTracking().SingleAsync(x => x.Id == appointment.BusinessId, cancellationToken);

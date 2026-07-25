@@ -25,19 +25,23 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IPublicCodeService 
         if (date > DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime).AddDays(60))
             throw new ApiException("DATE_OUT_OF_RANGE", "Solo puede consultar los próximos 60 días.");
 
-        var exception = context.Exceptions.FirstOrDefault(x => x.Date == date);
         var businessHour = context.Hours.FirstOrDefault(x => x.Day == date.DayOfWeek);
-        if (businessHour is null || exception?.IsUnavailable == true || context.EligibleStaff.Count == 0)
+        if (businessHour is null || context.EligibleStaff.Count == 0)
             return new(context.Business.TimeZoneId, date, []);
 
-        var opensAt = exception?.OpensAt ?? businessHour.OpensAt;
-        var closesAt = exception?.ClosesAt ?? businessHour.ClosesAt;
         var zone = TimeZoneInfo.FindSystemTimeZoneById(context.Business.TimeZoneId);
         var all = context.EligibleStaff
-            .SelectMany(staff => AppointmentSlotCalculator.Calculate(date, opensAt, closesAt,
-                context.Service.DurationMinutes, zone, timeProvider.GetUtcNow(),
-                context.Occupied.Where(x => x.StaffId == staff.Id).Select(x => (x.Start, x.End)))
-                .Select(x => new SlotDto(x.Start, x.End)))
+            .SelectMany(staff =>
+            {
+                var exception = context.Exceptions.FirstOrDefault(x => x.StaffMemberId == staff.Id && x.Date == date);
+                if (exception?.IsUnavailable == true) return [];
+                var opensAt = exception?.OpensAt ?? businessHour.OpensAt;
+                var closesAt = exception?.ClosesAt ?? businessHour.ClosesAt;
+                return AppointmentSlotCalculator.Calculate(date, opensAt, closesAt,
+                    context.Service.DurationMinutes, zone, timeProvider.GetUtcNow(),
+                    context.Occupied.Where(x => x.StaffId == staff.Id).Select(x => (x.Start, x.End)))
+                    .Select(x => new SlotDto(x.Start, x.End));
+            })
             .GroupBy(x => x.Start).Select(x => x.First()).OrderBy(x => x.Start).ToArray();
         return new(context.Business.TimeZoneId, date, all);
     }
@@ -150,6 +154,94 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IPublicCodeService 
         await store.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<StaffMemberDto>> GetStaffAsync(Guid userId, Guid businessId,
+        CancellationToken cancellationToken = default)
+    {
+        await DemandMembership(userId, businessId, cancellationToken);
+        return await store.GetStaffAsync(businessId, cancellationToken);
+    }
+
+    public async Task<StaffMemberDto> CreateStaffAsync(Guid userId, Guid businessId, SaveStaffMemberRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        await DemandMembership(userId, businessId, cancellationToken);
+        var staff = new StaffMember(Guid.NewGuid(), businessId, request.DisplayName.Trim());
+        staff.Update(request.DisplayName, request.IsActive);
+        store.AddStaffMember(staff);
+        if (!await store.SetStaffServicesAsync(businessId, staff.Id, request.ServiceIds.Distinct().ToArray(), cancellationToken))
+            throw new ApiException("CROSS_BUSINESS_REFERENCE", "Uno o más servicios no pertenecen al establecimiento.", 409);
+        await store.SaveChangesAsync(cancellationToken);
+        return new(staff.Id, staff.DisplayName, staff.IsActive, request.ServiceIds.Distinct().ToArray());
+    }
+
+    public async Task<StaffMemberDto> UpdateStaffAsync(Guid userId, Guid businessId, Guid staffId,
+        SaveStaffMemberRequest request, CancellationToken cancellationToken = default)
+    {
+        await DemandMembership(userId, businessId, cancellationToken);
+        var staff = await store.GetStaffMemberAsync(businessId, staffId, cancellationToken)
+            ?? throw new ApiException("STAFF_NOT_FOUND", "No encontramos al trabajador.", 404);
+        TryDomain(() => staff.Update(request.DisplayName, request.IsActive));
+        if (!await store.SetStaffServicesAsync(businessId, staff.Id, request.ServiceIds.Distinct().ToArray(), cancellationToken))
+            throw new ApiException("CROSS_BUSINESS_REFERENCE", "Uno o más servicios no pertenecen al establecimiento.", 409);
+        await store.SaveChangesAsync(cancellationToken);
+        return new(staff.Id, staff.DisplayName, staff.IsActive, request.ServiceIds.Distinct().ToArray());
+    }
+
+    public async Task SetBusinessHourAsync(Guid userId, Guid businessId, DayOfWeek day,
+        SaveBusinessHourRequest request, CancellationToken cancellationToken = default)
+    {
+        await DemandMembership(userId, businessId, cancellationToken);
+        var existing = await store.GetBusinessHourAsync(businessId, day, cancellationToken);
+        if (request.IsClosed)
+        {
+            if (existing is not null) store.RemoveBusinessHour(existing);
+        }
+        else if (existing is null)
+            store.AddBusinessHour(new BusinessHour(Guid.NewGuid(), businessId, day, request.OpensAt, request.ClosesAt));
+        else
+            TryDomain(() => existing.Update(request.OpensAt, request.ClosesAt));
+        await store.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<AvailabilityExceptionDto>> GetAvailabilityExceptionsAsync(Guid userId,
+        Guid businessId, CancellationToken cancellationToken = default)
+    {
+        await DemandMembership(userId, businessId, cancellationToken);
+        var items = await store.GetAvailabilityExceptionsAsync(businessId, cancellationToken);
+        return items.Select(ToExceptionDto).ToArray();
+    }
+
+    public async Task<AvailabilityExceptionDto> SaveAvailabilityExceptionAsync(Guid userId, Guid businessId,
+        SaveAvailabilityExceptionRequest request, CancellationToken cancellationToken = default)
+    {
+        await DemandMembership(userId, businessId, cancellationToken);
+        if (!await store.StaffBelongsToBusinessAsync(businessId, request.StaffMemberId, cancellationToken))
+            throw new ApiException("CROSS_BUSINESS_REFERENCE", "El trabajador no pertenece al establecimiento.", 409);
+        var existing = (await store.GetAvailabilityExceptionsAsync(businessId, cancellationToken))
+            .SingleOrDefault(x => x.StaffMemberId == request.StaffMemberId && x.Date == request.Date);
+        if (existing is null)
+        {
+            existing = new AvailabilityException(Guid.NewGuid(), businessId, request.StaffMemberId, request.Date,
+                request.IsUnavailable, request.OpensAt, request.ClosesAt);
+            if (!request.IsUnavailable) TryDomain(() => existing.Update(false, request.OpensAt, request.ClosesAt));
+            store.AddAvailabilityException(existing);
+        }
+        else
+            TryDomain(() => existing.Update(request.IsUnavailable, request.OpensAt, request.ClosesAt));
+        await store.SaveChangesAsync(cancellationToken);
+        return ToExceptionDto(existing);
+    }
+
+    public async Task DeleteAvailabilityExceptionAsync(Guid userId, Guid businessId, Guid exceptionId,
+        CancellationToken cancellationToken = default)
+    {
+        await DemandMembership(userId, businessId, cancellationToken);
+        var item = await store.GetAvailabilityExceptionAsync(businessId, exceptionId, cancellationToken)
+            ?? throw new ApiException("EXCEPTION_NOT_FOUND", "No encontramos el bloqueo.", 404);
+        store.RemoveAvailabilityException(item);
+        await store.SaveChangesAsync(cancellationToken);
+    }
+
     private async Task DemandMembership(Guid userId, Guid businessId, CancellationToken cancellationToken)
     {
         if (userId == Guid.Empty) throw new ApiException("UNAUTHENTICATED", "Debe iniciar sesión.", 401);
@@ -196,6 +288,9 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IPublicCodeService 
         try { action(); }
         catch (DomainException ex) { throw new ApiException(ex.Code, ex.Message, 409); }
     }
+
+    private static AvailabilityExceptionDto ToExceptionDto(AvailabilityException item)
+        => new(item.Id, item.StaffMemberId, item.Date, item.IsUnavailable, item.OpensAt, item.ClosesAt);
 
     [GeneratedRegex(@"\D")]
     private static partial Regex PhoneDigits();

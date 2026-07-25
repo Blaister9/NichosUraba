@@ -77,6 +77,11 @@ public sealed class BusinessHour : IBusinessOwned
     public DayOfWeek Day { get; private set; }
     public TimeOnly OpensAt { get; private set; }
     public TimeOnly ClosesAt { get; private set; }
+    public void Update(TimeOnly opensAt, TimeOnly closesAt)
+    {
+        if (closesAt <= opensAt) throw new DomainException("INVALID_HOURS", "La hora de cierre debe ser posterior.");
+        OpensAt = opensAt; ClosesAt = closesAt;
+    }
 }
 
 public sealed class Service : IBusinessOwned
@@ -112,6 +117,11 @@ public sealed class StaffMember : IBusinessOwned
     public Guid BusinessId { get; private set; }
     public string DisplayName { get; private set; } = "";
     public bool IsActive { get; private set; } = true;
+    public void Update(string displayName, bool active)
+    {
+        if (string.IsNullOrWhiteSpace(displayName)) throw new DomainException("INVALID_STAFF", "El nombre es obligatorio.");
+        DisplayName = displayName.Trim(); IsActive = active;
+    }
 }
 
 public sealed class StaffService : IBusinessOwned
@@ -138,6 +148,12 @@ public sealed class AvailabilityException : IBusinessOwned
     public bool IsUnavailable { get; private set; }
     public TimeOnly? OpensAt { get; private set; }
     public TimeOnly? ClosesAt { get; private set; }
+    public void Update(bool unavailable, TimeOnly? opensAt, TimeOnly? closesAt)
+    {
+        if (!unavailable && (opensAt is null || closesAt is null || closesAt <= opensAt))
+            throw new DomainException("INVALID_EXCEPTION", "El horario alternativo no es válido.");
+        IsUnavailable = unavailable; OpensAt = opensAt; ClosesAt = closesAt;
+    }
 }
 
 public sealed class ConsentReceipt : IBusinessOwned

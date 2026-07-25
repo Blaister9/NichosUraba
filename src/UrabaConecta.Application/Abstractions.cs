@@ -26,6 +26,21 @@ public interface IUrabaStore
     Task SaveChangesAsync(CancellationToken cancellationToken);
     Task<Service?> GetServiceAsync(Guid businessId, Guid serviceId, CancellationToken cancellationToken);
     void AddService(Service service);
+    Task<IReadOnlyList<StaffMemberDto>> GetStaffAsync(Guid businessId, CancellationToken cancellationToken);
+    Task<StaffMember?> GetStaffMemberAsync(Guid businessId, Guid staffId, CancellationToken cancellationToken);
+    Task<bool> SetStaffServicesAsync(Guid businessId, Guid staffId, IReadOnlyCollection<Guid> serviceIds,
+        CancellationToken cancellationToken);
+    void AddStaffMember(StaffMember staff);
+    Task<BusinessHour?> GetBusinessHourAsync(Guid businessId, DayOfWeek day, CancellationToken cancellationToken);
+    void AddBusinessHour(BusinessHour hour);
+    void RemoveBusinessHour(BusinessHour hour);
+    Task<IReadOnlyList<AvailabilityException>> GetAvailabilityExceptionsAsync(Guid businessId,
+        CancellationToken cancellationToken);
+    Task<AvailabilityException?> GetAvailabilityExceptionAsync(Guid businessId, Guid exceptionId,
+        CancellationToken cancellationToken);
+    Task<bool> StaffBelongsToBusinessAsync(Guid businessId, Guid staffId, CancellationToken cancellationToken);
+    void AddAvailabilityException(AvailabilityException exception);
+    void RemoveAvailabilityException(AvailabilityException exception);
 }
 
 public interface IPublicCodeService
@@ -60,5 +75,19 @@ public interface IUrabaUseCases
     Task<ServiceDto> CreateServiceAsync(Guid userId, Guid businessId, CreateServiceRequest request,
         CancellationToken cancellationToken = default);
     Task DeactivateServiceAsync(Guid userId, Guid businessId, Guid serviceId,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<StaffMemberDto>> GetStaffAsync(Guid userId, Guid businessId,
+        CancellationToken cancellationToken = default);
+    Task<StaffMemberDto> CreateStaffAsync(Guid userId, Guid businessId, SaveStaffMemberRequest request,
+        CancellationToken cancellationToken = default);
+    Task<StaffMemberDto> UpdateStaffAsync(Guid userId, Guid businessId, Guid staffId, SaveStaffMemberRequest request,
+        CancellationToken cancellationToken = default);
+    Task SetBusinessHourAsync(Guid userId, Guid businessId, DayOfWeek day, SaveBusinessHourRequest request,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AvailabilityExceptionDto>> GetAvailabilityExceptionsAsync(Guid userId, Guid businessId,
+        CancellationToken cancellationToken = default);
+    Task<AvailabilityExceptionDto> SaveAvailabilityExceptionAsync(Guid userId, Guid businessId,
+        SaveAvailabilityExceptionRequest request, CancellationToken cancellationToken = default);
+    Task DeleteAvailabilityExceptionAsync(Guid userId, Guid businessId, Guid exceptionId,
         CancellationToken cancellationToken = default);
 }

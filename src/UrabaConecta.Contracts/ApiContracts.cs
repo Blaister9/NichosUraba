@@ -49,6 +49,29 @@ public sealed class CreateServiceRequest
     [Range(5, 480)] public int DurationMinutes { get; set; }
     [Range(0, 100000000)] public decimal ReferencePrice { get; set; }
 }
+public sealed record StaffMemberDto(Guid Id, string DisplayName, bool IsActive, IReadOnlyList<Guid> ServiceIds);
+public sealed class SaveStaffMemberRequest
+{
+    [Required, StringLength(100, MinimumLength = 2)] public string DisplayName { get; set; } = "";
+    public bool IsActive { get; set; } = true;
+    [MinLength(1)] public List<Guid> ServiceIds { get; set; } = [];
+}
+public sealed class SaveBusinessHourRequest
+{
+    public bool IsClosed { get; set; }
+    [Required] public TimeOnly OpensAt { get; set; }
+    [Required] public TimeOnly ClosesAt { get; set; }
+}
+public sealed record AvailabilityExceptionDto(Guid Id, Guid StaffMemberId, DateOnly Date, bool IsUnavailable,
+    TimeOnly? OpensAt, TimeOnly? ClosesAt);
+public sealed class SaveAvailabilityExceptionRequest
+{
+    [Required] public Guid StaffMemberId { get; set; }
+    [Required] public DateOnly Date { get; set; }
+    public bool IsUnavailable { get; set; }
+    public TimeOnly? OpensAt { get; set; }
+    public TimeOnly? ClosesAt { get; set; }
+}
 
 public sealed class ApiException(string code, string message, int statusCode = 400) : Exception(message)
 {

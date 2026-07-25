@@ -129,6 +129,38 @@ privateApi.MapDelete("/{businessId:guid}/services/{serviceId:guid}",
     async (Guid businessId, Guid serviceId, ClaimsPrincipal user, IUrabaUseCases useCases, CancellationToken ct) =>
     { await useCases.DeactivateServiceAsync(UserId(user), businessId, serviceId, ct); return Results.NoContent(); })
     .RequireAuthorization("BusinessProfile.Manage");
+privateApi.MapGet("/{businessId:guid}/staff",
+    (Guid businessId, ClaimsPrincipal user, IUrabaUseCases useCases, CancellationToken ct)
+        => useCases.GetStaffAsync(UserId(user), businessId, ct))
+    .RequireAuthorization("BusinessProfile.Manage");
+privateApi.MapPost("/{businessId:guid}/staff",
+    async (Guid businessId, SaveStaffMemberRequest request, ClaimsPrincipal user,
+        IUrabaUseCases useCases, CancellationToken ct) =>
+        Results.Created("", await useCases.CreateStaffAsync(UserId(user), businessId, request, ct)))
+    .RequireAuthorization("BusinessProfile.Manage");
+privateApi.MapPut("/{businessId:guid}/staff/{staffId:guid}",
+    (Guid businessId, Guid staffId, SaveStaffMemberRequest request, ClaimsPrincipal user,
+        IUrabaUseCases useCases, CancellationToken ct)
+        => useCases.UpdateStaffAsync(UserId(user), businessId, staffId, request, ct))
+    .RequireAuthorization("BusinessProfile.Manage");
+privateApi.MapPut("/{businessId:guid}/hours/{day}",
+    async (Guid businessId, DayOfWeek day, SaveBusinessHourRequest request, ClaimsPrincipal user,
+        IUrabaUseCases useCases, CancellationToken ct) =>
+    { await useCases.SetBusinessHourAsync(UserId(user), businessId, day, request, ct); return Results.NoContent(); })
+    .RequireAuthorization("BusinessProfile.Manage");
+privateApi.MapGet("/{businessId:guid}/availability-exceptions",
+    (Guid businessId, ClaimsPrincipal user, IUrabaUseCases useCases, CancellationToken ct)
+        => useCases.GetAvailabilityExceptionsAsync(UserId(user), businessId, ct))
+    .RequireAuthorization("BusinessProfile.Manage");
+privateApi.MapPost("/{businessId:guid}/availability-exceptions",
+    async (Guid businessId, SaveAvailabilityExceptionRequest request, ClaimsPrincipal user,
+        IUrabaUseCases useCases, CancellationToken ct) =>
+        Results.Created("", await useCases.SaveAvailabilityExceptionAsync(UserId(user), businessId, request, ct)))
+    .RequireAuthorization("BusinessProfile.Manage");
+privateApi.MapDelete("/{businessId:guid}/availability-exceptions/{exceptionId:guid}",
+    async (Guid businessId, Guid exceptionId, ClaimsPrincipal user, IUrabaUseCases useCases, CancellationToken ct) =>
+    { await useCases.DeleteAvailabilityExceptionAsync(UserId(user), businessId, exceptionId, ct); return Results.NoContent(); })
+    .RequireAuthorization("BusinessProfile.Manage");
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()
