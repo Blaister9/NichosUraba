@@ -1,0 +1,139 @@
+@page "/panel/{BusinessId:guid}/configuracion/personal"
+@rendermode InteractiveAuto
+@attribute [Authorize]
+@inject IUrabaConectaApi Api
+
+<PageTitle>Personal | Configuración UrabáConecta</PageTitle>
+<a class="back-link" href="/panel/@BusinessId/configuracion">← Configuración</a>
+<p class="eyebrow">Configuración del negocio</p><h1>Personal</h1>
+<ConfigurationNav BusinessId="BusinessId" />
+
+@if (loading) { <p class="notice">Cargando personal…</p> }
+else if (error is not null) { <p class="error" role="alert">@error <button class="inline-button" @onclick="Load">Recargar</button></p> }
+else
+{
+    <div class="notice"><strong>Perfil operativo, no cuenta de acceso.</strong> Un trabajador puede participar en la agenda sin iniciar sesión. Las cuentas y membresías se administran por separado.</div>
+    @if (message is not null) { <p class="success" role="status">@message</p> }
+    <section class="config-form">
+        <h2>@(editingId.HasValue ? "Editar perfil" : "Nuevo perfil operativo")</h2>
+        <label>Nombre visible<input @bind="displayName" maxlength="100" data-testid="staff-name" /></label>
+        <label class="switch-row"><input type="checkbox" @bind="isActive" /> Perfil activo</label>
+        <label class="switch-row"><input type="checkbox" @bind="participates" /> Participa en la disponibilidad para citas</label>
+        <fieldset class="service-options">
+            <legend>Servicios que puede prestar</legend>
+            @foreach (var service in services)
+            {
+                <label class="check-option"><input type="checkbox" checked="@selected.Contains(service.Id)"
+                    @onchange="e => SelectService(service.Id, (bool)(e.Value ?? false))" /> @service.Name
+                    @if (!service.IsActive) { <small>(inactivo)</small> }</label>
+            }
+        </fieldset>
+        <div class="actions">
+            <button class="primary" type="button" @onclick="Save" disabled="@(!interactiveReady || saving)" data-testid="save-staff">@(saving ? "Guardando…" : "Guardar perfil")</button>
+            @if (editingId.HasValue) { <button class="secondary" type="button" @onclick="Reset">Cancelar edición</button> }
+        </div>
+    </section>
+
+    @if (staff.Count == 0) { <div class="empty"><h2>No hay perfiles operativos</h2><p>Cree el primero para preparar la disponibilidad.</p></div> }
+    else
+    {
+        <div class="config-list">
+            @foreach (var person in staff)
+            {
+                <article class="config-row" data-testid="staff-row">
+                    <div><div class="row-title"><h2>@person.DisplayName</h2><span class="status @(person.IsActive ? "confirmed" : "cancelled")">@(person.IsActive ? "Activo" : "Inactivo")</span></div>
+                        <p>@(person.ParticipatesInAvailability ? "Participa en disponibilidad" : "No participa en disponibilidad")</p>
+                        <p class="meta">@ServiceNames(person.ServiceIds)</p>
+                    </div>
+                    <div class="actions"><button class="secondary" type="button" @onclick="() => Edit(person)" disabled="@(!interactiveReady || saving)">Editar</button>
+                        <button class="@(person.IsActive ? "danger" : "primary")" type="button" @onclick="() => Toggle(person)" disabled="@(!interactiveReady || saving)">@(person.IsActive ? "Desactivar" : "Activar")</button></div>
+                </article>
+            }
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public Guid BusinessId { get; set; }
+    private IReadOnlyList<StaffMemberDto> staff = [];
+    private IReadOnlyList<ServiceDto> services = [];
+    private HashSet<Guid> selected = [];
+    private Guid? editingId;
+    private string displayName = "";
+    private bool isActive = true, participates = true, loading = true, saving, interactiveReady;
+    private long version;
+    private string? error, message;
+
+    protected override async Task OnParametersSetAsync() => await Load();
+    protected override void OnAfterRender(bool firstRender) { if (firstRender) { interactiveReady = true; StateHasChanged(); } }
+    private async Task Load()
+    {
+        loading = true; error = null;
+        try
+        {
+            var calls = await Task.WhenAll(
+                Wrap(Api.GetStaffAsync(BusinessId)),
+                Wrap(Api.GetServicesAsync(BusinessId)));
+            staff = (IReadOnlyList<StaffMemberDto>)calls[0];
+            services = (IReadOnlyList<ServiceDto>)calls[1];
+        }
+        catch (ApiException ex) { error = Friendly(ex); }
+        finally { loading = false; }
+    }
+    private static async Task<object> Wrap<T>(Task<T> task) => (object)(await task)!;
+    private void SelectService(Guid id, bool value) { if (value) selected.Add(id); else selected.Remove(id); }
+    private void Edit(StaffMemberDto person)
+    {
+        editingId = person.Id; displayName = person.DisplayName; isActive = person.IsActive;
+        participates = person.ParticipatesInAvailability; version = person.Version;
+        selected = person.ServiceIds.ToHashSet(); message = null;
+    }
+    private void Reset()
+    {
+        editingId = null; displayName = ""; isActive = true; participates = true; version = 0; selected = [];
+    }
+    private async Task Save()
+    {
+        error = message = null;
+        if (displayName.Trim().Length < 2) { error = "Ingrese un nombre visible de al menos dos caracteres."; return; }
+        if (selected.Count == 0) { error = "Seleccione al menos un servicio."; return; }
+        saving = true;
+        var request = new SaveStaffMemberRequest { DisplayName = displayName, IsActive = isActive,
+            ParticipatesInAvailability = participates, ServiceIds = selected.ToList(), Version = version };
+        try
+        {
+            if (editingId.HasValue) await Api.UpdateStaffAsync(BusinessId, editingId.Value, request);
+            else await Api.CreateStaffAsync(BusinessId, request);
+            message = editingId.HasValue ? "Perfil actualizado." : "Perfil creado.";
+            Reset(); await Load();
+        }
+        catch (ApiException ex) { error = ex.Code == "CONCURRENCY_CONFLICT" ? $"{ex.Message} Use Recargar." : ex.Message; }
+        finally { saving = false; }
+    }
+    private async Task Toggle(StaffMemberDto person)
+    {
+        saving = true; error = message = null;
+        try
+        {
+            await Api.UpdateStaffAsync(BusinessId, person.Id, new()
+            {
+                DisplayName = person.DisplayName, IsActive = !person.IsActive,
+                ParticipatesInAvailability = person.ParticipatesInAvailability,
+                ServiceIds = person.ServiceIds.ToList(), Version = person.Version
+            });
+            message = person.IsActive
+                ? "Perfil desactivado. Las citas históricas se conservan."
+                : "Perfil activado.";
+            await Load();
+        }
+        catch (ApiException ex) { error = ex.Message; }
+        finally { saving = false; }
+    }
+    private string ServiceNames(IReadOnlyList<Guid> ids)
+    {
+        var names = services.Where(x => ids.Contains(x.Id)).Select(x => x.Name).ToArray();
+        return names.Length == 0 ? "Sin servicios asociados" : string.Join(" · ", names);
+    }
+    private static string Friendly(ApiException ex) => ex.StatusCode is 401 or 403 or 404
+        ? "No tiene acceso a este establecimiento." : ex.Message;
+}

@@ -1,0 +1,156 @@
+@page "/panel/{BusinessId:guid}/configuracion/excepciones"
+@rendermode InteractiveAuto
+@attribute [Authorize]
+@inject IUrabaConectaApi Api
+
+<PageTitle>Excepciones | Configuración UrabáConecta</PageTitle>
+<a class="back-link" href="/panel/@BusinessId/configuracion">← Configuración</a>
+<p class="eyebrow">Configuración del negocio</p><h1>Excepciones de disponibilidad</h1>
+<ConfigurationNav BusinessId="BusinessId" />
+<div class="notice"><strong>Las citas existentes no se cancelan.</strong> Si una excepción entra en conflicto con una cita futura, deberá gestionarla por separado desde Citas.</div>
+
+@if (loading) { <p class="notice">Cargando excepciones…</p> }
+else if (error is not null) { <p class="error" role="alert">@error <button class="inline-button" @onclick="Load">Recargar</button></p> }
+else
+{
+    @if (message is not null) { <p class="success" role="status">@message</p> }
+    <section class="config-form">
+        <h2>@(editingId.HasValue ? "Editar excepción" : "Nueva excepción")</h2>
+        <div class="form-grid">
+            <label>Trabajador<select @bind="form.StaffMemberId" data-testid="exception-staff">
+                <option value="@Guid.Empty">Seleccione…</option>
+                @foreach (var person in staff.Where(x => x.IsActive)) { <option value="@person.Id">@person.DisplayName</option> }
+            </select></label>
+            <label>Fecha<input type="date" @bind="form.Date" @bind:event="oninput" min="@Today" data-testid="exception-date" /></label>
+            <label>Tipo<select @bind="form.Type" data-testid="exception-type">
+                <option value="ClosedAllDay">Cierre todo el día</option>
+                <option value="ClosedInterval">Cierre durante un intervalo</option>
+                <option value="ExtraordinaryOpening">Apertura extraordinaria</option>
+            </select></label>
+            @if (form.Type != "ClosedAllDay")
+            {
+                <label>Hora inicial<input type="time" @bind="form.OpensAt" @bind:event="oninput" /></label>
+                <label>Hora final<input type="time" @bind="form.ClosesAt" @bind:event="oninput" /></label>
+            }
+            <label>Motivo interno (opcional)<input @bind="form.Reason" @bind:event="oninput" maxlength="160" /></label>
+        </div>
+        <div class="actions"><button class="primary" type="button" @onclick="Save" disabled="@(!interactiveReady || saving)" data-testid="save-exception">@(saving ? "Guardando…" : "Guardar excepción")</button>
+            @if (editingId.HasValue) { <button class="secondary" type="button" @onclick="Reset">Cancelar edición</button> }</div>
+    </section>
+
+    <section class="filter-bar">
+        <label>Mostrar desde<input type="date" @bind="filterFrom" /></label>
+        <button class="secondary" type="button" @onclick="Load">Aplicar filtro</button>
+    </section>
+
+    @if (items.Count == 0) { <div class="empty"><h2>No hay excepciones próximas</h2><p>Agregue un cierre o una apertura para una fecha concreta.</p></div> }
+    else
+    {
+        <div class="config-list">
+            @foreach (var item in items)
+            {
+                <article class="config-row" data-testid="exception-row">
+                    <div><div class="row-title"><h2>@item.Date.ToString("dd/MM/yyyy")</h2><span class="tag">@TypeLabel(item.Type)</span></div>
+                        <p><strong>@StaffName(item.StaffMemberId)</strong> · @Interval(item)</p>
+                        @if (!string.IsNullOrWhiteSpace(item.Reason)) { <p>@item.Reason</p> }
+                        @if (item.FutureAppointmentConflicts > 0) { <p class="warning-text">⚠ @item.FutureAppointmentConflicts cita(s) futura(s) en conflicto. Gestione esas citas por separado.</p> }
+                    </div>
+                    <div class="actions"><button class="secondary" type="button" @onclick="() => Edit(item)" disabled="@(!interactiveReady || saving)">Editar</button>
+                        <button class="danger" type="button" @onclick="() => Delete(item)" disabled="@(!interactiveReady || saving)">Eliminar</button></div>
+                </article>
+            }
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public Guid BusinessId { get; set; }
+    private IReadOnlyList<StaffMemberDto> staff = [];
+    private IReadOnlyList<AvailabilityExceptionDto> items = [];
+    private ExceptionForm form = new();
+    private DateOnly filterFrom = DateOnly.FromDateTime(DateTime.Today);
+    private Guid? editingId;
+    private bool loading = true, saving, interactiveReady;
+    private string? error, message;
+    private string Today => DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd");
+
+    protected override async Task OnParametersSetAsync() => await Load();
+    protected override void OnAfterRender(bool firstRender) { if (firstRender) { interactiveReady = true; StateHasChanged(); } }
+    private async Task Load()
+    {
+        loading = true; error = null;
+        try
+        {
+            staff = await Api.GetStaffAsync(BusinessId);
+            items = await Api.GetAvailabilityExceptionsAsync(BusinessId, filterFrom);
+        }
+        catch (ApiException ex) { error = Friendly(ex); }
+        finally { loading = false; }
+    }
+    private void Edit(AvailabilityExceptionDto item)
+    {
+        editingId = item.Id;
+        form = new() { StaffMemberId = item.StaffMemberId, Date = item.Date, Type = item.Type,
+            OpensAt = item.OpensAt ?? new TimeOnly(8, 0), ClosesAt = item.ClosesAt ?? new TimeOnly(18, 0),
+            Reason = item.Reason, Version = item.Version };
+        message = null;
+    }
+    private void Reset() { editingId = null; form = new(); }
+    private async Task Save()
+    {
+        error = message = null;
+        if (form.StaffMemberId == Guid.Empty) { error = "Seleccione un trabajador."; return; }
+        if (form.Date < DateOnly.FromDateTime(DateTime.Today)) { error = "La fecha no puede estar en el pasado."; return; }
+        if (form.Type != "ClosedAllDay" && form.ClosesAt <= form.OpensAt)
+        { error = "La hora inicial debe ser anterior a la hora final."; return; }
+        saving = true;
+        try
+        {
+            var saved = await Api.SaveAvailabilityExceptionAsync(BusinessId, form.ToRequest());
+            message = saved.FutureAppointmentConflicts > 0
+                ? $"Excepción guardada. Hay {saved.FutureAppointmentConflicts} cita(s) futura(s) en conflicto; gestiónelas por separado."
+                : "Excepción guardada. No se modificaron citas existentes.";
+            Reset(); await Load();
+        }
+        catch (ApiException ex) { error = ex.Code == "CONCURRENCY_CONFLICT" ? $"{ex.Message} Use Recargar." : ex.Message; }
+        finally { saving = false; }
+    }
+    private async Task Delete(AvailabilityExceptionDto item)
+    {
+        saving = true; error = message = null;
+        try
+        {
+            await Api.DeleteAvailabilityExceptionAsync(BusinessId, item.Id, item.Version);
+            message = item.FutureAppointmentConflicts > 0
+                ? "Excepción eliminada. Las citas existentes se conservaron."
+                : "Excepción eliminada.";
+            await Load();
+        }
+        catch (ApiException ex) { error = ex.Message; }
+        finally { saving = false; }
+    }
+    private string StaffName(Guid id) => staff.SingleOrDefault(x => x.Id == id)?.DisplayName ?? "Trabajador no disponible";
+    private static string Interval(AvailabilityExceptionDto item) => item.Type == "ClosedAllDay"
+        ? "todo el día" : $"{item.OpensAt:HH\\:mm}–{item.ClosesAt:HH\\:mm}";
+    private static string TypeLabel(string type) => type switch
+    { "ClosedInterval" => "Cierre parcial", "ExtraordinaryOpening" => "Apertura extraordinaria", _ => "Cierre total" };
+    private static string Friendly(ApiException ex) => ex.StatusCode is 401 or 403 or 404
+        ? "No tiene acceso a este establecimiento." : ex.Message;
+    private sealed class ExceptionForm
+    {
+        public Guid StaffMemberId { get; set; }
+        public DateOnly Date { get; set; } = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+        public string Type { get; set; } = "ClosedAllDay";
+        public TimeOnly OpensAt { get; set; } = new(8, 0);
+        public TimeOnly ClosesAt { get; set; } = new(18, 0);
+        public string? Reason { get; set; }
+        public long Version { get; set; }
+        public SaveAvailabilityExceptionRequest ToRequest() => new()
+        {
+            StaffMemberId = StaffMemberId, Date = Date, Type = Type,
+            OpensAt = Type == "ClosedAllDay" ? null : OpensAt,
+            ClosesAt = Type == "ClosedAllDay" ? null : ClosesAt,
+            Reason = Reason, Version = Version
+        };
+    }
+}

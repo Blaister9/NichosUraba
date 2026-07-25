@@ -1,0 +1,52 @@
+@page "/panel/{BusinessId:guid}/configuracion"
+@rendermode InteractiveAuto
+@attribute [Authorize]
+@inject IUrabaConectaApi Api
+
+<PageTitle>Configuración del negocio | UrabáConecta</PageTitle>
+<a class="back-link" href="/panel">← Mis establecimientos</a>
+<p class="eyebrow">Área privada</p>
+<h1>Configuración del negocio</h1>
+
+@if (loading)
+{
+    <p class="notice" aria-live="polite">Cargando configuración…</p>
+}
+else if (error is not null)
+{
+    <p class="error" role="alert">@error</p>
+}
+else if (business is not null)
+{
+    <div class="config-business"><span class="tag">Establecimiento</span><strong>@business.Name</strong></div>
+    <ConfigurationNav BusinessId="BusinessId" />
+    <div class="config-grid">
+        <a class="config-card" href="/panel/@BusinessId/configuracion/servicios"><span>01</span><h2>Servicios</h2><p>Oferta, duración, precio y publicación.</p></a>
+        <a class="config-card" href="/panel/@BusinessId/configuracion/personal"><span>02</span><h2>Personal</h2><p>Perfiles operativos y servicios que prestan.</p></a>
+        <a class="config-card" href="/panel/@BusinessId/configuracion/horarios"><span>03</span><h2>Horarios</h2><p>Apertura habitual por día, hora de Colombia.</p></a>
+        <a class="config-card" href="/panel/@BusinessId/configuracion/excepciones"><span>04</span><h2>Excepciones</h2><p>Cierres y aperturas para fechas concretas.</p></a>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid BusinessId { get; set; }
+    private MyBusinessDto? business;
+    private bool loading = true;
+    private string? error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        loading = true; error = null;
+        try
+        {
+            business = (await Api.GetMyBusinessesAsync()).SingleOrDefault(x => x.Id == BusinessId);
+            if (business is null) error = "No tiene acceso a este establecimiento.";
+            else if (!business.CanManageConfiguration) error = "No tiene permiso para cambiar la configuración.";
+        }
+        catch (ApiException ex) { error = Friendly(ex); }
+        finally { loading = false; }
+    }
+
+    private static string Friendly(ApiException ex) => ex.StatusCode is 401 or 403 or 404
+        ? "No tiene acceso a este establecimiento." : ex.Message;
+}

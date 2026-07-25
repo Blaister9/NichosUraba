@@ -15,8 +15,8 @@ else
                 <option value="@Guid.Empty">Seleccione</option>
                 @foreach (var service in business.Services) { <option value="@service.Id">@service.Name · @service.DurationMinutes min</option> }
             </InputSelect></label>
-            <label>Fecha<InputDate @bind-Value="date" min="@DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd")" /></label>
-            <button type="button" class="secondary" @onclick="LoadSlots" disabled="@loadingSlots">@(loadingSlots ? "Consultando…" : "Ver horas disponibles")</button>
+            <label>Fecha<input type="date" value="@dateText" @oninput="e => dateText = e.Value?.ToString() ?? string.Empty" min="@DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd")" /></label>
+            <button type="button" class="secondary" @onclick="LoadSlots" disabled="@(!interactiveReady || loadingSlots)">@(loadingSlots ? "Consultando…" : "Ver horas disponibles")</button>
             @if (slots is not null && slots.Count == 0) { <p class="notice">No hay horas disponibles para esa fecha.</p> }
             else if (slots is not null)
             {
@@ -36,7 +36,7 @@ else
             <p><strong>Texto demostrativo sujeto a revisión jurídica antes de usar datos reales.</strong></p>
         </fieldset>
         @if (error is not null) { <p class="error" role="alert">@error</p> }
-        <button class="primary" disabled="@submitting">@(submitting ? "Enviando…" : "Enviar solicitud")</button>
+        <button class="primary" disabled="@(!interactiveReady || submitting)">@(submitting ? "Enviando…" : "Enviar solicitud")</button>
     </EditForm>
 }
 @code {
@@ -44,10 +44,10 @@ else
     [SupplyParameterFromQuery] public Guid? ServiceId { get; set; }
     private BusinessProfileDto? business;
     private List<SlotDto>? slots;
-    private DateOnly date = NextBusinessDay();
+    private string dateText = NextBusinessDay().ToString("yyyy-MM-dd");
     [SupplyParameterFromForm(FormName = "appointment-request")]
     private CreateAppointmentRequest request { get; set; } = default!;
-    private bool loadingSlots, submitting;
+    private bool loadingSlots, submitting, interactiveReady;
     private string? error;
     protected override async Task OnInitializedAsync()
     {
@@ -57,10 +57,17 @@ else
             request.ServiceId = ServiceId ?? business?.Services.FirstOrDefault()?.Id ?? Guid.Empty;
         if (request.ServiceId != Guid.Empty) await LoadSlots();
     }
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender) { interactiveReady = true; StateHasChanged(); }
+    }
     private async Task LoadSlots()
     {
         error = null;
         if (request.ServiceId == Guid.Empty) { error = "Seleccione un servicio."; return; }
+        if (!DateOnly.TryParseExact(dateText, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None, out var date))
+        { error = "Seleccione una fecha válida."; return; }
         loadingSlots = true;
         try { slots = (await Api.GetSlotsAsync(Slug, request.ServiceId, date)).Slots.ToList(); }
         catch (ApiException ex) { error = ex.Message; slots = []; }

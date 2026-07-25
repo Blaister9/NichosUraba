@@ -1,0 +1,143 @@
+@page "/panel/{BusinessId:guid}/configuracion/servicios"
+@rendermode InteractiveAuto
+@attribute [Authorize]
+@inject IUrabaConectaApi Api
+
+<PageTitle>Servicios | Configuración UrabáConecta</PageTitle>
+<a class="back-link" href="/panel/@BusinessId/configuracion">← Configuración</a>
+<p class="eyebrow">Configuración del negocio</p><h1>Servicios</h1>
+<ConfigurationNav BusinessId="BusinessId" />
+
+@if (loading) { <p class="notice" aria-live="polite">Cargando servicios…</p> }
+else if (error is not null) { <p class="error" role="alert">@error <button class="inline-button" @onclick="Load">Recargar</button></p> }
+else
+{
+    @if (message is not null) { <p class="success" role="status">@message</p> }
+    <section class="config-form">
+        <h2>@(editingId.HasValue ? "Editar servicio" : "Nuevo servicio")</h2>
+        <EditForm Model="form" OnValidSubmit="Save" FormName="service-configuration">
+            <DataAnnotationsValidator />
+            <div class="form-grid">
+                <label>Nombre<InputText @bind-Value="form.Name" maxlength="120" data-testid="service-name" /><ValidationMessage For="() => form.Name" /></label>
+                <label>Descripción corta<InputText @bind-Value="form.Description" maxlength="500" /></label>
+                <label>Duración en minutos<InputNumber @bind-Value="form.DurationMinutes" min="5" max="480" /></label>
+                <label>Precio de referencia (COP)<InputNumber @bind-Value="form.ReferencePrice" min="0" step="1000" /></label>
+                <label>Orden de visualización<InputNumber @bind-Value="form.DisplayOrder" min="0" /></label>
+                @if (editingId.HasValue)
+                {
+                    <label class="switch-row"><InputCheckbox @bind-Value="form.IsActive" /> Disponible para nuevas citas</label>
+                }
+            </div>
+            <div class="actions">
+                <button class="primary" type="submit" disabled="@(!interactiveReady || saving)" data-testid="save-service">
+                    @(saving ? "Guardando…" : "Guardar servicio")
+                </button>
+                @if (editingId.HasValue) { <button type="button" class="secondary" @onclick="Reset">Cancelar edición</button> }
+            </div>
+        </EditForm>
+    </section>
+
+    @if (services.Count == 0) { <div class="empty"><h2>Aún no hay servicios</h2><p>Cree el primero con el formulario anterior.</p></div> }
+    else
+    {
+        <div class="config-list">
+            @foreach (var service in services)
+            {
+                <article class="config-row" data-testid="service-row">
+                    <div><div class="row-title"><h2>@service.Name</h2><span class="status @(service.IsActive ? "confirmed" : "cancelled")">@(service.IsActive ? "Activo" : "Inactivo")</span></div>
+                        @if (!string.IsNullOrWhiteSpace(service.Description)) { <p>@service.Description</p> }
+                        <p class="meta">@service.DurationMinutes min · @service.ReferencePrice.ToString("C0", Colombia) · orden @service.DisplayOrder · @service.FutureAppointmentCount cita(s) futura(s)</p>
+                    </div>
+                    <div class="actions">
+                        <button class="secondary" type="button" @onclick="() => Edit(service)" disabled="@(!interactiveReady || saving)">Editar</button>
+                        <button class="@(service.IsActive ? "danger" : "primary")" type="button" @onclick="() => Toggle(service)" disabled="@(!interactiveReady || saving)">
+                            @(service.IsActive ? "Desactivar" : "Activar")
+                        </button>
+                    </div>
+                </article>
+            }
+        </div>
+    }
+}
+
+@code {
+    private static readonly System.Globalization.CultureInfo Colombia = new("es-CO");
+    [Parameter] public Guid BusinessId { get; set; }
+    private IReadOnlyList<ServiceDto> services = [];
+    private ServiceForm form = new();
+    private Guid? editingId;
+    private bool loading = true, saving, interactiveReady;
+    private string? error, message;
+
+    protected override async Task OnParametersSetAsync() => await Load();
+    protected override void OnAfterRender(bool firstRender) { if (firstRender) { interactiveReady = true; StateHasChanged(); } }
+
+    private async Task Load()
+    {
+        loading = true; error = null;
+        try { services = await Api.GetServicesAsync(BusinessId); }
+        catch (ApiException ex) { error = Friendly(ex); }
+        finally { loading = false; }
+    }
+    private void Edit(ServiceDto service)
+    {
+        editingId = service.Id;
+        form = new() { Name = service.Name, Description = service.Description, DurationMinutes = service.DurationMinutes,
+            ReferencePrice = service.ReferencePrice, DisplayOrder = service.DisplayOrder,
+            IsActive = service.IsActive, Version = service.Version };
+        message = null;
+    }
+    private void Reset() { editingId = null; form = new(); }
+    private async Task Save()
+    {
+        saving = true; error = message = null;
+        try
+        {
+            if (editingId.HasValue)
+                await Api.UpdateServiceAsync(BusinessId, editingId.Value, form.ToUpdate());
+            else
+                await Api.CreateServiceAsync(BusinessId, form.ToCreate());
+            message = editingId.HasValue ? "Servicio actualizado." : "Servicio creado.";
+            Reset(); await Load();
+        }
+        catch (ApiException ex) { error = ex.Code == "CONCURRENCY_CONFLICT" ? $"{ex.Message} Use Recargar." : ex.Message; }
+        finally { saving = false; }
+    }
+    private async Task Toggle(ServiceDto service)
+    {
+        saving = true; error = message = null;
+        try
+        {
+            await Api.UpdateServiceAsync(BusinessId, service.Id, new()
+            {
+                Name = service.Name, Description = service.Description, DurationMinutes = service.DurationMinutes,
+                ReferencePrice = service.ReferencePrice, DisplayOrder = service.DisplayOrder,
+                IsActive = !service.IsActive, Version = service.Version
+            });
+            message = service.IsActive
+                ? "Servicio desactivado. Las citas existentes se conservan."
+                : "Servicio activado para nuevas citas.";
+            await Load();
+        }
+        catch (ApiException ex) { error = ex.Message; }
+        finally { saving = false; }
+    }
+    private static string Friendly(ApiException ex) => ex.StatusCode is 401 or 403 or 404
+        ? "No tiene acceso a este establecimiento." : ex.Message;
+
+    private sealed class ServiceForm
+    {
+        [Required(ErrorMessage = "El nombre es obligatorio."), StringLength(120, MinimumLength = 2)] public string Name { get; set; } = "";
+        [StringLength(500)] public string? Description { get; set; }
+        [Range(5, 480, ErrorMessage = "Use entre 5 y 480 minutos.")] public int DurationMinutes { get; set; } = 30;
+        [Range(0, 100000000, ErrorMessage = "El precio no puede ser negativo.")] public decimal ReferencePrice { get; set; }
+        [Range(0, 10000)] public int DisplayOrder { get; set; }
+        public bool IsActive { get; set; } = true;
+        public long Version { get; set; }
+        public CreateServiceRequest ToCreate() => new() { Name = Name, Description = Description,
+            DurationMinutes = DurationMinutes, ReferencePrice = ReferencePrice, DisplayOrder = DisplayOrder };
+        public UpdateServiceRequest ToUpdate() => new() { Name = Name, Description = Description,
+            DurationMinutes = DurationMinutes, ReferencePrice = ReferencePrice, DisplayOrder = DisplayOrder,
+            IsActive = IsActive, Version = Version };
+    }
+}

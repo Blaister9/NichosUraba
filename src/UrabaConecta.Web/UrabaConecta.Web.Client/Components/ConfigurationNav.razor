@@ -1,0 +1,11 @@
+<nav class="config-nav" aria-label="Configuración del negocio">
+    <a href="/panel/@BusinessId/configuracion">Resumen</a>
+    <a href="/panel/@BusinessId/configuracion/servicios">Servicios</a>
+    <a href="/panel/@BusinessId/configuracion/personal">Personal</a>
+    <a href="/panel/@BusinessId/configuracion/horarios">Horarios</a>
+    <a href="/panel/@BusinessId/configuracion/excepciones">Excepciones</a>
+</nav>
+
+@code {
+    [Parameter, EditorRequired] public Guid BusinessId { get; set; }
+}
