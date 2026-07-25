@@ -67,13 +67,11 @@ public sealed class SchedulingJourneyTests(BrowserFixture fixture) : IClassFixtu
     private static ILocatorAssertions Expect(ILocator locator) => Assertions.Expect(locator);
     private static async Task ClickUntilStatus(ILocator card, string action, string expected)
     {
-        for (var attempt = 0; attempt < 10; attempt++)
-        {
-            if ((await card.InnerTextAsync()).Contains(expected, StringComparison.Ordinal)) return;
-            var button = card.GetByRole(AriaRole.Button, new() { Name = action });
-            if (await button.CountAsync() > 0) await button.ClickAsync();
-            await Task.Delay(500);
-        }
-        Assert.Contains(expected, await card.InnerTextAsync());
+        if ((await card.InnerTextAsync()).Contains(expected, StringComparison.Ordinal)) return;
+        var button = card.GetByRole(AriaRole.Button, new() { Name = action });
+        await Assertions.Expect(button).ToBeEnabledAsync(new() { Timeout = 15_000 });
+        await button.ClickAsync();
+        await Assertions.Expect(card.GetByText(expected, new() { Exact = true }))
+            .ToBeVisibleAsync(new() { Timeout = 15_000 });
     }
 }
