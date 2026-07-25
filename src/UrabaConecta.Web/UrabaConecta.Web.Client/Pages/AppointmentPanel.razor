@@ -8,7 +8,7 @@
 <section class="search-panel">
     <label>Fecha<InputDate @bind-Value="date" /></label>
     <label>Estado<InputSelect @bind-Value="status"><option value="">Todos</option><option>Pending</option><option>Confirmed</option><option>Rejected</option><option>Cancelled</option><option>Completed</option><option>NoShow</option></InputSelect></label>
-    <button class="primary" @onclick="Load">Filtrar</button>
+    <button class="primary" @onclick="Load" disabled="@(!interactiveReady || working)">Filtrar</button>
 </section>
 @if (loading) { <p class="notice">Cargando citas…</p> }
 else if (error is not null) { <p class="error" role="alert">@error</p> }
@@ -26,7 +26,7 @@ else
                     <dt>Creada</dt><dd>@item.CreatedAt.ToString("dd/MM/yyyy HH:mm") UTC</dd></dl>
                 <div class="actions">
                     @foreach (var action in Actions(item.Status))
-                    { <button class="secondary" @onclick="() => Change(item, action.Value)" disabled="@working">@action.Label</button> }
+                    { <button class="secondary" @onclick="() => Change(item, action.Value)" disabled="@(!interactiveReady || working)">@action.Label</button> }
                 </div>
             </article>
         }
@@ -37,9 +37,15 @@ else
     private DateOnly? date;
     private string status = "";
     private string? error;
-    private bool loading = true, working;
+    private bool loading = true, working, interactiveReady;
     private IReadOnlyList<AppointmentAdminDto> appointments = [];
     protected override async Task OnParametersSetAsync() => await Load();
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+        interactiveReady = true;
+        StateHasChanged();
+    }
     private async Task Load()
     {
         loading = true; error = null;
@@ -63,5 +69,5 @@ else
     private static string Label(string value) => value switch
     { "Pending" => "Pendiente", "Confirmed" => "Confirmada", "Rejected" => "Rechazada", "Cancelled" => "Cancelada", "Completed" => "Completada", "NoShow" => "No asistió", _ => value };
     private static string LocalDate(DateTimeOffset value) =>
-        TimeZoneInfo.ConvertTime(value, TimeZoneInfo.FindSystemTimeZoneById("America/Bogota")).ToString("dd/MM/yyyy · h:mm tt");
+        value.ToOffset(TimeSpan.FromHours(-5)).ToString("dd/MM/yyyy · h:mm tt");
 }

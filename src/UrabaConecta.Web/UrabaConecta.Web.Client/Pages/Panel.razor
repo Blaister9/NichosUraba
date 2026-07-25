@@ -13,10 +13,18 @@ else
         @foreach (var business in businesses)
         {
             <article class="business-card"><span class="tag">@business.MembershipRole</span><h2>@business.Name</h2>
-                <div class="actions"><a class="button-link" href="/panel/@business.Id/citas">Administrar citas</a>
+                <div class="actions">
+                @if (business.CanManageAppointments)
+                {
+                    <a class="button-link" href="/panel/@business.Id/citas">Administrar citas</a>
+                }
                 @if (business.CanManageConfiguration)
                 {
                     <a class="secondary button-link" href="/panel/@business.Id/configuracion">Configuración del negocio</a>
+                }
+                @if (business.CanManageMembers)
+                {
+                    <a class="secondary button-link" href="/panel/@business.Id/equipo">Equipo y permisos</a>
                 }</div>
             </article>
         }

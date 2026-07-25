@@ -1,0 +1,309 @@
+@page "/panel/{BusinessId:guid}/equipo"
+@rendermode InteractiveAuto
+@attribute [Authorize]
+@inject IUrabaConectaApi Api
+@inject IJSRuntime Js
+
+<PageTitle>Equipo y permisos | UrabáConecta</PageTitle>
+<a class="back-link" href="/panel">← Volver a establecimientos</a>
+<p class="eyebrow">Área privada</p>
+<h1>Equipo y permisos</h1>
+<p class="meta">Administre cuentas y acceso. Un perfil de personal que presta servicios no es necesariamente una cuenta con acceso.</p>
+
+@if (!string.IsNullOrWhiteSpace(error))
+{
+    <div class="error" role="alert">@error <button class="inline-button" @onclick="Load">Reintentar</button></div>
+}
+@if (!string.IsNullOrWhiteSpace(success))
+{
+    <div class="success" role="status">@success</div>
+}
+@if (!string.IsNullOrWhiteSpace(temporaryPassword))
+{
+    <section class="temporary-secret" role="status">
+        <strong>Contraseña temporal — se muestra una sola vez</strong>
+        <code>@temporaryPassword</code>
+        <p>Entréguela por un canal seguro. El cambio obligatorio en el primer ingreso no está disponible en esta demo.</p>
+        <button class="secondary" @onclick="DismissPassword">Ya la guardé</button>
+    </section>
+}
+
+@if (data is null && error is null)
+{
+    <p class="notice">Cargando equipo…</p>
+}
+else if (data is not null)
+{
+    <section class="team-create-grid">
+        <EditForm Model="linkRequest" OnValidSubmit="LinkExisting" FormName="link-existing-member"
+                  class="config-form" data-testid="link-member-form">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+            <h2>Vincular cuenta existente</h2>
+            <p class="meta">La búsqueda exige el correo completo y no muestra un directorio global de cuentas.</p>
+            <label>Correo de la cuenta <InputText @bind-Value="linkRequest.Email" autocomplete="off" /></label>
+            @PermissionInputs(linkRequest)
+            <button class="primary" disabled="@(!interactiveReady || busy)">Vincular cuenta</button>
+        </EditForm>
+        @if (data.DevelopmentAccountCreationEnabled)
+        {
+            <EditForm Model="createRequest" OnValidSubmit="CreateDevelopment" FormName="create-development-member"
+                      class="config-form" data-testid="create-member-form">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+                <h2>Crear cuenta ficticia</h2>
+                <p class="meta">Disponible únicamente en Development.</p>
+                <label>Nombre visible <InputText @bind-Value="createRequest.DisplayName" /></label>
+                <label>Correo ficticio <InputText @bind-Value="createRequest.Email" autocomplete="off" /></label>
+                @PermissionInputs(createRequest)
+                <button class="primary" disabled="@(!interactiveReady || busy)">Crear y vincular</button>
+            </EditForm>
+        }
+        else
+        {
+            <aside class="notice">
+                La creación directa con contraseña temporal no está disponible en este ambiente.
+                El flujo productivo de invitación está pendiente.
+            </aside>
+        }
+    </section>
+
+    @if (data.Items.Count == 0)
+    {
+        <div class="empty">No hay membresías registradas.</div>
+    }
+    else
+    {
+        <div class="member-list">
+            @foreach (var member in data.Items)
+            {
+                var editor = editors[member.Id];
+                <article class="member-card" data-member-id="@member.Id">
+                    <header>
+                        <div>
+                            <div class="row-title">
+                                <h2>@member.DisplayName</h2>
+                                <span class="status @(member.IsActive ? "confirmed" : "cancelled")">
+                                    @(member.IsActive ? "Activa" : "Inactiva")
+                                </span>
+                                <span class="tag">@(member.IsOwner ? "Propietaria" : "Trabajadora")</span>
+                            </div>
+                            <p class="meta">@member.Email</p>
+                        </div>
+                        <small>Vinculada @member.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")<br />
+                            Actualizada @member.UpdatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</small>
+                    </header>
+                    <fieldset class="permission-set" disabled="@busy">
+                        <legend>@(member.IsOwner ? "Permisos que conservará si deja de ser propietaria" : "Permisos efectivos")</legend>
+                        <label class="check-option"><input type="checkbox" @bind="editor.Appointments" /> Administrar citas</label>
+                        <label class="check-option"><input type="checkbox" @bind="editor.Configuration" /> Configurar negocio</label>
+                        <label class="check-option"><input type="checkbox" @bind="editor.Members" /> Administrar equipo</label>
+                    </fieldset>
+                    <div class="actions">
+                        @if (!member.IsOwner)
+                        {
+                            <button class="secondary" type="button" disabled="@(!interactiveReady || busy)"
+                                    @onclick="() => SavePermissions(member)">Guardar permisos</button>
+                        }
+                        @if (member.IsActive)
+                        {
+                            <button class="danger" type="button" disabled="@(!interactiveReady || busy)"
+                                    @onclick="() => Deactivate(member)">Desactivar acceso</button>
+                        }
+                        else
+                        {
+                            <button class="primary" type="button" disabled="@(!interactiveReady || busy)"
+                                    @onclick="() => Activate(member)">Reactivar acceso</button>
+                        }
+                        @if (!member.IsOwner && member.IsActive && CurrentActorIsOwner)
+                        {
+                            <button class="secondary" type="button" disabled="@(!interactiveReady || busy)"
+                                    @onclick="() => GrantOwner(member)">Hacer propietaria</button>
+                        }
+                        @if (member.IsOwner && CurrentActorIsOwner)
+                        {
+                            <button class="secondary" type="button" disabled="@(!interactiveReady || busy)"
+                                    @onclick="() => RevokeOwner(member)">Retirar propiedad</button>
+                        }
+                        <button class="secondary" type="button" disabled="@(!interactiveReady || busy)"
+                                @onclick="() => ToggleAudit(member.Id)">@(auditMemberId == member.Id ? "Ocultar historial" : "Ver historial")</button>
+                    </div>
+                    @if (auditMemberId == member.Id)
+                    {
+                        <div class="audit-list">
+                            @if (audit is null) { <p class="notice">Cargando historial…</p> }
+                            else if (audit.Count == 0) { <p class="empty">Aún no hay eventos registrados.</p> }
+                            else foreach (var entry in audit)
+                            {
+                                <div><strong>@AuditLabel(entry.Action)</strong>
+                                    <span>@entry.OccurredAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</span></div>
+                            }
+                        </div>
+                    }
+                </article>
+            }
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public Guid BusinessId { get; set; }
+    private BusinessMemberListDto? data;
+    private readonly LinkExistingMemberRequest linkRequest = new();
+    private readonly CreateDevelopmentMemberRequest createRequest = new();
+    private readonly Dictionary<Guid, PermissionEditor> editors = [];
+    private IReadOnlyList<MembershipAuditDto>? audit;
+    private Guid? auditMemberId;
+    private string? temporaryPassword;
+    private string? error;
+    private string? success;
+    private bool busy;
+    private bool interactiveReady;
+    private BusinessMemberDto? CurrentActor => data?.Items.SingleOrDefault(x => x.Id == data.CurrentMembershipId);
+    private bool CurrentActorIsOwner => CurrentActor?.IsOwner == true;
+
+    protected override async Task OnParametersSetAsync() => await Load();
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+        interactiveReady = true;
+        StateHasChanged();
+    }
+
+    private async Task Load()
+    {
+        error = null;
+        try
+        {
+            data = await Api.ListMembersAsync(BusinessId);
+            editors.Clear();
+            foreach (var item in data.Items)
+                editors[item.Id] = new(item.Permissions.CanManageAppointments,
+                    item.Permissions.CanManageConfiguration, item.Permissions.CanManageMembers);
+        }
+        catch (ApiException ex) { error = ex.Message; }
+    }
+
+    private RenderFragment PermissionInputs(LinkExistingMemberRequest model) => @<fieldset class="permission-set">
+        <legend>Permisos iniciales</legend>
+        <label class="check-option"><input type="checkbox" @bind="model.CanManageAppointments" /> Administrar citas</label>
+        <label class="check-option"><input type="checkbox" @bind="model.CanManageConfiguration" /> Configurar negocio</label>
+        <label class="check-option"><input type="checkbox" @bind="model.CanManageMembers" /> Administrar equipo</label>
+    </fieldset>;
+
+    private async Task LinkExisting()
+    {
+        await Run(async () =>
+        {
+            await Api.LinkExistingMemberAsync(BusinessId, linkRequest);
+            linkRequest.Email = "";
+            success = "La cuenta existente quedó vinculada con los permisos seleccionados.";
+        });
+    }
+
+    private async Task CreateDevelopment()
+    {
+        await Run(async () =>
+        {
+            var created = await Api.CreateDevelopmentMemberAsync(BusinessId, createRequest);
+            temporaryPassword = created.TemporaryPassword;
+            createRequest.DisplayName = ""; createRequest.Email = "";
+            success = "La cuenta ficticia fue creada y vinculada.";
+        });
+    }
+
+    private async Task SavePermissions(BusinessMemberDto member)
+    {
+        var editor = editors[member.Id];
+        if (!await Js.InvokeAsync<bool>("confirm",
+            $"Cambiará los permisos de {member.DisplayName}. El acceso se actualizará desde su siguiente solicitud. ¿Continuar?")) return;
+        await Run(async () =>
+        {
+            await Api.UpdateMemberPermissionsAsync(BusinessId, member.Id, new UpdateMemberPermissionsRequest
+            {
+                CanManageAppointments = editor.Appointments, CanManageConfiguration = editor.Configuration,
+                CanManageMembers = editor.Members, Version = member.Version
+            });
+            success = $"Permisos de {member.DisplayName} actualizados.";
+        });
+    }
+
+    private async Task Deactivate(BusinessMemberDto member)
+    {
+        if (!await Js.InvokeAsync<bool>("confirm",
+            $"Desactivará el acceso de {member.DisplayName} a este establecimiento. La cuenta y el historial no se eliminarán. ¿Continuar?")) return;
+        await Run(async () =>
+        {
+            await Api.DeactivateMemberAsync(BusinessId, member.Id, member.Version);
+            success = $"Acceso de {member.DisplayName} desactivado.";
+        });
+    }
+
+    private async Task Activate(BusinessMemberDto member)
+    {
+        if (!await Js.InvokeAsync<bool>("confirm",
+            $"Reactivará el acceso de {member.DisplayName} con sus permisos guardados. ¿Continuar?")) return;
+        await Run(async () =>
+        {
+            await Api.ActivateMemberAsync(BusinessId, member.Id, member.Version);
+            success = $"Acceso de {member.DisplayName} reactivado.";
+        });
+    }
+
+    private async Task GrantOwner(BusinessMemberDto member)
+    {
+        if (!await Js.InvokeAsync<bool>("confirm",
+            $"Convertirá a {member.DisplayName} en propietaria con todos los permisos, incluido administrar equipo y propietarios. ¿Continuar?")) return;
+        await Run(async () =>
+        {
+            await Api.GrantOwnershipAsync(BusinessId, member.Id, member.Version);
+            success = $"{member.DisplayName} ahora es propietaria.";
+        });
+    }
+
+    private async Task RevokeOwner(BusinessMemberDto member)
+    {
+        var editor = editors[member.Id];
+        if (!await Js.InvokeAsync<bool>("confirm",
+            $"Retirará la propiedad de {member.DisplayName}. La operación se bloqueará si es la última propietaria activa. ¿Continuar?")) return;
+        await Run(async () =>
+        {
+            await Api.RevokeOwnershipAsync(BusinessId, member.Id, new RevokeOwnershipRequest
+            {
+                CanManageAppointments = editor.Appointments, CanManageConfiguration = editor.Configuration,
+                CanManageMembers = editor.Members, Version = member.Version
+            });
+            success = $"{member.DisplayName} dejó de ser propietaria.";
+        });
+    }
+
+    private async Task ToggleAudit(Guid memberId)
+    {
+        if (auditMemberId == memberId) { auditMemberId = null; audit = null; return; }
+        auditMemberId = memberId; audit = null; error = null;
+        try { audit = await Api.ListMembershipAuditAsync(BusinessId, memberId); }
+        catch (ApiException ex) { error = ex.Message; }
+    }
+
+    private async Task Run(Func<Task> action)
+    {
+        busy = true; error = null; success = null;
+        try { await action(); await Load(); }
+        catch (ApiException ex) { error = ex.Message; }
+        finally { busy = false; }
+    }
+
+    private void DismissPassword() => temporaryPassword = null;
+    private static string AuditLabel(string action) => action switch
+    {
+        "MemberLinked" => "Cuenta vinculada", "MemberActivated" => "Membresía activada",
+        "MemberDeactivated" => "Membresía desactivada", "PermissionsChanged" => "Permisos modificados",
+        "OwnerGranted" => "Propiedad otorgada", "OwnerRevoked" => "Propiedad retirada", _ => action
+    };
+    private sealed class PermissionEditor(bool appointments, bool configuration, bool members)
+    {
+        public bool Appointments { get; set; } = appointments;
+        public bool Configuration { get; set; } = configuration;
+        public bool Members { get; set; } = members;
+    }
+}
