@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="es-CO">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Reunión de selección — oportunidades tecnológicas en Urabá</title>
+  <style>
+    :root{
+      --ink:#17352d;--muted:#61746d;--paper:#f7f4eb;--card:#fffdf7;
+      --green:#1d6b4f;--lime:#b7d56a;--orange:#ee8b42;--red:#b84d3e;
+      --line:#d8ded5;--shadow:0 20px 70px rgba(23,53,45,.15)
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0}
+    body{overflow:hidden;background:#dfe6dd;color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+    .deck{height:100%;position:relative}
+    .slide{
+      position:absolute;inset:0;display:none;overflow:auto;padding:6vh 7vw 8vh;
+      background:
+        radial-gradient(circle at 92% 10%,rgba(183,213,106,.28),transparent 28%),
+        linear-gradient(135deg,var(--paper),#eef4ea);
+    }
+    .slide.active{display:flex;flex-direction:column;animation:enter .25s ease-out}
+    @keyframes enter{from{opacity:.35;transform:translateX(12px)}}
+    .kicker{font-size:clamp(.7rem,1.1vw,1rem);letter-spacing:.16em;text-transform:uppercase;color:var(--green);font-weight:800}
+    h1{font-size:clamp(2.7rem,6.4vw,6.2rem);line-height:.94;letter-spacing:-.055em;max-width:1050px;margin:.18em 0}
+    h2{font-size:clamp(2rem,4.2vw,4.2rem);line-height:1;letter-spacing:-.045em;margin:.2em 0 .55em;max-width:1100px}
+    h3{font-size:clamp(1.02rem,1.65vw,1.45rem);margin:0 0 .45em}
+    p,li,td,th{font-size:clamp(.88rem,1.32vw,1.18rem);line-height:1.42}
+    p{margin:.35em 0 .8em}
+    ul{margin:.25em 0;padding-left:1.15em}
+    li{margin:.28em 0}
+    .hero{display:grid;grid-template-columns:1.45fr .7fr;gap:5vw;align-items:end;flex:1}
+    .stamp{border:2px solid var(--green);border-radius:22px;padding:1.3rem;background:rgba(255,255,255,.58);transform:rotate(-1.2deg)}
+    .stamp b{font-size:clamp(2.2rem,5vw,5rem);color:var(--orange);display:block;line-height:1}
+    .lead{font-size:clamp(1.1rem,1.9vw,1.65rem);max-width:850px;color:#39554d}
+    .grid{display:grid;gap:1rem}
+    .two{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .three{grid-template-columns:repeat(3,minmax(0,1fr))}
+    .four{grid-template-columns:repeat(4,minmax(0,1fr))}
+    .card{background:rgba(255,253,247,.92);border:1px solid var(--line);border-radius:18px;padding:1.1rem 1.2rem;box-shadow:0 8px 30px rgba(23,53,45,.06)}
+    .card.accent{border-top:7px solid var(--orange)}
+    .card.good{border-top:7px solid var(--green)}
+    .card.warn{border-top:7px solid var(--red)}
+    .big{font-size:clamp(1.55rem,3vw,3rem);font-weight:850;line-height:1;color:var(--green);margin:.1em 0 .25em}
+    .label{font-size:.78rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+    .fact{padding:.85rem 0;border-bottom:1px solid var(--line)}
+    .fact:last-child{border:0}
+    .tag{display:inline-block;border-radius:999px;padding:.25rem .65rem;background:#e4eadf;color:var(--green);font-size:.75rem;font-weight:800;margin:.1rem .2rem .1rem 0}
+    .tag.orange{background:#fde8d6;color:#964719}.tag.red{background:#f4dedb;color:#8d3329}
+    .callout{border-left:7px solid var(--orange);padding:.7rem 1rem;background:#fff7ed;border-radius:0 14px 14px 0;font-size:clamp(1.05rem,1.8vw,1.55rem);font-weight:750}
+    .flow{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:.7rem;align-items:center;margin:1rem 0}
+    .arrow{font-size:2rem;color:var(--orange);font-weight:800}
+    table{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border:1px solid var(--line);border-radius:15px;overflow:hidden}
+    th,td{padding:.65rem .72rem;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}
+    th{background:#e8eee4;font-size:clamp(.72rem,1vw,.9rem);text-transform:uppercase;letter-spacing:.04em}
+    tr:last-child td{border-bottom:0}
+    .source{margin-top:auto;padding-top:1rem;color:var(--muted);font-size:clamp(.62rem,.85vw,.78rem);line-height:1.3}
+    .source a{color:inherit}
+    .nav{position:fixed;right:24px;bottom:18px;display:flex;gap:.45rem;z-index:20}
+    button{border:0;border-radius:999px;width:42px;height:42px;background:var(--ink);color:white;font-size:1.1rem;cursor:pointer;box-shadow:var(--shadow)}
+    button:focus-visible{outline:4px solid var(--orange);outline-offset:2px}
+    .counter{position:fixed;left:24px;bottom:21px;font-weight:800;font-size:.82rem;z-index:20}
+    .progress{position:fixed;left:0;right:0;bottom:0;height:5px;background:#cbd5c8;z-index:19}
+    .progress span{display:block;height:100%;background:var(--orange);transition:width .2s}
+    .links{columns:2;column-gap:2rem}
+    .links p{break-inside:avoid;font-size:clamp(.66rem,.85vw,.82rem);word-break:break-word;margin:0 0 .65rem}
+    .legend{display:flex;gap:1rem;flex-wrap:wrap;margin:.5rem 0}
+    .legend span{font-size:.8rem}
+    @media(max-width:800px){
+      .slide{padding:5vh 5vw 10vh}.hero,.two,.three,.four{grid-template-columns:1fr}.hero{align-items:start}
+      .three,.four{overflow:auto}.flow{grid-template-columns:1fr}.arrow{transform:rotate(90deg);text-align:center}
+      .links{columns:1}.stamp{transform:none}
+    }
+    @media print{
+      body{overflow:visible;background:white}.deck{height:auto}.slide,.slide.active{position:relative;display:flex;min-height:100vh;page-break-after:always}
+      .nav,.counter,.progress{display:none}
+    }
+  </style>
+</head>
+<body>
+<main class="deck" aria-live="polite">
+  <section class="slide active" aria-label="Diapositiva 1">
+    <div class="kicker">Reunión inicial · 27 minutos</div>
+    <div class="hero">
+      <div>
+        <h1>Elegir qué validar. No qué construir.</h1>
+        <p class="lead">Propósito: salir con <strong>dos hipótesis concretas</strong>, una primera entrevista para cada una y criterios explícitos para continuar o abandonar.</p>
+      </div>
+      <div class="stamp"><span class="label">Decisión hoy</span><b>VALIDATE</b><p>No hay nicho ganador demostrado.</p></div>
+    </div>
+    <p class="source">Fuente: síntesis crítica de <code>00_LEEME.md</code>, <code>02_INFORME_TECNICO.md</code> y <code>03_HOJA_10_Validaciones.csv</code>. Investigación documental; cero entrevistas registradas.</p>
+  </section>
+
+  <section class="slide" aria-label="Diapositiva 2">
+    <div class="kicker">Alcance</div>
+    <h2>Qué se investigó</h2>
+    <div class="grid four">
+      <article class="card"><div class="big">16</div><h3>oportunidades</h3><p>Procesos en agroindustria, logística, cumplimiento, turismo, salud y servicios.</p></article>
+      <article class="card"><div class="big">36</div><h3>fuentes</h3><p>Instituciones, gremios, proveedores, medios y datos contractuales.</p></article>
+      <article class="card"><div class="big">100</div><h3>puntos</h3><p>Matriz ponderada, con falsación declarada para las cinco primeras.</p></article>
+      <article class="card warn"><div class="big">0</div><h3>entrevistas</h3><p>No se observó el trabajo real ni se verificó gasto del nicho propuesto.</p></article>
+    </div>
+    <div class="callout">El repositorio es un mapa de hipótesis documentadas; no es prueba de demanda.</div>
+    <p class="source">Fuente: <code>02_INFORME_TECNICO.md</code>, §§1 y 9; <code>04_FUENTES.csv</code>. El conteo de 36 corresponde al índice del repositorio.</p>
+  </section>
+
+  <section class="slide" aria-label="Diapositiva 3">
+    <div class="kicker">Hechos</div>
+    <h2>Qué sí está demostrado</h2>
+    <div class="grid two">
+      <article class="card good">
+        <div class="fact"><span class="tag">Hecho local</span><h3>Existe una cadena de gran escala</h3><p>Una declaración pública atribuye a Uniban cerca de <strong>4 millones de cajas/año</strong> de <strong>2.440 productores independientes</strong>.</p></div>
+        <div class="fact"><span class="tag">Hecho regional</span><h3>La base empresarial es mayoritariamente micro</h3><p>En 2024, la jurisdicción CCU registró <strong>12.134 empresas</strong>; <strong>11.651</strong> eran micro.</p></div>
+      </article>
+      <article class="card good">
+        <div class="fact"><span class="tag">Hecho normativo</span><h3>Hay obligaciones operativas</h3><p>Certificaciones y medidas fitosanitarias generan tareas de registro y auditoría.</p></div>
+        <div class="fact"><span class="tag">Hecho competitivo</span><h3>Ya existen sustitutos</h3><p>MyRA cubre certificación/trazabilidad; el repositorio identifica ERP agrícola, Excel, consultores y software SG-SST.</p></div>
+      </article>
+    </div>
+    <p class="source">Fuentes: F01 (CCU, 2025); F09 (declaración del presidente de Uniban, 2025); F20 (ICA, Resolución 095026/2021); F24 (Rainforest Alliance/MyRA). Enlaces completos en la diapositiva 10.</p>
+  </section>
+
+  <section class="slide" aria-label="Diapositiva 4">
+    <div class="kicker">Vacíos y correcciones</div>
+    <h2>Qué no está demostrado</h2>
+    <div class="grid two">
+      <article class="card warn">
+        <ul>
+          <li>Cómo se reciben, clasifican, liquidan y pagan hoy las entregas.</li>
+          <li>Errores, horas, reclamos o dinero perdido por ese proceso.</li>
+          <li>Quién puede comprar y cuánto ya paga por resolverlo.</li>
+          <li>Cuántos acopios y comercializadoras son realmente direccionables.</li>
+        </ul>
+      </article>
+      <article class="card accent">
+        <h3>Errores detectados</h3>
+        <ul>
+          <li><strong>93 medianas/grandes ≠ 93 compradores solventes.</strong> Es solo un conteo por tamaño.</li>
+          <li>El “ajuste por falsación” no aparece en la fórmula <code>SUM(C:M)</code>; el total no es auditable como ajuste separado.</li>
+          <li>“Planilla física” en bioseguridad y la brecha exacta de MyRA se presentan con más certeza que sus fuentes.</li>
+          <li>Mercado, precios y presupuestos dependen de supuestos sin cotización ni entrevista.</li>
+        </ul>
+      </article>
+    </div>
+    <p class="source">Fuentes: F01 y tabla de tamaño empresarial CCU; <code>03_HOJA_07_Scoring.csv</code>; <code>03_HOJA_08_Mercado.csv</code>; <code>03_HOJA_09_Supuestos.csv</code>; F20 y F24.</p>
+  </section>
+
+  <section class="slide" aria-label="Diapositiva 5">
+    <div class="kicker">Portafolio revisado</div>
+    <h2>Tres hipótesis que merecen una prueba</h2>
+    <div class="grid three">
+      <article class="card accent"><span class="tag orange">H1</span><h3>Recepción y liquidación de fruta</h3><p><strong>Usuario:</strong> recibidor/auxiliar.<br><strong>Comprador por confirmar:</strong> Operaciones de comercializadora.<br><strong>A favor:</strong> flujo local documentado.<br><strong>Vacío:</strong> método, dolor y gasto.</p></article>
+      <article class="card good"><span class="tag">H2</span><h3>Expediente de certificaciones</h3><p><strong>Usuario:</strong> auxiliar de calidad.<br><strong>Comprador por confirmar:</strong> HSEQ/calidad.<br><strong>A favor:</strong> obligación y auditoría reales.<br><strong>Vacío:</strong> carga local y brecha frente a MyRA/consultores.</p></article>
+      <article class="card"><span class="tag">H3 · reabierta</span><h3>SG-SST multiempresa</h3><p><strong>Usuario/comprador:</strong> consultor que atiende mipymes.<br><strong>A favor:</strong> gasto nacional observable y comprador agregador.<br><strong>Vacío:</strong> demanda local y diferenciación en mercado competido.</p></article>
+    </div>
+    <p class="source">Fuentes: <code>03_HOJA_04_Oportunidades.csv</code> (O1, O3, O5), <code>06_FICHAS_TOP10.md</code> y F09, F17, F23–F24. “Finalista” significa prioridad de validación, no oportunidad validada.</p>
+  </section>
+
+  <section class="slide" aria-label="Diapositiva 6">
+    <div class="kicker">Hipótesis H1</div>
+    <h2>Recepción y liquidación de fruta: la escala no basta</h2>
+    <div class="flow">
+      <div class="card"><span class="label">Hecho</span><h3>El flujo existe</h3><p>≈4 M cajas/año y 2.440 productores, según declaración pública.</p></div>
+      <div class="arrow">→</div>
+      <div class="card accent"><span class="label">Inferencia</span><h3>Hay una tarea administrativa</h3><p>Toda compra requiere registrar entrega y calcular pago.</p></div>
+      <div class="arrow">→</div>
+      <div class="card warn"><span class="label">Hipótesis</span><h3>El proceso duele</h3><p>Papel/Excel, errores, reproceso y disposición a pagar: sin verificar.</p></div>
+    </div>
+    <div class="callout">Primera prueba: observar un cierre real y reconstruir un reclamo o corrección reciente. No mostrar software.</div>
+    <p class="source">Fuente del flujo: F09. Vacíos: <code>03_HOJA_09_Supuestos.csv</code> S03, S04, S05 y S11; validaciones H1, H2, H3, H5 y H7 en <code>03_HOJA_10_Validaciones.csv</code>.</p>
+  </section>
+
+  <section class="slide" aria-label="Diapositiva 7">
+    <div class="kicker">Objeciones</div>
+    <h2>Qué puede matar cada oportunidad</h2>
+    <table>
+      <thead><tr><th>Hipótesis</th><th>Objeción decisiva</th><th>Riesgo comercial</th><th>Prueba mínima</th></tr></thead>
+      <tbody>
+        <tr><td><strong>H1 Fruta</strong></td><td>Ya existe ERP/desarrollo propio o el costo del problema es trivial.</td><td>Pocos compradores; dependencia de una comercializadora.</td><td>3 observaciones + evidencia de error/tiempo + decisor.</td></tr>
+        <tr><td><strong>H2 Certificaciones</strong></td><td>MyRA y el consultor cubren suficientemente el trabajo.</td><td>Auditoría anual; beneficio difícil de monetizar.</td><td>3 cierres de auditoría: horas, no conformidades y gasto.</td></tr>
+        <tr><td><strong>H3 SG-SST</strong></td><td>Oferta nacional abundante; cambiar de herramienta no compensa.</td><td>Ticket bajo y sensibilidad al precio.</td><td>3 consultores: cartera real, herramientas y último pago.</td></tr>
+      </tbody>
+    </table>
+    <p class="source">Fuentes: F13–F18, F23–F24; <code>03_HOJA_11_Riesgos.csv</code>. La presencia y adopción local de proveedores no está verificada.</p>
+  </section>
+
+  <section class="slide" aria-label="Diapositiva 8">
+    <div class="kicker">Método común</div>
+    <h2>Cómo comparar las ideas de las tres integrantes</h2>
+    <div class="grid two">
+      <article class="card">
+        <h3>Formato de 90 segundos por idea</h3>
+        <p>«[Persona] en [empresa/municipio] hace [tarea] [frecuencia] usando [método]. Esto causa [pérdida]. Compra [cargo]. Hoy sabemos [evidencia]. La siguiente prueba es [acción].»</p>
+        <p><span class="tag red">Sin “falta una app”</span><span class="tag red">Sin usuario=comprador</span></p>
+      </article>
+      <article class="card">
+        <h3>Puntaje sobre 40</h3>
+        <p>Ocho criterios, cada uno de 0 a 5: evidencia local, dolor económico, frecuencia, comprador, acceso, brecha, viabilidad técnica y riesgo bajo.</p>
+        <p><strong>Regla:</strong> ningún puntaje reemplaza evidencia. Un “5” exige prueba visible; si no hay dato, es 0 o 1.</p>
+      </article>
+    </div>
+    <p class="source">Herramienta: <code>11_MATRIZ_IDEAS_REUNION.csv</code>. Método derivado críticamente de <code>03_HOJA_07_Scoring.csv</code>; escala simplificada para la reunión.</p>
+  </section>
+
+  <section class="slide" aria-label="Diapositiva 9">
+    <div class="kicker">Salida obligatoria</div>
+    <h2>No terminamos sin estas seis decisiones</h2>
+    <div class="grid three">
+      <article class="card"><div class="big">1</div><p>Dos hipótesis seleccionadas.</p></article>
+      <article class="card"><div class="big">2</div><p>Usuario y comprador separados para cada una.</p></article>
+      <article class="card"><div class="big">3</div><p>Una prueba falsable y criterio de abandono.</p></article>
+      <article class="card"><div class="big">4</div><p>Un contacto nominal y responsable.</p></article>
+      <article class="card"><div class="big">5</div><p>Primera entrevista con fecha.</p></article>
+      <article class="card"><div class="big">6</div><p>Fecha de revisión. Sin presupuesto de MVP.</p></article>
+    </div>
+    <div class="callout">Resultado correcto: dos apuestas pequeñas de aprendizaje. Resultado incorrecto: aprobar una construcción.</div>
+    <p class="source">Registro: <code>13_ACTA_REUNION.md</code>. Criterios de entrevista: <code>07_KIT_VALIDACION.md</code>. Presupuesto de MVP permanece condicionado: <code>08_PLAN_INVERSION.md</code>.</p>
+  </section>
+
+  <section class="slide" aria-label="Diapositiva 10">
+    <div class="kicker">Fuentes críticas</div>
+    <h2>Enlaces completos</h2>
+    <div class="links">
+      <p><strong>F01 · Cámara de Comercio de Urabá, Estudio Económico 2024</strong><br><a href="https://ccuraba.org.co/site/wp-content/uploads/2025/01/ESTUDIO-ECONOMICO-2024.pdf">https://ccuraba.org.co/site/wp-content/uploads/2025/01/ESTUDIO-ECONOMICO-2024.pdf</a></p>
+      <p><strong>F09 · Declaración pública sobre plátano y productores</strong><br><a href="https://paisa.alerta.com.co/quejodromo/uraba-se-exportan-cerca-de-4-millones-de-cajas-de-platano-al-ano-221303">https://paisa.alerta.com.co/quejodromo/uraba-se-exportan-cerca-de-4-millones-de-cajas-de-platano-al-ano-221303</a></p>
+      <p><strong>F13 · Agrosoft LATAM — banano</strong><br><a href="https://www.agrosoftlatam.com/banano.html">https://www.agrosoftlatam.com/banano.html</a></p>
+      <p><strong>F17 · Referencia de precios SG-SST</strong><br><a href="https://mentoracolombia.com/cuanto-cuesta-el-sg-sst-colombia">https://mentoracolombia.com/cuanto-cuesta-el-sg-sst-colombia</a></p>
+      <p><strong>F20 · ICA — Urabá libre de Foc R4T</strong><br><a href="https://www.ica.gov.co/noticias/ica-declaro-uraba-libre-fusarium-raza-4-tropical">https://www.ica.gov.co/noticias/ica-declaro-uraba-libre-fusarium-raza-4-tropical</a></p>
+      <p><strong>F23 · Kiwa — certificación RA + GLOBALG.A.P.</strong><br><a href="https://www.kiwa.com/co/es-co/tipo-de-servicio/certificacion/certificacion-rainforest-alliance-ra-globalg.a.p.-gg">https://www.kiwa.com/co/es-co/tipo-de-servicio/certificacion/certificacion-rainforest-alliance-ra-globalg.a.p.-gg</a></p>
+      <p><strong>F24 · Rainforest Alliance — MyRA</strong><br><a href="https://knowledge.rainforest-alliance.org/docs/es/overview-of-the-rainforest-alliance-certification">https://knowledge.rainforest-alliance.org/docs/es/overview-of-the-rainforest-alliance-certification</a></p>
+      <p><strong>F26 · Comisión Europea — EUDR</strong><br><a href="https://environment.ec.europa.eu/topics/forests/deforestation/regulation-deforestation-free-products_en">https://environment.ec.europa.eu/topics/forests/deforestation/regulation-deforestation-free-products_en</a></p>
+    </div>
+    <p class="source">Base completa: <code>04_FUENTES.csv</code>. Verificación puntual realizada el 25 de julio de 2026. Navegación: flechas, espacio, botones o deslizar.</p>
+  </section>
+</main>
+<div class="counter" aria-hidden="true"><span id="current">1</span> / 10</div>
+<nav class="nav" aria-label="Navegación de diapositivas">
+  <button id="prev" aria-label="Diapositiva anterior">←</button>
+  <button id="next" aria-label="Diapositiva siguiente">→</button>
+</nav>
+<div class="progress" aria-hidden="true"><span id="bar" style="width:10%"></span></div>
+<script>
+  const slides=[...document.querySelectorAll('.slide')], current=document.querySelector('#current'), bar=document.querySelector('#bar');
+  let index=0, touchX=null;
+  function show(next){
+    index=(next+slides.length)%slides.length;
+    slides.forEach((s,i)=>s.classList.toggle('active',i===index));
+    current.textContent=index+1; bar.style.width=((index+1)/slides.length*100)+'%';
+    history.replaceState(null,'','#'+(index+1));
+  }
+  document.querySelector('#prev').addEventListener('click',()=>show(index-1));
+  document.querySelector('#next').addEventListener('click',()=>show(index+1));
+  addEventListener('keydown',e=>{
+    if(['ArrowRight','PageDown',' '].includes(e.key)){e.preventDefault();show(index+1)}
+    if(['ArrowLeft','PageUp'].includes(e.key)){e.preventDefault();show(index-1)}
+    if(e.key==='Home')show(0); if(e.key==='End')show(slides.length-1);
+  });
+  addEventListener('touchstart',e=>touchX=e.changedTouches[0].clientX,{passive:true});
+  addEventListener('touchend',e=>{if(touchX===null)return;const d=e.changedTouches[0].clientX-touchX;if(Math.abs(d)>50)show(index+(d<0?1:-1));touchX=null},{passive:true});
+  const initial=Number(location.hash.slice(1)); if(initial>=1&&initial<=slides.length)show(initial-1);
+</script>
+</body>
+</html>
