@@ -8,7 +8,7 @@
 @if (business is null) { <p class="notice">Cargando servicios…</p> }
 else
 {
-    <EditForm Model="request" OnValidSubmit="Submit" class="appointment-form">
+    <EditForm Model="request" OnValidSubmit="Submit" FormName="appointment-request" class="appointment-form">
         <DataAnnotationsValidator /><ValidationSummary />
         <fieldset><legend>1. Servicio y horario</legend>
             <label>Servicio<InputSelect @bind-Value="request.ServiceId">
@@ -45,13 +45,16 @@ else
     private BusinessProfileDto? business;
     private List<SlotDto>? slots;
     private DateOnly date = NextBusinessDay();
-    private CreateAppointmentRequest request = new();
+    [SupplyParameterFromForm(FormName = "appointment-request")]
+    private CreateAppointmentRequest request { get; set; } = default!;
     private bool loadingSlots, submitting;
     private string? error;
     protected override async Task OnInitializedAsync()
     {
+        request ??= new();
         business = await Api.GetBusinessAsync(Slug);
-        request.ServiceId = ServiceId ?? business?.Services.FirstOrDefault()?.Id ?? Guid.Empty;
+        if (request.ServiceId == Guid.Empty)
+            request.ServiceId = ServiceId ?? business?.Services.FirstOrDefault()?.Id ?? Guid.Empty;
         if (request.ServiceId != Guid.Empty) await LoadSlots();
     }
     private async Task LoadSlots()
