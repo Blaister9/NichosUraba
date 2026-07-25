@@ -40,10 +40,49 @@ public sealed class HttpUrabaConectaApi(HttpClient http) : IUrabaConectaApi
         ChangeAppointmentStatusRequest request, CancellationToken cancellationToken = default)
         => await Read<AppointmentAdminDto>(await http.PostAsJsonAsync($"api/v1/businesses/{businessId}/appointments/{appointmentId}/status",
             request, Json, cancellationToken), cancellationToken);
+    public Task<IReadOnlyList<ServiceDto>> GetServicesAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => Get<IReadOnlyList<ServiceDto>>($"api/v1/businesses/{businessId}/services", cancellationToken);
+    public async Task<ServiceDto> CreateServiceAsync(Guid businessId, CreateServiceRequest request,
+        CancellationToken cancellationToken = default)
+        => await Read<ServiceDto>(await http.PostAsJsonAsync($"api/v1/businesses/{businessId}/services",
+            request, Json, cancellationToken), cancellationToken);
     public async Task<ServiceDto> UpdateServiceAsync(Guid businessId, Guid serviceId, UpdateServiceRequest request,
         CancellationToken cancellationToken = default)
         => await Read<ServiceDto>(await http.PutAsJsonAsync($"api/v1/businesses/{businessId}/services/{serviceId}",
             request, Json, cancellationToken), cancellationToken);
+    public Task<IReadOnlyList<StaffMemberDto>> GetStaffAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => Get<IReadOnlyList<StaffMemberDto>>($"api/v1/businesses/{businessId}/staff", cancellationToken);
+    public async Task<StaffMemberDto> CreateStaffAsync(Guid businessId, SaveStaffMemberRequest request,
+        CancellationToken cancellationToken = default)
+        => await Read<StaffMemberDto>(await http.PostAsJsonAsync($"api/v1/businesses/{businessId}/staff",
+            request, Json, cancellationToken), cancellationToken);
+    public async Task<StaffMemberDto> UpdateStaffAsync(Guid businessId, Guid staffId,
+        SaveStaffMemberRequest request, CancellationToken cancellationToken = default)
+        => await Read<StaffMemberDto>(await http.PutAsJsonAsync($"api/v1/businesses/{businessId}/staff/{staffId}",
+            request, Json, cancellationToken), cancellationToken);
+    public Task<IReadOnlyList<BusinessHourAdminDto>> GetBusinessHoursAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => Get<IReadOnlyList<BusinessHourAdminDto>>($"api/v1/businesses/{businessId}/hours", cancellationToken);
+    public async Task<ConfigurationImpactDto> SetBusinessHourAsync(Guid businessId, DayOfWeek day,
+        SaveBusinessHourRequest request, CancellationToken cancellationToken = default)
+        => await Read<ConfigurationImpactDto>(await http.PutAsJsonAsync(
+            $"api/v1/businesses/{businessId}/hours/{day}", request, Json, cancellationToken), cancellationToken);
+    public Task<IReadOnlyList<AvailabilityExceptionDto>> GetAvailabilityExceptionsAsync(Guid businessId,
+        DateOnly? from = null, CancellationToken cancellationToken = default)
+        => Get<IReadOnlyList<AvailabilityExceptionDto>>(
+            $"api/v1/businesses/{businessId}/availability-exceptions?from={from:yyyy-MM-dd}", cancellationToken);
+    public async Task<AvailabilityExceptionDto> SaveAvailabilityExceptionAsync(Guid businessId,
+        SaveAvailabilityExceptionRequest request, CancellationToken cancellationToken = default)
+        => await Read<AvailabilityExceptionDto>(await http.PostAsJsonAsync(
+            $"api/v1/businesses/{businessId}/availability-exceptions", request, Json, cancellationToken),
+            cancellationToken);
+    public async Task DeleteAvailabilityExceptionAsync(Guid businessId, Guid exceptionId, long version,
+        CancellationToken cancellationToken = default)
+        => await Ensure(await http.DeleteAsync(
+            $"api/v1/businesses/{businessId}/availability-exceptions/{exceptionId}?version={version}",
+            cancellationToken), cancellationToken);
 
     private async Task<T> Get<T>(string url, CancellationToken ct) => await Read<T>(await http.GetAsync(url, ct), ct);
     private static async Task<T> Read<T>(HttpResponseMessage response, CancellationToken ct)

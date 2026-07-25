@@ -107,13 +107,13 @@ public sealed partial class SchedulingApiTests(PostgresWebFactory factory) : ICl
             new SaveStaffMemberRequest { DisplayName = "Profesional configurable", ServiceIds = [configurableService.Id] }, Json);
         Assert.Equal(HttpStatusCode.Created, createStaffResponse.StatusCode);
         var configurableStaff = (await createStaffResponse.Content.ReadFromJsonAsync<StaffMemberDto>(Json))!;
-        Assert.Equal(HttpStatusCode.NoContent, (await bella.PutAsJsonAsync(
+        Assert.Equal(HttpStatusCode.OK, (await bella.PutAsJsonAsync(
             $"/api/v1/businesses/{DevelopmentSeeder.BellaBusinessId}/hours/Sunday",
             new SaveBusinessHourRequest { OpensAt = new(9, 0), ClosesAt = new(13, 0) }, Json)).StatusCode);
         var exceptionResponse = await bella.PostAsJsonAsync(
             $"/api/v1/businesses/{DevelopmentSeeder.BellaBusinessId}/availability-exceptions",
             new SaveAvailabilityExceptionRequest
-            { StaffMemberId = configurableStaff.Id, Date = NextBusinessDate(30), IsUnavailable = true }, Json);
+            { StaffMemberId = configurableStaff.Id, Date = NextBusinessDate(30), Type = "ClosedAllDay" }, Json);
         Assert.Equal(HttpStatusCode.Created, exceptionResponse.StatusCode);
         var availabilityException = (await exceptionResponse.Content.ReadFromJsonAsync<AvailabilityExceptionDto>(Json))!;
         var blockedSlots = await publicClient.GetFromJsonAsync<SlotListDto>(
@@ -121,7 +121,7 @@ public sealed partial class SchedulingApiTests(PostgresWebFactory factory) : ICl
             Json);
         Assert.Empty(blockedSlots!.Slots);
         Assert.Equal(HttpStatusCode.NoContent, (await bella.DeleteAsync(
-            $"/api/v1/businesses/{DevelopmentSeeder.BellaBusinessId}/availability-exceptions/{availabilityException.Id}")).StatusCode);
+            $"/api/v1/businesses/{DevelopmentSeeder.BellaBusinessId}/availability-exceptions/{availabilityException.Id}?version={availabilityException.Version}")).StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, (await bella.DeleteAsync(
             $"/api/v1/businesses/{DevelopmentSeeder.BellaBusinessId}/services/{configurableService.Id}")).StatusCode);
 

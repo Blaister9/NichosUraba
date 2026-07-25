@@ -60,6 +60,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         {
             x.ToTable("business_hours", t => t.HasCheckConstraint("ck_business_hours_range", "\"OpensAt\" < \"ClosesAt\""));
             x.HasKey(e => e.Id); x.HasIndex(e => new { e.BusinessId, e.Day }).IsUnique();
+            x.Property(e => e.Version).IsConcurrencyToken();
             x.HasOne<Business>().WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Cascade);
         });
         builder.Entity<Service>(x =>
@@ -68,16 +69,18 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             {
                 t.HasCheckConstraint("ck_service_duration", "\"DurationMinutes\" BETWEEN 5 AND 480");
                 t.HasCheckConstraint("ck_service_price", "\"ReferencePrice\" >= 0");
+                t.HasCheckConstraint("ck_service_display_order", "\"DisplayOrder\" >= 0");
             });
             x.HasKey(e => e.Id); x.HasIndex(e => new { e.BusinessId, e.IsActive });
             x.HasIndex(e => new { e.BusinessId, e.Id }).IsUnique();
-            x.Property(e => e.Name).HasMaxLength(120); x.Property(e => e.ReferencePrice).HasPrecision(12, 2);
+            x.Property(e => e.Name).HasMaxLength(120); x.Property(e => e.Description).HasMaxLength(500);
+            x.Property(e => e.ReferencePrice).HasPrecision(12, 2); x.Property(e => e.Version).IsConcurrencyToken();
             x.HasOne<Business>().WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Cascade);
         });
         builder.Entity<StaffMember>(x =>
         {
             x.ToTable("staff_members"); x.HasKey(e => e.Id); x.HasIndex(e => new { e.BusinessId, e.Id }).IsUnique();
-            x.Property(e => e.DisplayName).HasMaxLength(100);
+            x.Property(e => e.DisplayName).HasMaxLength(100); x.Property(e => e.Version).IsConcurrencyToken();
             x.HasOne<Business>().WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Cascade);
         });
         builder.Entity<StaffService>(x =>
@@ -91,8 +94,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         });
         builder.Entity<AvailabilityException>(x =>
         {
-            x.ToTable("availability_exceptions"); x.HasKey(e => e.Id);
+            x.ToTable("availability_exceptions", t =>
+                t.HasCheckConstraint("ck_availability_exception_range",
+                    "\"Type\" = 'ClosedAllDay' OR (\"OpensAt\" IS NOT NULL AND \"ClosesAt\" IS NOT NULL AND \"OpensAt\" < \"ClosesAt\")"));
+            x.HasKey(e => e.Id);
             x.HasIndex(e => new { e.BusinessId, e.StaffMemberId, e.Date }).IsUnique();
+            x.Property(e => e.Type).HasConversion<string>().HasMaxLength(32);
+            x.Property(e => e.Reason).HasMaxLength(160);
+            x.Property(e => e.Version).IsConcurrencyToken();
             x.HasOne<StaffMember>().WithMany().HasForeignKey(e => new { e.BusinessId, e.StaffMemberId })
                 .HasPrincipalKey(e => new { e.BusinessId, e.Id }).OnDelete(DeleteBehavior.Cascade);
         });

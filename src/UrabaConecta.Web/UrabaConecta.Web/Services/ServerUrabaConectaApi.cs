@@ -28,9 +28,40 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, Authenticatio
     public async Task<AppointmentAdminDto> ChangeAppointmentStatusAsync(Guid businessId, Guid appointmentId,
         ChangeAppointmentStatusRequest request, CancellationToken cancellationToken = default)
         => await useCases.ChangeStatusAsync(await UserId(), businessId, appointmentId, request, cancellationToken);
+    public async Task<IReadOnlyList<ServiceDto>> GetServicesAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => await useCases.GetServicesAsync(await UserId(), businessId, cancellationToken);
+    public async Task<ServiceDto> CreateServiceAsync(Guid businessId, CreateServiceRequest request,
+        CancellationToken cancellationToken = default)
+        => await useCases.CreateServiceAsync(await UserId(), businessId, request, cancellationToken);
     public async Task<ServiceDto> UpdateServiceAsync(Guid businessId, Guid serviceId, UpdateServiceRequest request,
         CancellationToken cancellationToken = default)
         => await useCases.UpdateServiceAsync(await UserId(), businessId, serviceId, request, cancellationToken);
+    public async Task<IReadOnlyList<StaffMemberDto>> GetStaffAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => await useCases.GetStaffAsync(await UserId(), businessId, cancellationToken);
+    public async Task<StaffMemberDto> CreateStaffAsync(Guid businessId, SaveStaffMemberRequest request,
+        CancellationToken cancellationToken = default)
+        => await useCases.CreateStaffAsync(await UserId(), businessId, request, cancellationToken);
+    public async Task<StaffMemberDto> UpdateStaffAsync(Guid businessId, Guid staffId,
+        SaveStaffMemberRequest request, CancellationToken cancellationToken = default)
+        => await useCases.UpdateStaffAsync(await UserId(), businessId, staffId, request, cancellationToken);
+    public async Task<IReadOnlyList<BusinessHourAdminDto>> GetBusinessHoursAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => await useCases.GetBusinessHoursAsync(await UserId(), businessId, cancellationToken);
+    public async Task<ConfigurationImpactDto> SetBusinessHourAsync(Guid businessId, DayOfWeek day,
+        SaveBusinessHourRequest request, CancellationToken cancellationToken = default)
+        => await useCases.SetBusinessHourAsync(await UserId(), businessId, day, request, cancellationToken);
+    public async Task<IReadOnlyList<AvailabilityExceptionDto>> GetAvailabilityExceptionsAsync(Guid businessId,
+        DateOnly? from = null, CancellationToken cancellationToken = default)
+        => await useCases.GetAvailabilityExceptionsAsync(await UserId(), businessId, from, cancellationToken);
+    public async Task<AvailabilityExceptionDto> SaveAvailabilityExceptionAsync(Guid businessId,
+        SaveAvailabilityExceptionRequest request, CancellationToken cancellationToken = default)
+        => await useCases.SaveAvailabilityExceptionAsync(await UserId(), businessId, request, cancellationToken);
+    public async Task DeleteAvailabilityExceptionAsync(Guid businessId, Guid exceptionId, long version,
+        CancellationToken cancellationToken = default)
+        => await useCases.DeleteAvailabilityExceptionAsync(await UserId(), businessId, exceptionId, version,
+            cancellationToken);
 
     private async Task<Guid> UserId()
     {

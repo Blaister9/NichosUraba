@@ -40,7 +40,9 @@ public sealed class UrabaStore(AppDbContext db) : IUrabaStore
             .OrderBy(x => x.Day).Select(x => new BusinessHourDto(x.Day, x.OpensAt.ToString("HH:mm"), x.ClosesAt.ToString("HH:mm")))
             .ToListAsync(cancellationToken);
         var services = await db.Services.AsNoTracking().Where(x => x.BusinessId == data.b.Id && x.IsActive)
-            .OrderBy(x => x.Name).Select(x => new ServiceDto(x.Id, x.Name, x.DurationMinutes, x.ReferencePrice, x.IsActive))
+            .OrderBy(x => x.DisplayOrder).ThenBy(x => x.Name)
+            .Select(x => new ServiceDto(x.Id, x.Name, x.Description, x.DurationMinutes, x.ReferencePrice,
+                x.DisplayOrder, x.IsActive, 0, x.Version))
             .ToListAsync(cancellationToken);
         return new(data.b.Slug, data.b.Name, data.b.Description, data.b.Address, data.b.PublicPhone,
             new(data.c.Slug, data.c.Name), new(data.m.Slug, data.m.Name), hours, services);
@@ -59,6 +61,7 @@ public sealed class UrabaStore(AppDbContext db) : IUrabaStore
                            join ss in db.StaffServices.AsNoTracking()
                                on new { s.BusinessId, StaffMemberId = s.Id } equals new { ss.BusinessId, ss.StaffMemberId }
                            where s.BusinessId == business.Id && ss.ServiceId == serviceId && s.IsActive
+                               && s.ParticipatesInAvailability
                            select s).ToListAsync(cancellationToken);
         var staffIds = staff.Select(x => x.Id).ToArray();
         var zone = TimeZoneInfo.FindSystemTimeZoneById(business.TimeZoneId);
@@ -101,13 +104,17 @@ public sealed class UrabaStore(AppDbContext db) : IUrabaStore
     }
     public Task<bool> IsMemberAsync(Guid userId, Guid businessId, CancellationToken cancellationToken)
         => db.BusinessMemberships.AsNoTracking().AnyAsync(x => x.UserId == userId && x.BusinessId == businessId && x.IsActive, cancellationToken);
+    public Task<bool> CanManageConfigurationAsync(Guid userId, Guid businessId, CancellationToken cancellationToken)
+        => db.BusinessMemberships.AsNoTracking().AnyAsync(x => x.UserId == userId && x.BusinessId == businessId &&
+            x.IsActive && (x.Role == MembershipRole.Owner || x.CanManageConfiguration), cancellationToken);
 
     public async Task<IReadOnlyList<MyBusinessDto>> GetMembershipsAsync(Guid userId, CancellationToken cancellationToken)
         => await (from membership in db.BusinessMemberships.AsNoTracking()
                   join business in db.Businesses.AsNoTracking() on membership.BusinessId equals business.Id
                   where membership.UserId == userId && membership.IsActive
                   orderby business.Name
-                  select new MyBusinessDto(business.Id, business.Name, business.Slug, membership.Role.ToString()))
+                  select new MyBusinessDto(business.Id, business.Name, business.Slug, membership.Role.ToString(),
+                      membership.Role == MembershipRole.Owner || membership.CanManageConfiguration))
             .ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<AppointmentRecord>> GetAppointmentsAsync(Guid businessId, DateOnly? date,
@@ -136,7 +143,24 @@ public sealed class UrabaStore(AppDbContext db) : IUrabaStore
             cancellationToken);
         return appointment is null ? null : await BuildRecord(appointment, cancellationToken);
     }
-    public Task SaveChangesAsync(CancellationToken cancellationToken) => db.SaveChangesAsync(cancellationToken);
+    public async Task SaveChangesAsync(CancellationToken cancellationToken)
+    {
+        try { await db.SaveChangesAsync(cancellationToken); }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new ApiException("CONCURRENCY_CONFLICT",
+                "La información cambió mientras la editaba. Recargue e intente de nuevo.", 409);
+        }
+    }
+    public async Task<IReadOnlyList<ServiceDto>> GetServicesAsync(Guid businessId, DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+        => await db.Services.AsNoTracking().Where(x => x.BusinessId == businessId)
+            .OrderBy(x => x.DisplayOrder).ThenBy(x => x.Name)
+            .Select(x => new ServiceDto(x.Id, x.Name, x.Description, x.DurationMinutes, x.ReferencePrice,
+                x.DisplayOrder, x.IsActive, db.Appointments.Count(a => a.BusinessId == businessId &&
+                    a.ServiceId == x.Id && a.StartAtUtc > nowUtc &&
+                    (a.Status == AppointmentStatus.Pending || a.Status == AppointmentStatus.Confirmed)), x.Version))
+            .ToListAsync(cancellationToken);
     public Task<Service?> GetServiceAsync(Guid businessId, Guid serviceId, CancellationToken cancellationToken)
         => db.Services.SingleOrDefaultAsync(x => x.BusinessId == businessId && x.Id == serviceId, cancellationToken);
     public void AddService(Service service) => db.Services.Add(service);
@@ -147,8 +171,8 @@ public sealed class UrabaStore(AppDbContext db) : IUrabaStore
             .OrderBy(x => x.DisplayName).ToListAsync(cancellationToken);
         var links = await db.StaffServices.AsNoTracking().Where(x => x.BusinessId == businessId)
             .ToListAsync(cancellationToken);
-        return staff.Select(x => new StaffMemberDto(x.Id, x.DisplayName, x.IsActive,
-            links.Where(link => link.StaffMemberId == x.Id).Select(link => link.ServiceId).ToArray())).ToArray();
+        return staff.Select(x => new StaffMemberDto(x.Id, x.DisplayName, x.IsActive, x.ParticipatesInAvailability,
+            links.Where(link => link.StaffMemberId == x.Id).Select(link => link.ServiceId).ToArray(), x.Version)).ToArray();
     }
     public Task<StaffMember?> GetStaffMemberAsync(Guid businessId, Guid staffId, CancellationToken cancellationToken)
         => db.StaffMembers.SingleOrDefaultAsync(x => x.BusinessId == businessId && x.Id == staffId, cancellationToken);
@@ -167,6 +191,10 @@ public sealed class UrabaStore(AppDbContext db) : IUrabaStore
     public void AddStaffMember(StaffMember staff) => db.StaffMembers.Add(staff);
     public Task<BusinessHour?> GetBusinessHourAsync(Guid businessId, DayOfWeek day, CancellationToken cancellationToken)
         => db.BusinessHours.SingleOrDefaultAsync(x => x.BusinessId == businessId && x.Day == day, cancellationToken);
+    public async Task<IReadOnlyList<BusinessHour>> GetBusinessHoursAsync(Guid businessId,
+        CancellationToken cancellationToken)
+        => await db.BusinessHours.AsNoTracking().Where(x => x.BusinessId == businessId)
+            .OrderBy(x => x.Day).ToListAsync(cancellationToken);
     public void AddBusinessHour(BusinessHour hour) => db.BusinessHours.Add(hour);
     public void RemoveBusinessHour(BusinessHour hour) => db.BusinessHours.Remove(hour);
     public async Task<IReadOnlyList<AvailabilityException>> GetAvailabilityExceptionsAsync(Guid businessId,
@@ -177,6 +205,31 @@ public sealed class UrabaStore(AppDbContext db) : IUrabaStore
         x => x.BusinessId == businessId && x.Id == exceptionId, cancellationToken);
     public Task<bool> StaffBelongsToBusinessAsync(Guid businessId, Guid staffId, CancellationToken cancellationToken)
         => db.StaffMembers.AsNoTracking().AnyAsync(x => x.BusinessId == businessId && x.Id == staffId, cancellationToken);
+    public async Task<int> CountFutureAppointmentConflictsAsync(Guid businessId, Guid? staffId, DateOnly date,
+        TimeOnly? startsAt, TimeOnly? endsAt, bool conflictsOutsideInterval, CancellationToken cancellationToken)
+    {
+        var business = await db.Businesses.AsNoTracking().SingleAsync(x => x.Id == businessId, cancellationToken);
+        var zone = TimeZoneInfo.FindSystemTimeZoneById(business.TimeZoneId);
+        var dayStart = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(
+            date.ToDateTime(TimeOnly.MinValue), zone), TimeSpan.Zero);
+        var dayEnd = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(
+            date.AddDays(1).ToDateTime(TimeOnly.MinValue), zone), TimeSpan.Zero);
+        var query = db.Appointments.AsNoTracking().Where(x => x.BusinessId == businessId &&
+            x.StartAtUtc < dayEnd && x.EndAtUtc > dayStart &&
+            (x.Status == AppointmentStatus.Pending || x.Status == AppointmentStatus.Confirmed));
+        if (staffId.HasValue) query = query.Where(x => x.StaffMemberId == staffId.Value);
+        if (startsAt.HasValue && endsAt.HasValue)
+        {
+            var intervalStart = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(
+                date.ToDateTime(startsAt.Value), zone), TimeSpan.Zero);
+            var intervalEnd = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(
+                date.ToDateTime(endsAt.Value), zone), TimeSpan.Zero);
+            query = conflictsOutsideInterval
+                ? query.Where(x => x.StartAtUtc < intervalStart || x.EndAtUtc > intervalEnd)
+                : query.Where(x => x.StartAtUtc < intervalEnd && x.EndAtUtc > intervalStart);
+        }
+        return await query.CountAsync(cancellationToken);
+    }
     public void AddAvailabilityException(AvailabilityException exception) => db.AvailabilityExceptions.Add(exception);
     public void RemoveAvailabilityException(AvailabilityException exception) => db.AvailabilityExceptions.Remove(exception);
 

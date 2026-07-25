@@ -6,7 +6,8 @@ public sealed record OptionDto(string Slug, string Name);
 public sealed record BusinessCardDto(string Slug, string Name, OptionDto Category, OptionDto Municipality,
     string Description, string Address);
 public sealed record BusinessHourDto(DayOfWeek Day, string OpensAt, string ClosesAt);
-public sealed record ServiceDto(Guid Id, string Name, int DurationMinutes, decimal ReferencePrice, bool IsActive = true);
+public sealed record ServiceDto(Guid Id, string Name, string Description, int DurationMinutes, decimal ReferencePrice,
+    int DisplayOrder, bool IsActive, int FutureAppointmentCount = 0, long Version = 0);
 public sealed record BusinessProfileDto(string Slug, string Name, string Description, string Address, string PublicPhone,
     OptionDto Category, OptionDto Municipality, IReadOnlyList<BusinessHourDto> Hours, IReadOnlyList<ServiceDto> Services);
 public sealed record SlotDto(DateTimeOffset Start, DateTimeOffset End);
@@ -27,7 +28,8 @@ public sealed record AppointmentCreatedDto(string TrackingCode, string Status, s
 public sealed record AppointmentTrackingDto(string Status, string StatusLabel, string BusinessName, string ServiceName,
     DateTimeOffset Start, string PhoneMasked, bool CanCancel, DateTimeOffset UpdatedAt);
 
-public sealed record MyBusinessDto(Guid Id, string Name, string Slug, string MembershipRole);
+public sealed record MyBusinessDto(Guid Id, string Name, string Slug, string MembershipRole,
+    bool CanManageConfiguration = false);
 public sealed record AppointmentAdminDto(Guid Id, Guid BusinessId, string ServiceName, DateTimeOffset Start,
     DateTimeOffset End, string CustomerAlias, string Phone, string Notes, string Status,
     DateTimeOffset CreatedAt, string ConsentNoticeVersion, DateTimeOffset ConsentAcceptedAt, uint Version);
@@ -39,38 +41,52 @@ public sealed class ChangeAppointmentStatusRequest
 public sealed class UpdateServiceRequest
 {
     [Required, StringLength(120, MinimumLength = 2)] public string Name { get; set; } = "";
+    [StringLength(500)] public string? Description { get; set; }
     [Range(5, 480)] public int DurationMinutes { get; set; }
     [Range(0, 100000000)] public decimal ReferencePrice { get; set; }
+    [Range(0, 10000)] public int DisplayOrder { get; set; }
     public bool IsActive { get; set; }
+    public long Version { get; set; }
 }
 public sealed class CreateServiceRequest
 {
     [Required, StringLength(120, MinimumLength = 2)] public string Name { get; set; } = "";
+    [StringLength(500)] public string? Description { get; set; }
     [Range(5, 480)] public int DurationMinutes { get; set; }
     [Range(0, 100000000)] public decimal ReferencePrice { get; set; }
+    [Range(0, 10000)] public int DisplayOrder { get; set; }
 }
-public sealed record StaffMemberDto(Guid Id, string DisplayName, bool IsActive, IReadOnlyList<Guid> ServiceIds);
+public sealed record StaffMemberDto(Guid Id, string DisplayName, bool IsActive, bool ParticipatesInAvailability,
+    IReadOnlyList<Guid> ServiceIds, long Version = 0);
 public sealed class SaveStaffMemberRequest
 {
     [Required, StringLength(100, MinimumLength = 2)] public string DisplayName { get; set; } = "";
     public bool IsActive { get; set; } = true;
+    public bool ParticipatesInAvailability { get; set; } = true;
     [MinLength(1)] public List<Guid> ServiceIds { get; set; } = [];
+    public long Version { get; set; }
 }
+public sealed record BusinessHourAdminDto(DayOfWeek Day, bool IsClosed, TimeOnly? OpensAt, TimeOnly? ClosesAt,
+    long Version = 0);
 public sealed class SaveBusinessHourRequest
 {
     public bool IsClosed { get; set; }
-    [Required] public TimeOnly OpensAt { get; set; }
-    [Required] public TimeOnly ClosesAt { get; set; }
+    public TimeOnly? OpensAt { get; set; }
+    public TimeOnly? ClosesAt { get; set; }
+    public long Version { get; set; }
 }
-public sealed record AvailabilityExceptionDto(Guid Id, Guid StaffMemberId, DateOnly Date, bool IsUnavailable,
-    TimeOnly? OpensAt, TimeOnly? ClosesAt);
+public sealed record ConfigurationImpactDto(int FutureAppointmentConflicts);
+public sealed record AvailabilityExceptionDto(Guid Id, Guid StaffMemberId, DateOnly Date, string Type,
+    TimeOnly? OpensAt, TimeOnly? ClosesAt, string Reason, int FutureAppointmentConflicts = 0, long Version = 0);
 public sealed class SaveAvailabilityExceptionRequest
 {
     [Required] public Guid StaffMemberId { get; set; }
     [Required] public DateOnly Date { get; set; }
-    public bool IsUnavailable { get; set; }
+    [Required] public string Type { get; set; } = "ClosedAllDay";
     public TimeOnly? OpensAt { get; set; }
     public TimeOnly? ClosesAt { get; set; }
+    [StringLength(160)] public string? Reason { get; set; }
+    public long Version { get; set; }
 }
 
 public sealed class ApiException(string code, string message, int statusCode = 400) : Exception(message)
@@ -94,6 +110,24 @@ public interface IUrabaConectaApi
         string? status = null, CancellationToken cancellationToken = default);
     Task<AppointmentAdminDto> ChangeAppointmentStatusAsync(Guid businessId, Guid appointmentId,
         ChangeAppointmentStatusRequest request, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<ServiceDto>> GetServicesAsync(Guid businessId, CancellationToken cancellationToken = default);
+    Task<ServiceDto> CreateServiceAsync(Guid businessId, CreateServiceRequest request,
+        CancellationToken cancellationToken = default);
     Task<ServiceDto> UpdateServiceAsync(Guid businessId, Guid serviceId, UpdateServiceRequest request,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<StaffMemberDto>> GetStaffAsync(Guid businessId, CancellationToken cancellationToken = default);
+    Task<StaffMemberDto> CreateStaffAsync(Guid businessId, SaveStaffMemberRequest request,
+        CancellationToken cancellationToken = default);
+    Task<StaffMemberDto> UpdateStaffAsync(Guid businessId, Guid staffId, SaveStaffMemberRequest request,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BusinessHourAdminDto>> GetBusinessHoursAsync(Guid businessId,
+        CancellationToken cancellationToken = default);
+    Task<ConfigurationImpactDto> SetBusinessHourAsync(Guid businessId, DayOfWeek day,
+        SaveBusinessHourRequest request, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AvailabilityExceptionDto>> GetAvailabilityExceptionsAsync(Guid businessId,
+        DateOnly? from = null, CancellationToken cancellationToken = default);
+    Task<AvailabilityExceptionDto> SaveAvailabilityExceptionAsync(Guid businessId,
+        SaveAvailabilityExceptionRequest request, CancellationToken cancellationToken = default);
+    Task DeleteAvailabilityExceptionAsync(Guid businessId, Guid exceptionId, long version,
         CancellationToken cancellationToken = default);
 }

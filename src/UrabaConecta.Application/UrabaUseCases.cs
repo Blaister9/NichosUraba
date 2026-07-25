@@ -33,12 +33,22 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IPublicCodeService 
             .SelectMany(staff =>
             {
                 var exception = context.Exceptions.FirstOrDefault(x => x.StaffMemberId == staff.Id && x.Date == date);
-                if (exception?.IsUnavailable == true) return [];
-                var opensAt = exception?.OpensAt ?? businessHour.OpensAt;
-                var closesAt = exception?.ClosesAt ?? businessHour.ClosesAt;
+                if (exception?.Type == AvailabilityExceptionType.ClosedAllDay) return [];
+                var extraordinary = exception?.Type == AvailabilityExceptionType.ExtraordinaryOpening;
+                var opensAt = extraordinary ? exception!.OpensAt!.Value : businessHour.OpensAt;
+                var closesAt = extraordinary ? exception!.ClosesAt!.Value : businessHour.ClosesAt;
+                var occupied = context.Occupied.Where(x => x.StaffId == staff.Id).Select(x => (x.Start, x.End)).ToList();
+                if (exception?.Type == AvailabilityExceptionType.ClosedInterval)
+                {
+                    var startUtc = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(
+                        date.ToDateTime(exception.OpensAt!.Value), zone), TimeSpan.Zero);
+                    var endUtc = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(
+                        date.ToDateTime(exception.ClosesAt!.Value), zone), TimeSpan.Zero);
+                    occupied.Add((startUtc, endUtc));
+                }
                 return AppointmentSlotCalculator.Calculate(date, opensAt, closesAt,
                     context.Service.DurationMinutes, zone, timeProvider.GetUtcNow(),
-                    context.Occupied.Where(x => x.StaffId == staff.Id).Select(x => (x.Start, x.End)))
+                    occupied)
                     .Select(x => new SlotDto(x.Start, x.End));
             })
             .GroupBy(x => x.Start).Select(x => x.First()).OrderBy(x => x.Start).ToArray();
@@ -123,120 +133,176 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IPublicCodeService 
     public async Task<ServiceDto> UpdateServiceAsync(Guid userId, Guid businessId, Guid serviceId,
         UpdateServiceRequest request, CancellationToken cancellationToken = default)
     {
-        await DemandMembership(userId, businessId, cancellationToken);
+        await DemandConfigurationAccess(userId, businessId, cancellationToken);
         var service = await store.GetServiceAsync(businessId, serviceId, cancellationToken)
             ?? throw new ApiException("SERVICE_NOT_FOUND", "No encontramos el servicio.", 404);
-        TryDomain(() => service.Update(request.Name, request.DurationMinutes, request.ReferencePrice, request.IsActive));
+        TryDomain(() => service.Update(request.Name, request.DurationMinutes, request.ReferencePrice, request.IsActive,
+            request.Description, request.DisplayOrder, request.Version));
         await store.SaveChangesAsync(cancellationToken);
-        return new(service.Id, service.Name, service.DurationMinutes, service.ReferencePrice, service.IsActive);
+        return ToServiceDto(service);
+    }
+
+    public async Task<IReadOnlyList<ServiceDto>> GetServicesAsync(Guid userId, Guid businessId,
+        CancellationToken cancellationToken = default)
+    {
+        await DemandConfigurationAccess(userId, businessId, cancellationToken);
+        return await store.GetServicesAsync(businessId, timeProvider.GetUtcNow(), cancellationToken);
     }
 
     public async Task<ServiceDto> CreateServiceAsync(Guid userId, Guid businessId, CreateServiceRequest request,
         CancellationToken cancellationToken = default)
     {
-        await DemandMembership(userId, businessId, cancellationToken);
+        await DemandConfigurationAccess(userId, businessId, cancellationToken);
         Service service;
-        try { service = new Service(Guid.NewGuid(), businessId, request.Name.Trim(), request.DurationMinutes, request.ReferencePrice); }
+        try
+        {
+            service = new Service(Guid.NewGuid(), businessId, request.Name, request.DurationMinutes,
+                request.ReferencePrice, request.Description, request.DisplayOrder);
+        }
         catch (DomainException ex) { throw new ApiException(ex.Code, ex.Message); }
         store.AddService(service);
         await store.SaveChangesAsync(cancellationToken);
-        return new(service.Id, service.Name, service.DurationMinutes, service.ReferencePrice, service.IsActive);
+        return ToServiceDto(service);
     }
 
     public async Task DeactivateServiceAsync(Guid userId, Guid businessId, Guid serviceId,
         CancellationToken cancellationToken = default)
     {
-        await DemandMembership(userId, businessId, cancellationToken);
+        await DemandConfigurationAccess(userId, businessId, cancellationToken);
         var service = await store.GetServiceAsync(businessId, serviceId, cancellationToken)
             ?? throw new ApiException("SERVICE_NOT_FOUND", "No encontramos el servicio.", 404);
-        service.Update(service.Name, service.DurationMinutes, service.ReferencePrice, false);
+        service.Update(service.Name, service.DurationMinutes, service.ReferencePrice, false,
+            service.Description, service.DisplayOrder);
         await store.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<StaffMemberDto>> GetStaffAsync(Guid userId, Guid businessId,
         CancellationToken cancellationToken = default)
     {
-        await DemandMembership(userId, businessId, cancellationToken);
+        await DemandConfigurationAccess(userId, businessId, cancellationToken);
         return await store.GetStaffAsync(businessId, cancellationToken);
     }
 
     public async Task<StaffMemberDto> CreateStaffAsync(Guid userId, Guid businessId, SaveStaffMemberRequest request,
         CancellationToken cancellationToken = default)
     {
-        await DemandMembership(userId, businessId, cancellationToken);
+        await DemandConfigurationAccess(userId, businessId, cancellationToken);
         var staff = new StaffMember(Guid.NewGuid(), businessId, request.DisplayName.Trim());
-        staff.Update(request.DisplayName, request.IsActive);
+        staff.Update(request.DisplayName, request.IsActive, request.ParticipatesInAvailability);
         store.AddStaffMember(staff);
         if (!await store.SetStaffServicesAsync(businessId, staff.Id, request.ServiceIds.Distinct().ToArray(), cancellationToken))
             throw new ApiException("CROSS_BUSINESS_REFERENCE", "Uno o más servicios no pertenecen al establecimiento.", 409);
         await store.SaveChangesAsync(cancellationToken);
-        return new(staff.Id, staff.DisplayName, staff.IsActive, request.ServiceIds.Distinct().ToArray());
+        return new(staff.Id, staff.DisplayName, staff.IsActive, staff.ParticipatesInAvailability,
+            request.ServiceIds.Distinct().ToArray(), staff.Version);
     }
 
     public async Task<StaffMemberDto> UpdateStaffAsync(Guid userId, Guid businessId, Guid staffId,
         SaveStaffMemberRequest request, CancellationToken cancellationToken = default)
     {
-        await DemandMembership(userId, businessId, cancellationToken);
+        await DemandConfigurationAccess(userId, businessId, cancellationToken);
         var staff = await store.GetStaffMemberAsync(businessId, staffId, cancellationToken)
             ?? throw new ApiException("STAFF_NOT_FOUND", "No encontramos al trabajador.", 404);
-        TryDomain(() => staff.Update(request.DisplayName, request.IsActive));
+        TryDomain(() => staff.Update(request.DisplayName, request.IsActive, request.ParticipatesInAvailability,
+            request.Version));
         if (!await store.SetStaffServicesAsync(businessId, staff.Id, request.ServiceIds.Distinct().ToArray(), cancellationToken))
             throw new ApiException("CROSS_BUSINESS_REFERENCE", "Uno o más servicios no pertenecen al establecimiento.", 409);
         await store.SaveChangesAsync(cancellationToken);
-        return new(staff.Id, staff.DisplayName, staff.IsActive, request.ServiceIds.Distinct().ToArray());
+        return new(staff.Id, staff.DisplayName, staff.IsActive, staff.ParticipatesInAvailability,
+            request.ServiceIds.Distinct().ToArray(), staff.Version);
     }
 
-    public async Task SetBusinessHourAsync(Guid userId, Guid businessId, DayOfWeek day,
+    public async Task<IReadOnlyList<BusinessHourAdminDto>> GetBusinessHoursAsync(Guid userId, Guid businessId,
+        CancellationToken cancellationToken = default)
+    {
+        await DemandConfigurationAccess(userId, businessId, cancellationToken);
+        var existing = await store.GetBusinessHoursAsync(businessId, cancellationToken);
+        return Enum.GetValues<DayOfWeek>().Select(day =>
+        {
+            var hour = existing.SingleOrDefault(x => x.Day == day);
+            return new BusinessHourAdminDto(day, hour is null, hour?.OpensAt, hour?.ClosesAt, hour?.Version ?? 0);
+        }).ToArray();
+    }
+
+    public async Task<ConfigurationImpactDto> SetBusinessHourAsync(Guid userId, Guid businessId, DayOfWeek day,
         SaveBusinessHourRequest request, CancellationToken cancellationToken = default)
     {
-        await DemandMembership(userId, businessId, cancellationToken);
+        await DemandConfigurationAccess(userId, businessId, cancellationToken);
         var existing = await store.GetBusinessHourAsync(businessId, day, cancellationToken);
         if (request.IsClosed)
         {
-            if (existing is not null) store.RemoveBusinessHour(existing);
+            if (existing is not null)
+            {
+                EnsureVersion(existing.Version, request.Version, "El horario cambió. Recargue la información.");
+                store.RemoveBusinessHour(existing);
+            }
         }
         else if (existing is null)
-            store.AddBusinessHour(new BusinessHour(Guid.NewGuid(), businessId, day, request.OpensAt, request.ClosesAt));
+        {
+            if (request.OpensAt is null || request.ClosesAt is null)
+                throw new ApiException("INVALID_HOURS", "Indique hora de apertura y cierre.");
+            store.AddBusinessHour(new BusinessHour(Guid.NewGuid(), businessId, day,
+                request.OpensAt.Value, request.ClosesAt.Value));
+        }
         else
-            TryDomain(() => existing.Update(request.OpensAt, request.ClosesAt));
+        {
+            if (request.OpensAt is null || request.ClosesAt is null)
+                throw new ApiException("INVALID_HOURS", "Indique hora de apertura y cierre.");
+            TryDomain(() => existing.Update(request.OpensAt.Value, request.ClosesAt.Value, request.Version));
+        }
         await store.SaveChangesAsync(cancellationToken);
+        var nextDate = NextDate(day);
+        var conflicts = await store.CountFutureAppointmentConflictsAsync(businessId, null, nextDate,
+            request.IsClosed ? null : request.OpensAt, request.IsClosed ? null : request.ClosesAt, true,
+            cancellationToken);
+        return new(conflicts);
     }
 
     public async Task<IReadOnlyList<AvailabilityExceptionDto>> GetAvailabilityExceptionsAsync(Guid userId,
-        Guid businessId, CancellationToken cancellationToken = default)
+        Guid businessId, DateOnly? from = null, CancellationToken cancellationToken = default)
     {
-        await DemandMembership(userId, businessId, cancellationToken);
+        await DemandConfigurationAccess(userId, businessId, cancellationToken);
         var items = await store.GetAvailabilityExceptionsAsync(businessId, cancellationToken);
-        return items.Select(ToExceptionDto).ToArray();
+        var filtered = from.HasValue ? items.Where(x => x.Date >= from.Value) : items;
+        var result = new List<AvailabilityExceptionDto>();
+        foreach (var item in filtered)
+            result.Add(await ToExceptionDto(item, cancellationToken));
+        return result;
     }
 
     public async Task<AvailabilityExceptionDto> SaveAvailabilityExceptionAsync(Guid userId, Guid businessId,
         SaveAvailabilityExceptionRequest request, CancellationToken cancellationToken = default)
     {
-        await DemandMembership(userId, businessId, cancellationToken);
+        await DemandConfigurationAccess(userId, businessId, cancellationToken);
         if (!await store.StaffBelongsToBusinessAsync(businessId, request.StaffMemberId, cancellationToken))
             throw new ApiException("CROSS_BUSINESS_REFERENCE", "El trabajador no pertenece al establecimiento.", 409);
+        if (!Enum.TryParse<AvailabilityExceptionType>(request.Type, true, out var type))
+            throw new ApiException("INVALID_EXCEPTION", "Seleccione un tipo de excepción válido.");
         var existing = (await store.GetAvailabilityExceptionsAsync(businessId, cancellationToken))
             .SingleOrDefault(x => x.StaffMemberId == request.StaffMemberId && x.Date == request.Date);
         if (existing is null)
         {
-            existing = new AvailabilityException(Guid.NewGuid(), businessId, request.StaffMemberId, request.Date,
-                request.IsUnavailable, request.OpensAt, request.ClosesAt);
-            if (!request.IsUnavailable) TryDomain(() => existing.Update(false, request.OpensAt, request.ClosesAt));
+            try
+            {
+                existing = new AvailabilityException(Guid.NewGuid(), businessId, request.StaffMemberId, request.Date,
+                    type, request.OpensAt, request.ClosesAt, request.Reason);
+            }
+            catch (DomainException ex) { throw new ApiException(ex.Code, ex.Message); }
             store.AddAvailabilityException(existing);
         }
         else
-            TryDomain(() => existing.Update(request.IsUnavailable, request.OpensAt, request.ClosesAt));
+            TryDomain(() => existing.Update(type, request.OpensAt, request.ClosesAt, request.Reason, request.Version));
         await store.SaveChangesAsync(cancellationToken);
-        return ToExceptionDto(existing);
+        return await ToExceptionDto(existing, cancellationToken);
     }
 
-    public async Task DeleteAvailabilityExceptionAsync(Guid userId, Guid businessId, Guid exceptionId,
+    public async Task DeleteAvailabilityExceptionAsync(Guid userId, Guid businessId, Guid exceptionId, long version,
         CancellationToken cancellationToken = default)
     {
-        await DemandMembership(userId, businessId, cancellationToken);
+        await DemandConfigurationAccess(userId, businessId, cancellationToken);
         var item = await store.GetAvailabilityExceptionAsync(businessId, exceptionId, cancellationToken)
             ?? throw new ApiException("EXCEPTION_NOT_FOUND", "No encontramos el bloqueo.", 404);
+        EnsureVersion(item.Version, version, "La excepción cambió. Recargue la información.");
         store.RemoveAvailabilityException(item);
         await store.SaveChangesAsync(cancellationToken);
     }
@@ -246,6 +312,15 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IPublicCodeService 
         if (userId == Guid.Empty) throw new ApiException("UNAUTHENTICATED", "Debe iniciar sesión.", 401);
         if (!await store.IsMemberAsync(userId, businessId, cancellationToken))
             throw new ApiException("BUSINESS_ACCESS_DENIED", "No tiene acceso a este establecimiento.", 403);
+    }
+
+    private async Task DemandConfigurationAccess(Guid userId, Guid businessId, CancellationToken cancellationToken)
+    {
+        if (userId == Guid.Empty) throw new ApiException("UNAUTHENTICATED", "Debe iniciar sesión.", 401);
+        if (!await store.IsMemberAsync(userId, businessId, cancellationToken))
+            throw new ApiException("BUSINESS_ACCESS_DENIED", "No tiene acceso a este establecimiento.", 403);
+        if (!await store.CanManageConfigurationAsync(userId, businessId, cancellationToken))
+            throw new ApiException("CONFIGURATION_FORBIDDEN", "No tiene permiso para cambiar la configuración.", 403);
     }
 
     private static void ValidateContact(CreateAppointmentRequest request)
@@ -294,8 +369,31 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IPublicCodeService 
         catch (DomainException ex) { throw new ApiException(ex.Code, ex.Message, 404); }
     }
 
-    private static AvailabilityExceptionDto ToExceptionDto(AvailabilityException item)
-        => new(item.Id, item.StaffMemberId, item.Date, item.IsUnavailable, item.OpensAt, item.ClosesAt);
+    private async Task<AvailabilityExceptionDto> ToExceptionDto(AvailabilityException item,
+        CancellationToken cancellationToken)
+    {
+        var conflicts = await store.CountFutureAppointmentConflictsAsync(item.BusinessId, item.StaffMemberId,
+            item.Date, item.Type == AvailabilityExceptionType.ClosedAllDay ? null : item.OpensAt,
+            item.Type == AvailabilityExceptionType.ClosedAllDay ? null : item.ClosesAt,
+            item.Type == AvailabilityExceptionType.ExtraordinaryOpening, cancellationToken);
+        return new(item.Id, item.StaffMemberId, item.Date, item.Type.ToString(), item.OpensAt, item.ClosesAt,
+            item.Reason, conflicts, item.Version);
+    }
+
+    private DateOnly NextDate(DayOfWeek day)
+    {
+        var date = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+        do { date = date.AddDays(1); } while (date.DayOfWeek != day);
+        return date;
+    }
+
+    private static void EnsureVersion(long actual, long expected, string message)
+    {
+        if (actual != expected) throw new ApiException("CONCURRENCY_CONFLICT", message, 409);
+    }
+
+    private static ServiceDto ToServiceDto(Service service) => new(service.Id, service.Name, service.Description,
+        service.DurationMinutes, service.ReferencePrice, service.DisplayOrder, service.IsActive, 0, service.Version);
 
     [GeneratedRegex(@"\D")]
     private static partial Regex PhoneDigits();
