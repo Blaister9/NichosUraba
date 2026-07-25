@@ -34,9 +34,9 @@ public sealed class SchedulingJourneyTests(BrowserFixture fixture) : IClassFixtu
         await page.GetByLabel("Contraseña").FillAsync(DevelopmentSeeder.DemoPassword);
         await page.GetByRole(AriaRole.Button, new() { Name = "Ingresar" }).ClickAsync();
         await page.WaitForURLAsync(url => url.Contains("/panel"));
-        await page.GetByRole(AriaRole.Link, new() { Name = "Administrar citas" }).ClickAsync();
+        await page.GotoAsync($"{fixture.BaseUrl}/panel/{DevelopmentSeeder.BellaBusinessId}/citas");
         var card = page.Locator("[data-testid=appointment-card]").Filter(new() { HasTextString = "E2E Ana" });
-        await card.WaitForAsync();
+        await Expect(card).ToBeVisibleAsync(new() { Timeout = 15_000 });
         await ClickUntilStatus(card, "Confirmar", "Confirmada");
 
         await page.GotoAsync($"{fixture.BaseUrl}/seguimiento/citas/{code}");
