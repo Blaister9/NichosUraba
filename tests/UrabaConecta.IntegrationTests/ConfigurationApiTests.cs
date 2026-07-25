@@ -120,15 +120,19 @@ public sealed partial class ConfigurationApiTests(PostgresWebFactory factory) : 
         using var bella = factory.CreateClient(new() { AllowAutoRedirect = false, HandleCookies = true });
         using var other = factory.CreateClient(new() { AllowAutoRedirect = false, HandleCookies = true });
         using var worker = factory.CreateClient(new() { AllowAutoRedirect = false, HandleCookies = true });
+        using var authorizedWorker = factory.CreateClient(new() { AllowAutoRedirect = false, HandleCookies = true });
         await Login(bella, DevelopmentSeeder.BellaOwnerEmail);
         await Login(other, DevelopmentSeeder.OtherOwnerEmail);
         await Login(worker, DevelopmentSeeder.BellaWorkerEmail);
+        await Login(authorizedWorker, DevelopmentSeeder.BellaConfigurationWorkerEmail);
 
         Assert.Equal(HttpStatusCode.OK, (await bella.GetAsync(
             $"/api/v1/businesses/{DevelopmentSeeder.BellaBusinessId}/services")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await other.GetAsync(
             $"/api/v1/businesses/{DevelopmentSeeder.BellaBusinessId}/services")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await worker.GetAsync(
+            $"/api/v1/businesses/{DevelopmentSeeder.BellaBusinessId}/services")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await authorizedWorker.GetAsync(
             $"/api/v1/businesses/{DevelopmentSeeder.BellaBusinessId}/services")).StatusCode);
 
         var bellaService = (await bella.GetFromJsonAsync<List<ServiceDto>>(
