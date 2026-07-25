@@ -100,6 +100,10 @@ public sealed class Service : IBusinessOwned
     public int DurationMinutes { get; private set; }
     public decimal ReferencePrice { get; private set; }
     public bool IsActive { get; private set; } = true;
+    public void EnsureActive()
+    {
+        if (!IsActive) throw new DomainException("SERVICE_INACTIVE", "El servicio no está disponible.");
+    }
     public void Update(string name, int durationMinutes, decimal referencePrice, bool active)
     {
         if (string.IsNullOrWhiteSpace(name) || durationMinutes is < 5 or > 480 || referencePrice < 0)

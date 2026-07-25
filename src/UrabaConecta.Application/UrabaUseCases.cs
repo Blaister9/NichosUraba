@@ -20,8 +20,7 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IPublicCodeService 
     {
         var context = await store.GetSchedulingContextAsync(slug, serviceId, date, cancellationToken)
             ?? throw new ApiException("BUSINESS_OR_SERVICE_NOT_FOUND", "No encontramos el establecimiento o servicio.", 404);
-        if (!context.Service.IsActive)
-            throw new ApiException("SERVICE_INACTIVE", "El servicio no está disponible.", 404);
+        EnsureServiceActive(context.Service);
         if (date > DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime).AddDays(60))
             throw new ApiException("DATE_OUT_OF_RANGE", "Solo puede consultar los próximos 60 días.");
 
@@ -54,7 +53,7 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IPublicCodeService 
             TimeZoneInfo.FindSystemTimeZoneById("America/Bogota")).DateTime);
         var context = await store.GetSchedulingContextAsync(slug, request.ServiceId, localDate, cancellationToken)
             ?? throw new ApiException("BUSINESS_OR_SERVICE_NOT_FOUND", "No encontramos el establecimiento o servicio.", 404);
-        if (!context.Service.IsActive) throw new ApiException("SERVICE_INACTIVE", "El servicio no está activo.");
+        EnsureServiceActive(context.Service);
 
         var slots = await GetSlotsAsync(slug, request.ServiceId, localDate, cancellationToken);
         var chosen = slots.Slots.FirstOrDefault(x => x.Start.ToUniversalTime() == request.Start.ToUniversalTime());
@@ -287,6 +286,12 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IPublicCodeService 
     {
         try { action(); }
         catch (DomainException ex) { throw new ApiException(ex.Code, ex.Message, 409); }
+    }
+
+    private static void EnsureServiceActive(Service service)
+    {
+        try { service.EnsureActive(); }
+        catch (DomainException ex) { throw new ApiException(ex.Code, ex.Message, 404); }
     }
 
     private static AvailabilityExceptionDto ToExceptionDto(AvailabilityException item)

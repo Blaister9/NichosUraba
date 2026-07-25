@@ -41,10 +41,11 @@ public sealed class AvailabilityTests
     }
 
     [Fact]
-    public void Inactive_service_preserves_invariant()
+    public void Inactive_service_is_rejected()
     {
         var service = new Service(Guid.NewGuid(), Guid.NewGuid(), "Corte", 60, 35000);
         service.Update("Corte", 60, 35000, false);
-        Assert.False(service.IsActive);
+        var error = Assert.Throws<DomainException>(service.EnsureActive);
+        Assert.Equal("SERVICE_INACTIVE", error.Code);
     }
 }

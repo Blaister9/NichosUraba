@@ -116,6 +116,10 @@ public sealed partial class SchedulingApiTests(PostgresWebFactory factory) : ICl
             { StaffMemberId = configurableStaff.Id, Date = NextBusinessDate(30), IsUnavailable = true }, Json);
         Assert.Equal(HttpStatusCode.Created, exceptionResponse.StatusCode);
         var availabilityException = (await exceptionResponse.Content.ReadFromJsonAsync<AvailabilityExceptionDto>(Json))!;
+        var blockedSlots = await publicClient.GetFromJsonAsync<SlotListDto>(
+            $"/api/v1/public/businesses/salon-bella-uraba/appointment-slots?serviceId={configurableService.Id}&date={availabilityException.Date:yyyy-MM-dd}",
+            Json);
+        Assert.Empty(blockedSlots!.Slots);
         Assert.Equal(HttpStatusCode.NoContent, (await bella.DeleteAsync(
             $"/api/v1/businesses/{DevelopmentSeeder.BellaBusinessId}/availability-exceptions/{availabilityException.Id}")).StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, (await bella.DeleteAsync(
