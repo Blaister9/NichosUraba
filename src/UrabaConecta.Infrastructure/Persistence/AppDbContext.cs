@@ -13,6 +13,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Business> Businesses => Set<Business>();
     public DbSet<BusinessMembership> BusinessMemberships => Set<BusinessMembership>();
+    public DbSet<MembershipAuditEntry> MembershipAuditEntries => Set<MembershipAuditEntry>();
     public DbSet<BusinessHour> BusinessHours => Set<BusinessHour>();
     public DbSet<Service> Services => Set<Service>();
     public DbSet<StaffMember> StaffMembers => Set<StaffMember>();
@@ -52,10 +53,25 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             x.ToTable("business_memberships"); x.HasKey(e => e.Id);
             x.HasIndex(e => new { e.BusinessId, e.UserId }).IsUnique();
             x.HasIndex(e => new { e.UserId, e.IsActive });
+            x.HasIndex(e => new { e.BusinessId, e.IsActive });
+            x.HasIndex(e => new { e.BusinessId, e.Role, e.IsActive });
             x.Property(e => e.Role).HasConversion<string>().HasMaxLength(20);
+            x.Property(e => e.Version).IsConcurrencyToken();
             x.HasOne<Business>().WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Cascade);
-            x.HasOne<ApplicationUser>().WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+            x.HasOne<ApplicationUser>().WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Restrict);
         });
+        builder.Entity<MembershipAuditEntry>(x =>
+        {
+            x.ToTable("membership_audit_entries"); x.HasKey(e => e.Id);
+            x.HasIndex(e => new { e.BusinessId, e.OccurredAtUtc });
+            x.HasIndex(e => new { e.BusinessId, e.MembershipId, e.OccurredAtUtc });
+            x.Property(e => e.Action).HasConversion<string>().HasMaxLength(40);
+            x.Property(e => e.PreviousState).HasColumnType("jsonb");
+            x.Property(e => e.NewState).HasColumnType("jsonb");
+            x.HasOne<Business>().WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Cascade);
+            x.HasOne<BusinessMembership>().WithMany().HasForeignKey(e => e.MembershipId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<ApplicationUser>().Property(e => e.DisplayName).HasMaxLength(100);
         builder.Entity<BusinessHour>(x =>
         {
             x.ToTable("business_hours", t => t.HasCheckConstraint("ck_business_hours_range", "\"OpensAt\" < \"ClosesAt\""));

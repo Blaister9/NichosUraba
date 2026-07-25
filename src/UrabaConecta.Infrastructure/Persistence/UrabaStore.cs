@@ -107,6 +107,9 @@ public sealed class UrabaStore(AppDbContext db) : IUrabaStore
     public Task<bool> CanManageConfigurationAsync(Guid userId, Guid businessId, CancellationToken cancellationToken)
         => db.BusinessMemberships.AsNoTracking().AnyAsync(x => x.UserId == userId && x.BusinessId == businessId &&
             x.IsActive && (x.Role == MembershipRole.Owner || x.CanManageConfiguration), cancellationToken);
+    public Task<bool> CanManageAppointmentsAsync(Guid userId, Guid businessId, CancellationToken cancellationToken)
+        => db.BusinessMemberships.AsNoTracking().AnyAsync(x => x.UserId == userId && x.BusinessId == businessId &&
+            x.IsActive && (x.Role == MembershipRole.Owner || x.CanManageAppointments), cancellationToken);
 
     public async Task<IReadOnlyList<MyBusinessDto>> GetMembershipsAsync(Guid userId, CancellationToken cancellationToken)
         => await (from membership in db.BusinessMemberships.AsNoTracking()
@@ -114,7 +117,9 @@ public sealed class UrabaStore(AppDbContext db) : IUrabaStore
                   where membership.UserId == userId && membership.IsActive
                   orderby business.Name
                   select new MyBusinessDto(business.Id, business.Name, business.Slug, membership.Role.ToString(),
-                      membership.Role == MembershipRole.Owner || membership.CanManageConfiguration))
+                      membership.Role == MembershipRole.Owner || membership.CanManageConfiguration,
+                      membership.Role == MembershipRole.Owner || membership.CanManageAppointments,
+                      membership.Role == MembershipRole.Owner || membership.CanManageMembers))
             .ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<AppointmentRecord>> GetAppointmentsAsync(Guid businessId, DateOnly? date,

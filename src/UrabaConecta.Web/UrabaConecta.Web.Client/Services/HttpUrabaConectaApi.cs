@@ -83,6 +83,48 @@ public sealed class HttpUrabaConectaApi(HttpClient http) : IUrabaConectaApi
         => await Ensure(await http.DeleteAsync(
             $"api/v1/businesses/{businessId}/availability-exceptions/{exceptionId}?version={version}",
             cancellationToken), cancellationToken);
+    public Task<BusinessMemberListDto> ListMembersAsync(Guid businessId, CancellationToken cancellationToken = default)
+        => Get<BusinessMemberListDto>($"api/v1/businesses/{businessId}/memberships", cancellationToken);
+    public Task<BusinessMemberDto> GetMemberAsync(Guid businessId, Guid membershipId,
+        CancellationToken cancellationToken = default)
+        => Get<BusinessMemberDto>($"api/v1/businesses/{businessId}/memberships/{membershipId}", cancellationToken);
+    public async Task<BusinessMemberDto> LinkExistingMemberAsync(Guid businessId, LinkExistingMemberRequest request,
+        CancellationToken cancellationToken = default)
+        => await Read<BusinessMemberDto>(await http.PostAsJsonAsync(
+            $"api/v1/businesses/{businessId}/memberships/link-existing", request, Json, cancellationToken), cancellationToken);
+    public async Task<DevelopmentMemberCreatedDto> CreateDevelopmentMemberAsync(Guid businessId,
+        CreateDevelopmentMemberRequest request, CancellationToken cancellationToken = default)
+        => await Read<DevelopmentMemberCreatedDto>(await http.PostAsJsonAsync(
+            $"api/v1/businesses/{businessId}/memberships/create-development", request, Json, cancellationToken), cancellationToken);
+    public async Task<BusinessMemberDto> UpdateMemberPermissionsAsync(Guid businessId, Guid membershipId,
+        UpdateMemberPermissionsRequest request, CancellationToken cancellationToken = default)
+        => await Read<BusinessMemberDto>(await http.PutAsJsonAsync(
+            $"api/v1/businesses/{businessId}/memberships/{membershipId}/permissions", request, Json, cancellationToken),
+            cancellationToken);
+    public Task<BusinessMemberDto> ActivateMemberAsync(Guid businessId, Guid membershipId, long version,
+        CancellationToken cancellationToken = default)
+        => PostVersion(businessId, membershipId, "activate", version, cancellationToken);
+    public Task<BusinessMemberDto> DeactivateMemberAsync(Guid businessId, Guid membershipId, long version,
+        CancellationToken cancellationToken = default)
+        => PostVersion(businessId, membershipId, "deactivate", version, cancellationToken);
+    public Task<BusinessMemberDto> GrantOwnershipAsync(Guid businessId, Guid membershipId, long version,
+        CancellationToken cancellationToken = default)
+        => PostVersion(businessId, membershipId, "grant-owner", version, cancellationToken);
+    public async Task<BusinessMemberDto> RevokeOwnershipAsync(Guid businessId, Guid membershipId,
+        RevokeOwnershipRequest request, CancellationToken cancellationToken = default)
+        => await Read<BusinessMemberDto>(await http.PostAsJsonAsync(
+            $"api/v1/businesses/{businessId}/memberships/{membershipId}/revoke-owner", request, Json, cancellationToken),
+            cancellationToken);
+    public Task<IReadOnlyList<MembershipAuditDto>> ListMembershipAuditAsync(Guid businessId, Guid membershipId,
+        CancellationToken cancellationToken = default)
+        => Get<IReadOnlyList<MembershipAuditDto>>(
+            $"api/v1/businesses/{businessId}/memberships/{membershipId}/audit", cancellationToken);
+
+    private async Task<BusinessMemberDto> PostVersion(Guid businessId, Guid membershipId, string action, long version,
+        CancellationToken cancellationToken)
+        => await Read<BusinessMemberDto>(await http.PostAsJsonAsync(
+            $"api/v1/businesses/{businessId}/memberships/{membershipId}/{action}",
+            new MembershipVersionRequest { Version = version }, Json, cancellationToken), cancellationToken);
 
     private async Task<T> Get<T>(string url, CancellationToken ct) => await Read<T>(await http.GetAsync(url, ct), ct);
     private static async Task<T> Read<T>(HttpResponseMessage response, CancellationToken ct)

@@ -8,6 +8,40 @@ public sealed record SchedulingContext(Business Business, Service Service, IRead
     IReadOnlyList<(DateTimeOffset Start, DateTimeOffset End, Guid StaffId)> Occupied);
 
 public sealed record AppointmentRecord(Appointment Appointment, Business Business, ConsentReceipt Consent);
+public sealed record IdentityAccount(Guid UserId, string Email, string DisplayName);
+public sealed record CreatedIdentityAccount(IdentityAccount Account, string TemporaryPassword);
+
+public interface IApplicationTransaction : IAsyncDisposable
+{
+    Task CommitAsync(CancellationToken cancellationToken);
+}
+
+public interface IIdentityAccountManager
+{
+    bool DevelopmentAccountCreationEnabled { get; }
+    Task<IdentityAccount?> FindByExactEmailAsync(string email, CancellationToken cancellationToken);
+    Task<CreatedIdentityAccount> CreateDevelopmentAsync(string displayName, string email,
+        CancellationToken cancellationToken);
+}
+
+public interface IMembershipAdministrationStore
+{
+    Task<IApplicationTransaction> BeginTransactionAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<BusinessMembership>> LockBusinessMembershipsAsync(Guid businessId,
+        CancellationToken cancellationToken);
+    Task<BusinessMembership?> GetMembershipAsync(Guid businessId, Guid membershipId,
+        CancellationToken cancellationToken);
+    Task<BusinessMembership?> GetMembershipByUserAsync(Guid businessId, Guid userId,
+        CancellationToken cancellationToken);
+    Task<IReadOnlyList<BusinessMemberDto>> ListMembersAsync(Guid businessId, CancellationToken cancellationToken);
+    Task<BusinessMemberDto?> GetMemberDtoAsync(Guid businessId, Guid membershipId,
+        CancellationToken cancellationToken);
+    void AddMembership(BusinessMembership membership);
+    void AddAudit(MembershipAuditEntry entry);
+    Task<IReadOnlyList<MembershipAuditDto>> ListAuditAsync(Guid businessId, Guid membershipId,
+        CancellationToken cancellationToken);
+    Task SaveMembershipChangesAsync(CancellationToken cancellationToken);
+}
 
 public interface IUrabaStore
 {
@@ -19,6 +53,7 @@ public interface IUrabaStore
     Task<bool> AddAppointmentAsync(Appointment appointment, ConsentReceipt consent, CancellationToken cancellationToken);
     Task<AppointmentRecord?> FindAppointmentByCodeHashAsync(string codeHash, CancellationToken cancellationToken);
     Task<bool> IsMemberAsync(Guid userId, Guid businessId, CancellationToken cancellationToken);
+    Task<bool> CanManageAppointmentsAsync(Guid userId, Guid businessId, CancellationToken cancellationToken);
     Task<bool> CanManageConfigurationAsync(Guid userId, Guid businessId, CancellationToken cancellationToken);
     Task<IReadOnlyList<MyBusinessDto>> GetMembershipsAsync(Guid userId, CancellationToken cancellationToken);
     Task<IReadOnlyList<AppointmentRecord>> GetAppointmentsAsync(Guid businessId, DateOnly? date,
@@ -100,4 +135,24 @@ public interface IUrabaUseCases
         SaveAvailabilityExceptionRequest request, CancellationToken cancellationToken = default);
     Task DeleteAvailabilityExceptionAsync(Guid userId, Guid businessId, Guid exceptionId, long version,
         CancellationToken cancellationToken = default);
+    Task<BusinessMemberListDto> ListMembersAsync(Guid userId, Guid businessId,
+        CancellationToken cancellationToken = default);
+    Task<BusinessMemberDto> GetMemberAsync(Guid userId, Guid businessId, Guid membershipId,
+        CancellationToken cancellationToken = default);
+    Task<BusinessMemberDto> LinkExistingMemberAsync(Guid userId, Guid businessId, LinkExistingMemberRequest request,
+        CancellationToken cancellationToken = default);
+    Task<DevelopmentMemberCreatedDto> CreateDevelopmentMemberAsync(Guid userId, Guid businessId,
+        CreateDevelopmentMemberRequest request, CancellationToken cancellationToken = default);
+    Task<BusinessMemberDto> UpdateMemberPermissionsAsync(Guid userId, Guid businessId, Guid membershipId,
+        UpdateMemberPermissionsRequest request, CancellationToken cancellationToken = default);
+    Task<BusinessMemberDto> ActivateMemberAsync(Guid userId, Guid businessId, Guid membershipId, long version,
+        CancellationToken cancellationToken = default);
+    Task<BusinessMemberDto> DeactivateMemberAsync(Guid userId, Guid businessId, Guid membershipId, long version,
+        CancellationToken cancellationToken = default);
+    Task<BusinessMemberDto> GrantOwnershipAsync(Guid userId, Guid businessId, Guid membershipId, long version,
+        CancellationToken cancellationToken = default);
+    Task<BusinessMemberDto> RevokeOwnershipAsync(Guid userId, Guid businessId, Guid membershipId,
+        RevokeOwnershipRequest request, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<MembershipAuditDto>> ListMembershipAuditAsync(Guid userId, Guid businessId,
+        Guid membershipId, CancellationToken cancellationToken = default);
 }

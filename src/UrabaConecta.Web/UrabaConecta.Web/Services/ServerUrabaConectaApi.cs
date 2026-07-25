@@ -62,6 +62,37 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, Authenticatio
         CancellationToken cancellationToken = default)
         => await useCases.DeleteAvailabilityExceptionAsync(await UserId(), businessId, exceptionId, version,
             cancellationToken);
+    public async Task<BusinessMemberListDto> ListMembersAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => await useCases.ListMembersAsync(await UserId(), businessId, cancellationToken);
+    public async Task<BusinessMemberDto> GetMemberAsync(Guid businessId, Guid membershipId,
+        CancellationToken cancellationToken = default)
+        => await useCases.GetMemberAsync(await UserId(), businessId, membershipId, cancellationToken);
+    public async Task<BusinessMemberDto> LinkExistingMemberAsync(Guid businessId, LinkExistingMemberRequest request,
+        CancellationToken cancellationToken = default)
+        => await useCases.LinkExistingMemberAsync(await UserId(), businessId, request, cancellationToken);
+    public async Task<DevelopmentMemberCreatedDto> CreateDevelopmentMemberAsync(Guid businessId,
+        CreateDevelopmentMemberRequest request, CancellationToken cancellationToken = default)
+        => await useCases.CreateDevelopmentMemberAsync(await UserId(), businessId, request, cancellationToken);
+    public async Task<BusinessMemberDto> UpdateMemberPermissionsAsync(Guid businessId, Guid membershipId,
+        UpdateMemberPermissionsRequest request, CancellationToken cancellationToken = default)
+        => await useCases.UpdateMemberPermissionsAsync(await UserId(), businessId, membershipId, request,
+            cancellationToken);
+    public async Task<BusinessMemberDto> ActivateMemberAsync(Guid businessId, Guid membershipId, long version,
+        CancellationToken cancellationToken = default)
+        => await useCases.ActivateMemberAsync(await UserId(), businessId, membershipId, version, cancellationToken);
+    public async Task<BusinessMemberDto> DeactivateMemberAsync(Guid businessId, Guid membershipId, long version,
+        CancellationToken cancellationToken = default)
+        => await useCases.DeactivateMemberAsync(await UserId(), businessId, membershipId, version, cancellationToken);
+    public async Task<BusinessMemberDto> GrantOwnershipAsync(Guid businessId, Guid membershipId, long version,
+        CancellationToken cancellationToken = default)
+        => await useCases.GrantOwnershipAsync(await UserId(), businessId, membershipId, version, cancellationToken);
+    public async Task<BusinessMemberDto> RevokeOwnershipAsync(Guid businessId, Guid membershipId,
+        RevokeOwnershipRequest request, CancellationToken cancellationToken = default)
+        => await useCases.RevokeOwnershipAsync(await UserId(), businessId, membershipId, request, cancellationToken);
+    public async Task<IReadOnlyList<MembershipAuditDto>> ListMembershipAuditAsync(Guid businessId,
+        Guid membershipId, CancellationToken cancellationToken = default)
+        => await useCases.ListMembershipAuditAsync(await UserId(), businessId, membershipId, cancellationToken);
 
     private async Task<Guid> UserId()
     {

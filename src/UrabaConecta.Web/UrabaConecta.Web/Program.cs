@@ -33,7 +33,8 @@ builder.Services.AddAuthorizationBuilder()
     .AddPolicy("BusinessOwner", policy => policy.RequireRole("BusinessOwner"))
     .AddPolicy("Appointments.Manage", policy => policy.RequireRole("BusinessOwner", "BusinessWorker"))
     .AddPolicy("BusinessProfile.Manage", policy => policy.RequireRole("BusinessOwner"))
-    .AddPolicy("BusinessConfiguration.Manage", policy => policy.RequireRole("BusinessOwner", "BusinessWorker"));
+    .AddPolicy("BusinessConfiguration.Manage", policy => policy.RequireRole("BusinessOwner", "BusinessWorker"))
+    .AddPolicy("Workers.Manage", policy => policy.RequireRole("BusinessOwner", "BusinessWorker"));
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
 {
     options.SignIn.RequireConfirmedAccount = true;
@@ -48,6 +49,8 @@ builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSe
 builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
 builder.Services.AddDataProtection();
 builder.Services.AddScoped<IUrabaStore, UrabaStore>();
+builder.Services.AddScoped<IMembershipAdministrationStore, MembershipAdministrationStore>();
+builder.Services.AddScoped<IIdentityAccountManager, IdentityAccountManager>();
 builder.Services.AddScoped<IPublicCodeService, PublicCodeService>();
 builder.Services.AddScoped<UrabaConecta.Application.IPersonalDataProtector, PersonalDataProtector>();
 builder.Services.AddSingleton(TimeProvider.System);
@@ -170,6 +173,56 @@ privateApi.MapDelete("/{businessId:guid}/availability-exceptions/{exceptionId:gu
     async (Guid businessId, Guid exceptionId, long version, ClaimsPrincipal user, IUrabaUseCases useCases, CancellationToken ct) =>
     { await useCases.DeleteAvailabilityExceptionAsync(UserId(user), businessId, exceptionId, version, ct); return Results.NoContent(); })
     .RequireAuthorization("BusinessConfiguration.Manage");
+privateApi.MapGet("/{businessId:guid}/memberships",
+    (Guid businessId, ClaimsPrincipal user, IUrabaUseCases useCases, CancellationToken ct)
+        => useCases.ListMembersAsync(UserId(user), businessId, ct))
+    .RequireAuthorization("Workers.Manage");
+privateApi.MapGet("/{businessId:guid}/memberships/{membershipId:guid}",
+    (Guid businessId, Guid membershipId, ClaimsPrincipal user, IUrabaUseCases useCases, CancellationToken ct)
+        => useCases.GetMemberAsync(UserId(user), businessId, membershipId, ct))
+    .RequireAuthorization("Workers.Manage");
+privateApi.MapPost("/{businessId:guid}/memberships/link-existing",
+    async (Guid businessId, LinkExistingMemberRequest request, ClaimsPrincipal user,
+        IUrabaUseCases useCases, CancellationToken ct) =>
+        Results.Created("", await useCases.LinkExistingMemberAsync(UserId(user), businessId, request, ct)))
+    .RequireAuthorization("Workers.Manage");
+if (app.Environment.IsDevelopment())
+{
+    privateApi.MapPost("/{businessId:guid}/memberships/create-development",
+        async (Guid businessId, CreateDevelopmentMemberRequest request, ClaimsPrincipal user,
+            IUrabaUseCases useCases, CancellationToken ct) =>
+            Results.Created("", await useCases.CreateDevelopmentMemberAsync(UserId(user), businessId, request, ct)))
+        .RequireAuthorization("Workers.Manage");
+}
+privateApi.MapPut("/{businessId:guid}/memberships/{membershipId:guid}/permissions",
+    (Guid businessId, Guid membershipId, UpdateMemberPermissionsRequest request, ClaimsPrincipal user,
+        IUrabaUseCases useCases, CancellationToken ct)
+        => useCases.UpdateMemberPermissionsAsync(UserId(user), businessId, membershipId, request, ct))
+    .RequireAuthorization("Workers.Manage");
+privateApi.MapPost("/{businessId:guid}/memberships/{membershipId:guid}/activate",
+    (Guid businessId, Guid membershipId, MembershipVersionRequest request, ClaimsPrincipal user,
+        IUrabaUseCases useCases, CancellationToken ct)
+        => useCases.ActivateMemberAsync(UserId(user), businessId, membershipId, request.Version, ct))
+    .RequireAuthorization("Workers.Manage");
+privateApi.MapPost("/{businessId:guid}/memberships/{membershipId:guid}/deactivate",
+    (Guid businessId, Guid membershipId, MembershipVersionRequest request, ClaimsPrincipal user,
+        IUrabaUseCases useCases, CancellationToken ct)
+        => useCases.DeactivateMemberAsync(UserId(user), businessId, membershipId, request.Version, ct))
+    .RequireAuthorization("Workers.Manage");
+privateApi.MapPost("/{businessId:guid}/memberships/{membershipId:guid}/grant-owner",
+    (Guid businessId, Guid membershipId, MembershipVersionRequest request, ClaimsPrincipal user,
+        IUrabaUseCases useCases, CancellationToken ct)
+        => useCases.GrantOwnershipAsync(UserId(user), businessId, membershipId, request.Version, ct))
+    .RequireAuthorization("Workers.Manage");
+privateApi.MapPost("/{businessId:guid}/memberships/{membershipId:guid}/revoke-owner",
+    (Guid businessId, Guid membershipId, RevokeOwnershipRequest request, ClaimsPrincipal user,
+        IUrabaUseCases useCases, CancellationToken ct)
+        => useCases.RevokeOwnershipAsync(UserId(user), businessId, membershipId, request, ct))
+    .RequireAuthorization("Workers.Manage");
+privateApi.MapGet("/{businessId:guid}/memberships/{membershipId:guid}/audit",
+    (Guid businessId, Guid membershipId, ClaimsPrincipal user, IUrabaUseCases useCases, CancellationToken ct)
+        => useCases.ListMembershipAuditAsync(UserId(user), businessId, membershipId, ct))
+    .RequireAuthorization("Workers.Manage");
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()

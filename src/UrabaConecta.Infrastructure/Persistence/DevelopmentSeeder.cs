@@ -29,10 +29,10 @@ public static class DevelopmentSeeder
                 await roleManager.CreateAsync(new IdentityRole<Guid>(role));
 
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-        var bellaOwner = await EnsureUser(userManager, BellaOwnerEmail);
-        var otherOwner = await EnsureUser(userManager, OtherOwnerEmail);
-        var bellaWorker = await EnsureUser(userManager, BellaWorkerEmail);
-        var configurationWorker = await EnsureUser(userManager, BellaConfigurationWorkerEmail);
+        var bellaOwner = await EnsureUser(userManager, BellaOwnerEmail, "Propietaria Bella");
+        var otherOwner = await EnsureUser(userManager, OtherOwnerEmail, "Propietario negocio aislado");
+        var bellaWorker = await EnsureUser(userManager, BellaWorkerEmail, "Trabajadora Bella");
+        var configurationWorker = await EnsureUser(userManager, BellaConfigurationWorkerEmail, "Configuradora Bella");
         if (!await userManager.IsInRoleAsync(bellaOwner, "BusinessOwner")) await userManager.AddToRoleAsync(bellaOwner, "BusinessOwner");
         if (!await userManager.IsInRoleAsync(otherOwner, "BusinessOwner")) await userManager.AddToRoleAsync(otherOwner, "BusinessOwner");
         if (!await userManager.IsInRoleAsync(bellaWorker, "BusinessWorker")) await userManager.AddToRoleAsync(bellaWorker, "BusinessWorker");
@@ -81,11 +81,23 @@ public static class DevelopmentSeeder
         await db.SaveChangesAsync();
     }
 
-    private static async Task<ApplicationUser> EnsureUser(UserManager<ApplicationUser> manager, string email)
+    private static async Task<ApplicationUser> EnsureUser(UserManager<ApplicationUser> manager, string email,
+        string displayName)
     {
         var existing = await manager.FindByEmailAsync(email);
-        if (existing is not null) return existing;
-        var user = new ApplicationUser { Id = Guid.NewGuid(), UserName = email, Email = email, EmailConfirmed = true };
+        if (existing is not null)
+        {
+            if (existing.DisplayName != displayName)
+            {
+                existing.DisplayName = displayName;
+                await manager.UpdateAsync(existing);
+            }
+            return existing;
+        }
+        var user = new ApplicationUser
+        {
+            Id = Guid.NewGuid(), UserName = email, Email = email, EmailConfirmed = true, DisplayName = displayName
+        };
         var result = await manager.CreateAsync(user, DemoPassword);
         if (!result.Succeeded) throw new InvalidOperationException(string.Join("; ", result.Errors.Select(x => x.Description)));
         return user;

@@ -2,6 +2,10 @@ namespace UrabaConecta.Domain;
 
 public enum BusinessStatus { Active, Suspended }
 public enum MembershipRole { Owner, Worker }
+public enum MembershipAuditAction
+{
+    MemberLinked, MemberActivated, MemberDeactivated, PermissionsChanged, OwnerGranted, OwnerRevoked
+}
 public enum AppointmentStatus { Pending, Confirmed, Rejected, Cancelled, Completed, NoShow }
 public enum AvailabilityExceptionType { ClosedAllDay, ClosedInterval, ExtraordinaryOpening }
 
@@ -57,15 +61,98 @@ public sealed class BusinessMembership : IBusinessOwned
 {
     private BusinessMembership() { }
     public BusinessMembership(Guid id, Guid businessId, Guid userId, MembershipRole role,
-        bool canManageConfiguration = false)
-        => (Id, BusinessId, UserId, Role, CanManageConfiguration) =
-            (id, businessId, userId, role, canManageConfiguration);
+        bool canManageConfiguration = false, bool canManageAppointments = true,
+        bool canManageMembers = false, DateTimeOffset? createdAtUtc = null)
+    {
+        (Id, BusinessId, UserId, Role) = (id, businessId, userId, role);
+        CreatedAtUtc = UpdatedAtUtc = createdAtUtc ?? DateTimeOffset.UtcNow;
+        SetPermissions(canManageAppointments, canManageConfiguration, canManageMembers);
+        if (role == MembershipRole.Owner) SetPermissions(true, true, true);
+    }
     public Guid Id { get; private set; }
     public Guid BusinessId { get; private set; }
     public Guid UserId { get; private set; }
     public MembershipRole Role { get; private set; }
     public bool IsActive { get; private set; } = true;
+    public bool CanManageAppointments { get; private set; }
     public bool CanManageConfiguration { get; private set; }
+    public bool CanManageMembers { get; private set; }
+    public DateTimeOffset CreatedAtUtc { get; private set; }
+    public DateTimeOffset UpdatedAtUtc { get; private set; }
+    public DateTimeOffset? DeactivatedAtUtc { get; private set; }
+    public long Version { get; private set; }
+
+    public bool HasPermission(bool appointments, bool configuration, bool members)
+        => (!appointments || Role == MembershipRole.Owner || CanManageAppointments)
+           && (!configuration || Role == MembershipRole.Owner || CanManageConfiguration)
+           && (!members || Role == MembershipRole.Owner || CanManageMembers);
+
+    public void UpdatePermissions(bool appointments, bool configuration, bool members,
+        DateTimeOffset now, long expectedVersion)
+    {
+        EnsureVersion(expectedVersion);
+        if (Role == MembershipRole.Owner && (!appointments || !configuration || !members))
+            throw new DomainException("OWNER_PERMISSIONS_REQUIRED", "Una persona propietaria conserva todos los permisos.");
+        SetPermissions(appointments, configuration, members);
+        Touch(now);
+    }
+
+    public void Activate(DateTimeOffset now, long expectedVersion)
+    {
+        EnsureVersion(expectedVersion);
+        if (IsActive) throw new DomainException("MEMBERSHIP_ALREADY_ACTIVE", "La membresía ya está activa.");
+        IsActive = true; DeactivatedAtUtc = null; Touch(now);
+    }
+
+    public void Deactivate(DateTimeOffset now, long expectedVersion)
+    {
+        EnsureVersion(expectedVersion);
+        if (!IsActive) throw new DomainException("MEMBERSHIP_ALREADY_INACTIVE", "La membresía ya está inactiva.");
+        IsActive = false; DeactivatedAtUtc = now; Touch(now);
+    }
+
+    public void GrantOwnership(DateTimeOffset now, long expectedVersion)
+    {
+        EnsureVersion(expectedVersion);
+        if (!IsActive) throw new DomainException("INACTIVE_MEMBER", "Active la membresía antes de transferir propiedad.");
+        if (Role == MembershipRole.Owner) throw new DomainException("ALREADY_OWNER", "La persona ya es propietaria.");
+        Role = MembershipRole.Owner; SetPermissions(true, true, true); Touch(now);
+    }
+
+    public void RevokeOwnership(bool appointments, bool configuration, bool members,
+        DateTimeOffset now, long expectedVersion)
+    {
+        EnsureVersion(expectedVersion);
+        if (Role != MembershipRole.Owner) throw new DomainException("NOT_OWNER", "La persona no es propietaria.");
+        Role = MembershipRole.Worker; SetPermissions(appointments, configuration, members); Touch(now);
+    }
+
+    private void SetPermissions(bool appointments, bool configuration, bool members)
+        => (CanManageAppointments, CanManageConfiguration, CanManageMembers) =
+            (appointments, configuration, members);
+    private void Touch(DateTimeOffset now) { UpdatedAtUtc = now; Version++; }
+    private void EnsureVersion(long expected)
+    {
+        if (expected != Version)
+            throw new DomainException("CONCURRENCY_CONFLICT", "La membresía cambió. Recargue la información.");
+    }
+}
+
+public sealed class MembershipAuditEntry : IBusinessOwned
+{
+    private MembershipAuditEntry() { }
+    public MembershipAuditEntry(Guid id, Guid businessId, Guid membershipId, Guid actorUserId,
+        MembershipAuditAction action, string previousState, string newState, DateTimeOffset occurredAtUtc)
+        => (Id, BusinessId, MembershipId, ActorUserId, Action, PreviousState, NewState, OccurredAtUtc) =
+            (id, businessId, membershipId, actorUserId, action, previousState, newState, occurredAtUtc);
+    public Guid Id { get; private set; }
+    public Guid BusinessId { get; private set; }
+    public Guid MembershipId { get; private set; }
+    public Guid ActorUserId { get; private set; }
+    public MembershipAuditAction Action { get; private set; }
+    public string PreviousState { get; private set; } = "{}";
+    public string NewState { get; private set; } = "{}";
+    public DateTimeOffset OccurredAtUtc { get; private set; }
 }
 
 public sealed class BusinessHour : IBusinessOwned

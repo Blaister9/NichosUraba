@@ -29,7 +29,39 @@ public sealed record AppointmentTrackingDto(string Status, string StatusLabel, s
     DateTimeOffset Start, string PhoneMasked, bool CanCancel, DateTimeOffset UpdatedAt);
 
 public sealed record MyBusinessDto(Guid Id, string Name, string Slug, string MembershipRole,
-    bool CanManageConfiguration = false);
+    bool CanManageConfiguration = false, bool CanManageAppointments = true, bool CanManageMembers = false);
+public sealed record MembershipPermissionsDto(bool CanManageAppointments, bool CanManageConfiguration,
+    bool CanManageMembers);
+public sealed record BusinessMemberDto(Guid Id, string DisplayName, string Email, bool IsActive, bool IsOwner,
+    MembershipPermissionsDto Permissions, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, long Version);
+public sealed record BusinessMemberListDto(IReadOnlyList<BusinessMemberDto> Items,
+    bool DevelopmentAccountCreationEnabled, Guid CurrentMembershipId);
+public class LinkExistingMemberRequest
+{
+    [Required, EmailAddress, StringLength(256)] public string Email { get; set; } = "";
+    public bool CanManageAppointments { get; set; }
+    public bool CanManageConfiguration { get; set; }
+    public bool CanManageMembers { get; set; }
+}
+public sealed class CreateDevelopmentMemberRequest : LinkExistingMemberRequest
+{
+    [Required, StringLength(100, MinimumLength = 2)] public string DisplayName { get; set; } = "";
+}
+public sealed record DevelopmentMemberCreatedDto(BusinessMemberDto Member, string TemporaryPassword);
+public class UpdateMemberPermissionsRequest
+{
+    public bool CanManageAppointments { get; set; }
+    public bool CanManageConfiguration { get; set; }
+    public bool CanManageMembers { get; set; }
+    public long Version { get; set; }
+}
+public sealed class MembershipVersionRequest
+{
+    public long Version { get; set; }
+}
+public sealed class RevokeOwnershipRequest : UpdateMemberPermissionsRequest;
+public sealed record MembershipAuditDto(Guid Id, string Action, Guid ActorUserId,
+    DateTimeOffset OccurredAtUtc, string PreviousState, string NewState);
 public sealed record AppointmentAdminDto(Guid Id, Guid BusinessId, string ServiceName, DateTimeOffset Start,
     DateTimeOffset End, string CustomerAlias, string Phone, string Notes, string Status,
     DateTimeOffset CreatedAt, string ConsentNoticeVersion, DateTimeOffset ConsentAcceptedAt, uint Version);
@@ -129,5 +161,24 @@ public interface IUrabaConectaApi
     Task<AvailabilityExceptionDto> SaveAvailabilityExceptionAsync(Guid businessId,
         SaveAvailabilityExceptionRequest request, CancellationToken cancellationToken = default);
     Task DeleteAvailabilityExceptionAsync(Guid businessId, Guid exceptionId, long version,
+        CancellationToken cancellationToken = default);
+    Task<BusinessMemberListDto> ListMembersAsync(Guid businessId, CancellationToken cancellationToken = default);
+    Task<BusinessMemberDto> GetMemberAsync(Guid businessId, Guid membershipId,
+        CancellationToken cancellationToken = default);
+    Task<BusinessMemberDto> LinkExistingMemberAsync(Guid businessId, LinkExistingMemberRequest request,
+        CancellationToken cancellationToken = default);
+    Task<DevelopmentMemberCreatedDto> CreateDevelopmentMemberAsync(Guid businessId,
+        CreateDevelopmentMemberRequest request, CancellationToken cancellationToken = default);
+    Task<BusinessMemberDto> UpdateMemberPermissionsAsync(Guid businessId, Guid membershipId,
+        UpdateMemberPermissionsRequest request, CancellationToken cancellationToken = default);
+    Task<BusinessMemberDto> ActivateMemberAsync(Guid businessId, Guid membershipId, long version,
+        CancellationToken cancellationToken = default);
+    Task<BusinessMemberDto> DeactivateMemberAsync(Guid businessId, Guid membershipId, long version,
+        CancellationToken cancellationToken = default);
+    Task<BusinessMemberDto> GrantOwnershipAsync(Guid businessId, Guid membershipId, long version,
+        CancellationToken cancellationToken = default);
+    Task<BusinessMemberDto> RevokeOwnershipAsync(Guid businessId, Guid membershipId,
+        RevokeOwnershipRequest request, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<MembershipAuditDto>> ListMembershipAuditAsync(Guid businessId, Guid membershipId,
         CancellationToken cancellationToken = default);
 }

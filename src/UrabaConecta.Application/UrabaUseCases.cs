@@ -5,7 +5,8 @@ using UrabaConecta.Domain;
 
 namespace UrabaConecta.Application;
 
-public sealed partial class UrabaUseCases(IUrabaStore store, IPublicCodeService codes,
+public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdministrationStore membershipStore,
+    IIdentityAccountManager identityAccounts, IPublicCodeService codes,
     IPersonalDataProtector protector, TimeProvider timeProvider) : IUrabaUseCases
 {
     public Task<IReadOnlyList<BusinessCardDto>> GetBusinessesAsync(string? search, string? municipality,
@@ -111,7 +112,7 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IPublicCodeService 
     public async Task<IReadOnlyList<AppointmentAdminDto>> GetAppointmentsAsync(Guid userId, Guid businessId,
         DateOnly? date, string? status, CancellationToken cancellationToken = default)
     {
-        await DemandMembership(userId, businessId, cancellationToken);
+        await DemandAppointmentAccess(userId, businessId, cancellationToken);
         AppointmentStatus? parsed = Enum.TryParse<AppointmentStatus>(status, true, out var value) ? value : null;
         var records = await store.GetAppointmentsAsync(businessId, date, parsed, cancellationToken);
         return records.Select(ToAdmin).ToArray();
@@ -120,7 +121,7 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IPublicCodeService 
     public async Task<AppointmentAdminDto> ChangeStatusAsync(Guid userId, Guid businessId, Guid appointmentId,
         ChangeAppointmentStatusRequest request, CancellationToken cancellationToken = default)
     {
-        await DemandMembership(userId, businessId, cancellationToken);
+        await DemandAppointmentAccess(userId, businessId, cancellationToken);
         var record = await store.GetAppointmentAsync(businessId, appointmentId, cancellationToken)
             ?? throw new ApiException("APPOINTMENT_NOT_FOUND", "No encontramos la cita.", 404);
         if (!Enum.TryParse<AppointmentStatus>(request.TargetStatus, true, out var target))
@@ -312,6 +313,13 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IPublicCodeService 
         if (userId == Guid.Empty) throw new ApiException("UNAUTHENTICATED", "Debe iniciar sesión.", 401);
         if (!await store.IsMemberAsync(userId, businessId, cancellationToken))
             throw new ApiException("BUSINESS_ACCESS_DENIED", "No tiene acceso a este establecimiento.", 403);
+    }
+
+    private async Task DemandAppointmentAccess(Guid userId, Guid businessId, CancellationToken cancellationToken)
+    {
+        await DemandMembership(userId, businessId, cancellationToken);
+        if (!await store.CanManageAppointmentsAsync(userId, businessId, cancellationToken))
+            throw new ApiException("APPOINTMENTS_FORBIDDEN", "No tiene permiso para administrar citas.", 403);
     }
 
     private async Task DemandConfigurationAccess(Guid userId, Guid businessId, CancellationToken cancellationToken)
