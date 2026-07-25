@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/UrabaConecta.Application/UrabaConecta.Application.csproj" />
+    <Project Path="src/UrabaConecta.Contracts/UrabaConecta.Contracts.csproj" />
+    <Project Path="src/UrabaConecta.Domain/UrabaConecta.Domain.csproj" />
+    <Project Path="src/UrabaConecta.Infrastructure/UrabaConecta.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/src/UrabaConecta.Web/">
+    <Project Path="src/UrabaConecta.Web/UrabaConecta.Web.Client/UrabaConecta.Web.Client.csproj" />
+    <Project Path="src/UrabaConecta.Web/UrabaConecta.Web/UrabaConecta.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/UrabaConecta.Domain.Tests/UrabaConecta.Domain.Tests.csproj" />
+    <Project Path="tests/UrabaConecta.EndToEndTests/UrabaConecta.EndToEndTests.csproj" />
+    <Project Path="tests/UrabaConecta.IntegrationTests/UrabaConecta.IntegrationTests.csproj" />
+  </Folder>
+</Solution>

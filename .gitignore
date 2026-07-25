@@ -1,0 +1,9 @@
+**/bin/
+**/obj/
+.env
+TestResults/
+playwright.ps1
+playwright-report/
+test-results/
+src/UrabaConecta.Web/UrabaConecta.Web/Data/app.db*
+src/UrabaConecta.Web/UrabaConecta.Web/keys/

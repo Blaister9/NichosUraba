@@ -1,0 +1,17 @@
+@inherits LayoutComponentBase
+
+<header class="site-header">
+    <a class="brand" href="/"><span>U</span> UrabáConecta</a>
+    <nav aria-label="Navegación principal">
+        <a href="/">Directorio</a><a href="/seguimiento/citas">Mi cita</a>
+        <AuthorizeView>
+            <Authorized><a href="/panel">Panel</a><a href="/Account/Manage" target="_self">Cuenta</a></Authorized>
+            <NotAuthorized><a href="/Account/Login" target="_self">Ingresar</a></NotAuthorized>
+        </AuthorizeView>
+    </nav>
+</header>
+<main class="page-shell">@Body</main>
+<footer><p>Demo con datos ficticios · Urabá, Colombia</p></footer>
+<div id="blazor-error-ui" data-nosnippet>
+    Ocurrió un error inesperado. <a href="." class="reload">Recargar</a><span class="dismiss">×</span>
+</div>

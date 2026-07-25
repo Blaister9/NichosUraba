@@ -1,0 +1,87 @@
+@page "/negocios/{Slug}/citas"
+@rendermode InteractiveAuto
+@inject IUrabaConectaApi Api
+@inject NavigationManager Navigation
+
+<PageTitle>Solicitar cita | UrabáConecta</PageTitle>
+<a class="back-link" href="/negocios/@Slug">← Volver al establecimiento</a><h1>Solicitar una cita</h1>
+@if (business is null) { <p class="notice">Cargando servicios…</p> }
+else
+{
+    <EditForm Model="request" OnValidSubmit="Submit" class="appointment-form">
+        <DataAnnotationsValidator /><ValidationSummary />
+        <fieldset><legend>1. Servicio y horario</legend>
+            <label>Servicio<InputSelect @bind-Value="request.ServiceId">
+                <option value="@Guid.Empty">Seleccione</option>
+                @foreach (var service in business.Services) { <option value="@service.Id">@service.Name · @service.DurationMinutes min</option> }
+            </InputSelect></label>
+            <label>Fecha<InputDate @bind-Value="date" min="@DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd")" /></label>
+            <button type="button" class="secondary" @onclick="LoadSlots" disabled="@loadingSlots">@(loadingSlots ? "Consultando…" : "Ver horas disponibles")</button>
+            @if (slots is not null && slots.Count == 0) { <p class="notice">No hay horas disponibles para esa fecha.</p> }
+            else if (slots is not null)
+            {
+                <div class="slot-grid" role="radiogroup" aria-label="Horas disponibles">
+                    @foreach (var slot in slots)
+                    { <button type="button" class="slot @(request.Start == slot.Start ? "selected" : "")" @onclick="() => request.Start = slot.Start">@LocalTime(slot.Start)</button> }
+                </div>
+            }
+        </fieldset>
+        <fieldset><legend>2. Sus datos</legend>
+            <label>Nombre o alias<InputText @bind-Value="request.CustomerAlias" autocomplete="name" /></label>
+            <label>Teléfono<InputText @bind-Value="request.Phone" inputmode="tel" autocomplete="tel" /></label>
+            <label>Observación corta (opcional)<InputTextArea @bind-Value="request.Notes" maxlength="300" /></label>
+        </fieldset>
+        <fieldset class="consent"><legend>3. Autorización</legend>
+            <label class="check"><InputCheckbox @bind-Value="request.ConsentAccepted" /> Acepto que estos datos se usen para gestionar esta cita y contactarme sobre ella.</label>
+            <p><strong>Texto demostrativo sujeto a revisión jurídica antes de usar datos reales.</strong></p>
+        </fieldset>
+        @if (error is not null) { <p class="error" role="alert">@error</p> }
+        <button class="primary" disabled="@submitting">@(submitting ? "Enviando…" : "Enviar solicitud")</button>
+    </EditForm>
+}
+@code {
+    [Parameter] public string Slug { get; set; } = "";
+    [SupplyParameterFromQuery] public Guid? ServiceId { get; set; }
+    private BusinessProfileDto? business;
+    private List<SlotDto>? slots;
+    private DateOnly date = NextBusinessDay();
+    private CreateAppointmentRequest request = new();
+    private bool loadingSlots, submitting;
+    private string? error;
+    protected override async Task OnInitializedAsync()
+    {
+        business = await Api.GetBusinessAsync(Slug);
+        request.ServiceId = ServiceId ?? business?.Services.FirstOrDefault()?.Id ?? Guid.Empty;
+        if (request.ServiceId != Guid.Empty) await LoadSlots();
+    }
+    private async Task LoadSlots()
+    {
+        error = null;
+        if (request.ServiceId == Guid.Empty) { error = "Seleccione un servicio."; return; }
+        loadingSlots = true;
+        try { slots = (await Api.GetSlotsAsync(Slug, request.ServiceId, date)).Slots.ToList(); }
+        catch (ApiException ex) { error = ex.Message; slots = []; }
+        finally { loadingSlots = false; }
+    }
+    private async Task Submit()
+    {
+        error = null;
+        if (request.Start == default) { error = "Seleccione una hora disponible."; return; }
+        submitting = true;
+        try
+        {
+            var created = await Api.CreateAppointmentAsync(Slug, request);
+            Navigation.NavigateTo($"/seguimiento/citas/{Uri.EscapeDataString(created.TrackingCode)}?new=true");
+        }
+        catch (ApiException ex) { error = ex.Message; if (ex.Code == "SLOT_UNAVAILABLE") await LoadSlots(); }
+        finally { submitting = false; }
+    }
+    private static DateOnly NextBusinessDay()
+    {
+        var value = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+        while (value.DayOfWeek == DayOfWeek.Sunday) value = value.AddDays(1);
+        return value;
+    }
+    private static string LocalTime(DateTimeOffset value) =>
+        TimeZoneInfo.ConvertTime(value, TimeZoneInfo.FindSystemTimeZoneById("America/Bogota")).ToString("hh:mm tt");
+}

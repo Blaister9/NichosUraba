@@ -1,0 +1,15 @@
+@page "/seguimiento/citas"
+@rendermode InteractiveAuto
+@inject NavigationManager Navigation
+
+<PageTitle>Consultar cita | UrabáConecta</PageTitle>
+<section class="narrow">
+    <p class="eyebrow">Seguimiento público</p><h1>Consulte su cita</h1>
+    <p>Escriba el código recibido al enviar la solicitud.</p>
+    <label>Código de seguimiento<InputText @bind-Value="code" autocomplete="off" /></label>
+    <button class="primary" @onclick="Open" disabled="@(code.Trim().Length < 20)">Consultar</button>
+</section>
+@code {
+    private string code = "";
+    private void Open() => Navigation.NavigateTo($"/seguimiento/citas/{Uri.EscapeDataString(code.Trim())}");
+}

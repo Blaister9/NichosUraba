@@ -1,0 +1,50 @@
+@page "/Account/Login"
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Identity
+@using UrabaConecta.Infrastructure.Identity
+@inject SignInManager<ApplicationUser> SignInManager
+@inject ILogger<Login> Logger
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Ingresar | UrabáConecta</PageTitle>
+<section class="narrow">
+    <p class="eyebrow">Área privada</p><h1>Ingresar al panel</h1>
+    <p>Acceso exclusivo para propietarios y trabajadores creados por administración.</p>
+    <StatusMessage Message="@errorMessage" />
+    <EditForm Model="Input" method="post" OnValidSubmit="LoginUser" FormName="login" class="appointment-form">
+        <DataAnnotationsValidator /><ValidationSummary />
+        <label>Correo<InputText @bind-Value="Input.Email" autocomplete="username" /></label>
+        <label>Contraseña<InputText type="password" @bind-Value="Input.Password" autocomplete="current-password" /></label>
+        <label class="check"><InputCheckbox @bind-Value="Input.RememberMe" /> Mantener la sesión iniciada</label>
+        <button type="submit" class="primary">Ingresar</button>
+    </EditForm>
+    <p class="notice">El registro público está deshabilitado en esta versión.</p>
+</section>
+@code {
+    private string? errorMessage;
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+    [SupplyParameterFromForm] private InputModel Input { get; set; } = default!;
+    [SupplyParameterFromQuery] private string? ReturnUrl { get; set; }
+    protected override async Task OnInitializedAsync()
+    {
+        Input ??= new();
+        if (HttpMethods.IsGet(HttpContext.Request.Method))
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+    }
+    private async Task LoginUser()
+    {
+        var result = await SignInManager.PasswordSignInAsync(Input.Email, Input.Password, Input.RememberMe, lockoutOnFailure: true);
+        if (result.Succeeded) { Logger.LogInformation("Inicio de sesión exitoso."); RedirectManager.RedirectTo(ReturnUrl ?? "/panel"); }
+        else if (result.IsLockedOut) errorMessage = "La cuenta está bloqueada temporalmente.";
+        else errorMessage = "Correo o contraseña incorrectos.";
+    }
+    private sealed class InputModel
+    {
+        [Required(ErrorMessage = "El correo es obligatorio."), EmailAddress(ErrorMessage = "Ingrese un correo válido.")]
+        public string Email { get; set; } = "";
+        [Required(ErrorMessage = "La contraseña es obligatoria."), DataType(DataType.Password)]
+        public string Password { get; set; } = "";
+        public bool RememberMe { get; set; }
+    }
+}

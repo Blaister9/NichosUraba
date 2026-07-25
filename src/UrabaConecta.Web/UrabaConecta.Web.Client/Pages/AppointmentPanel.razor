@@ -1,0 +1,67 @@
+@page "/panel/{BusinessId:guid}/citas"
+@rendermode InteractiveAuto
+@attribute [Authorize]
+@inject IUrabaConectaApi Api
+
+<PageTitle>Citas | Panel UrabáConecta</PageTitle>
+<a class="back-link" href="/panel">← Mis establecimientos</a><p class="eyebrow">Panel del negocio</p><h1>Citas</h1>
+<section class="search-panel">
+    <label>Fecha<InputDate @bind-Value="date" /></label>
+    <label>Estado<InputSelect @bind-Value="status"><option value="">Todos</option><option>Pending</option><option>Confirmed</option><option>Rejected</option><option>Cancelled</option><option>Completed</option><option>NoShow</option></InputSelect></label>
+    <button class="primary" @onclick="Load">Filtrar</button>
+</section>
+@if (loading) { <p class="notice">Cargando citas…</p> }
+else if (error is not null) { <p class="error" role="alert">@error</p> }
+else if (appointments.Count == 0) { <div class="empty"><h2>No hay citas con estos filtros</h2></div> }
+else
+{
+    <div class="appointment-list">
+        @foreach (var item in appointments)
+        {
+            <article class="appointment-card" data-testid="appointment-card">
+                <header><div><strong>@item.ServiceName</strong><p>@LocalDate(item.Start)</p></div><span class="status @item.Status.ToLowerInvariant()">@Label(item.Status)</span></header>
+                <dl class="details"><dt>Solicitante</dt><dd>@item.CustomerAlias</dd><dt>Teléfono</dt><dd>@item.Phone</dd>
+                    <dt>Observación</dt><dd>@(string.IsNullOrWhiteSpace(item.Notes) ? "Sin observación" : item.Notes)</dd>
+                    <dt>Consentimiento</dt><dd>@item.ConsentNoticeVersion · @item.ConsentAcceptedAt.ToString("dd/MM/yyyy HH:mm") UTC</dd>
+                    <dt>Creada</dt><dd>@item.CreatedAt.ToString("dd/MM/yyyy HH:mm") UTC</dd></dl>
+                <div class="actions">
+                    @foreach (var action in Actions(item.Status))
+                    { <button class="secondary" @onclick="() => Change(item, action.Value)" disabled="@working">@action.Label</button> }
+                </div>
+            </article>
+        }
+    </div>
+}
+@code {
+    [Parameter] public Guid BusinessId { get; set; }
+    private DateOnly? date;
+    private string status = "";
+    private string? error;
+    private bool loading = true, working;
+    private IReadOnlyList<AppointmentAdminDto> appointments = [];
+    protected override async Task OnParametersSetAsync() => await Load();
+    private async Task Load()
+    {
+        loading = true; error = null;
+        try { appointments = await Api.GetAppointmentsAsync(BusinessId, date, status); }
+        catch (ApiException ex) { error = ex.StatusCode == 403 ? "No tiene acceso a este establecimiento." : ex.Message; }
+        finally { loading = false; }
+    }
+    private async Task Change(AppointmentAdminDto item, string target)
+    {
+        working = true; error = null;
+        try { await Api.ChangeAppointmentStatusAsync(BusinessId, item.Id, new() { TargetStatus = target }); await Load(); }
+        catch (ApiException ex) { error = ex.Message; }
+        finally { working = false; }
+    }
+    private static IEnumerable<(string Value, string Label)> Actions(string current) => current switch
+    {
+        "Pending" => [("Confirmed", "Confirmar"), ("Rejected", "Rechazar")],
+        "Confirmed" => [("Completed", "Completar"), ("NoShow", "Marcar ausente")],
+        _ => []
+    };
+    private static string Label(string value) => value switch
+    { "Pending" => "Pendiente", "Confirmed" => "Confirmada", "Rejected" => "Rechazada", "Cancelled" => "Cancelada", "Completed" => "Completada", "NoShow" => "No asistió", _ => value };
+    private static string LocalDate(DateTimeOffset value) =>
+        TimeZoneInfo.ConvertTime(value, TimeZoneInfo.FindSystemTimeZoneById("America/Bogota")).ToString("dd/MM/yyyy · h:mm tt");
+}

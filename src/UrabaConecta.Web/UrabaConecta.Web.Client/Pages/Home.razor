@@ -1,0 +1,55 @@
+@page "/"
+@rendermode InteractiveAuto
+@inject IUrabaConectaApi Api
+
+<PageTitle>Directorio | UrabáConecta</PageTitle>
+<section class="hero">
+    <p class="eyebrow">Directorio local demostrativo</p>
+    <h1>Encuentre servicios cerca de usted</h1>
+    <p>Consulte información pública y solicite una cita sin crear cuenta.</p>
+</section>
+<section class="search-panel" aria-label="Filtros del directorio">
+    <label>Buscar por nombre<InputText @bind-Value="search" placeholder="Ej. Bella" /></label>
+    <label>Municipio<InputSelect @bind-Value="municipality">
+        <option value="">Todos</option><option value="apartado">Apartadó</option><option value="turbo">Turbo</option>
+    </InputSelect></label>
+    <label>Categoría<InputSelect @bind-Value="category">
+        <option value="">Todas</option><option value="belleza-cuidado-personal">Belleza y cuidado personal</option>
+    </InputSelect></label>
+    <button class="primary" @onclick="Load">Buscar</button>
+</section>
+@if (loading) { <p class="notice">Cargando establecimientos…</p> }
+else if (error is not null) { <p class="error" role="alert">@error</p> }
+else if (businesses.Count == 0)
+{
+    <div class="empty"><h2>No encontramos resultados</h2><p>Pruebe otro nombre, municipio o categoría.</p></div>
+}
+else
+{
+    <section class="card-grid" aria-live="polite">
+        @foreach (var business in businesses)
+        {
+            <article class="business-card">
+                <span class="tag">@business.Category.Name</span><h2>@business.Name</h2>
+                <p>@business.Description</p><p><strong>@business.Municipality.Name</strong> · @business.Address</p>
+                <a class="button-link" href="/negocios/@business.Slug">Ver establecimiento</a>
+            </article>
+        }
+    </section>
+}
+@code {
+    private string search = "";
+    private string municipality = "";
+    private string category = "";
+    private string? error;
+    private bool loading = true;
+    private IReadOnlyList<BusinessCardDto> businesses = [];
+    protected override async Task OnInitializedAsync() => await Load();
+    private async Task Load()
+    {
+        loading = true; error = null;
+        try { businesses = await Api.GetBusinessesAsync(search, municipality, category); }
+        catch (ApiException ex) { error = ex.Message; }
+        finally { loading = false; }
+    }
+}

@@ -1,0 +1,150 @@
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using UrabaConecta.Application;
+using UrabaConecta.Contracts;
+using UrabaConecta.Domain;
+
+namespace UrabaConecta.Infrastructure.Persistence;
+
+public sealed class UrabaStore(AppDbContext db) : IUrabaStore
+{
+    public async Task<IReadOnlyList<BusinessCardDto>> FindBusinessesAsync(string? search, string? municipality,
+        string? category, CancellationToken cancellationToken)
+    {
+        var query = from b in db.Businesses.AsNoTracking()
+                    join m in db.Municipalities on b.MunicipalityId equals m.Id
+                    join c in db.Categories on b.CategoryId equals c.Id
+                    where b.Status == BusinessStatus.Active && b.IsPublished && m.IsActive && c.IsActive
+                    select new { b, m, c };
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var pattern = $"%{search}%";
+            query = query.Where(x => EF.Functions.ILike(x.b.Name, pattern));
+        }
+        if (!string.IsNullOrWhiteSpace(municipality)) query = query.Where(x => x.m.Slug == municipality);
+        if (!string.IsNullOrWhiteSpace(category)) query = query.Where(x => x.c.Slug == category);
+        return await query.OrderBy(x => x.b.Name).Select(x => new BusinessCardDto(x.b.Slug, x.b.Name,
+            new(x.c.Slug, x.c.Name), new(x.m.Slug, x.m.Name), x.b.Description, x.b.Address))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<BusinessProfileDto?> GetBusinessProfileAsync(string slug, CancellationToken cancellationToken)
+    {
+        var data = await (from b in db.Businesses.AsNoTracking()
+                          join m in db.Municipalities on b.MunicipalityId equals m.Id
+                          join c in db.Categories on b.CategoryId equals c.Id
+                          where b.Slug == slug && b.Status == BusinessStatus.Active && b.IsPublished
+                          select new { b, m, c }).SingleOrDefaultAsync(cancellationToken);
+        if (data is null) return null;
+        var hours = await db.BusinessHours.AsNoTracking().Where(x => x.BusinessId == data.b.Id)
+            .OrderBy(x => x.Day).Select(x => new BusinessHourDto(x.Day, x.OpensAt.ToString("HH:mm"), x.ClosesAt.ToString("HH:mm")))
+            .ToListAsync(cancellationToken);
+        var services = await db.Services.AsNoTracking().Where(x => x.BusinessId == data.b.Id && x.IsActive)
+            .OrderBy(x => x.Name).Select(x => new ServiceDto(x.Id, x.Name, x.DurationMinutes, x.ReferencePrice, x.IsActive))
+            .ToListAsync(cancellationToken);
+        return new(data.b.Slug, data.b.Name, data.b.Description, data.b.Address, data.b.PublicPhone,
+            new(data.c.Slug, data.c.Name), new(data.m.Slug, data.m.Name), hours, services);
+    }
+
+    public async Task<SchedulingContext?> GetSchedulingContextAsync(string slug, Guid serviceId, DateOnly date,
+        CancellationToken cancellationToken)
+    {
+        var business = await db.Businesses.AsNoTracking().SingleOrDefaultAsync(x => x.Slug == slug &&
+            x.Status == BusinessStatus.Active && x.IsPublished, cancellationToken);
+        if (business is null) return null;
+        var service = await db.Services.AsNoTracking().SingleOrDefaultAsync(x =>
+            x.BusinessId == business.Id && x.Id == serviceId, cancellationToken);
+        if (service is null) return null;
+        var staff = await (from s in db.StaffMembers.AsNoTracking()
+                           join ss in db.StaffServices.AsNoTracking()
+                               on new { s.BusinessId, StaffMemberId = s.Id } equals new { ss.BusinessId, ss.StaffMemberId }
+                           where s.BusinessId == business.Id && ss.ServiceId == serviceId && s.IsActive
+                           select s).ToListAsync(cancellationToken);
+        var staffIds = staff.Select(x => x.Id).ToArray();
+        var zone = TimeZoneInfo.FindSystemTimeZoneById(business.TimeZoneId);
+        var dayStart = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(date.ToDateTime(TimeOnly.MinValue), zone), TimeSpan.Zero);
+        var dayEnd = dayStart.AddDays(1);
+        var occupied = await db.Appointments.AsNoTracking().Where(x => x.BusinessId == business.Id &&
+                staffIds.Contains(x.StaffMemberId) && x.StartAtUtc < dayEnd && x.EndAtUtc > dayStart &&
+                (x.Status == AppointmentStatus.Pending || x.Status == AppointmentStatus.Confirmed))
+            .Select(x => new ValueTuple<DateTimeOffset, DateTimeOffset, Guid>(x.StartAtUtc, x.EndAtUtc, x.StaffMemberId))
+            .ToListAsync(cancellationToken);
+        var hours = await db.BusinessHours.AsNoTracking().Where(x => x.BusinessId == business.Id).ToListAsync(cancellationToken);
+        var exceptions = await db.AvailabilityExceptions.AsNoTracking().Where(x =>
+            x.BusinessId == business.Id && staffIds.Contains(x.StaffMemberId) && x.Date == date).ToListAsync(cancellationToken);
+        return new(business, service, hours, staff, exceptions, occupied);
+    }
+
+    public async Task<bool> AddAppointmentAsync(Appointment appointment, ConsentReceipt consent,
+        CancellationToken cancellationToken)
+    {
+        await using var tx = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, cancellationToken);
+        db.ConsentReceipts.Add(consent); db.Appointments.Add(appointment);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+            return true;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException pg &&
+            pg.SqlState is PostgresErrorCodes.ExclusionViolation or PostgresErrorCodes.UniqueViolation)
+        {
+            await tx.RollbackAsync(cancellationToken);
+            return false;
+        }
+    }
+
+    public async Task<AppointmentRecord?> FindAppointmentByCodeHashAsync(string codeHash, CancellationToken cancellationToken)
+    {
+        var appointment = await db.Appointments.SingleOrDefaultAsync(x => x.PublicCodeHash == codeHash, cancellationToken);
+        return appointment is null ? null : await BuildRecord(appointment, cancellationToken);
+    }
+    public Task<bool> IsMemberAsync(Guid userId, Guid businessId, CancellationToken cancellationToken)
+        => db.BusinessMemberships.AsNoTracking().AnyAsync(x => x.UserId == userId && x.BusinessId == businessId && x.IsActive, cancellationToken);
+
+    public async Task<IReadOnlyList<MyBusinessDto>> GetMembershipsAsync(Guid userId, CancellationToken cancellationToken)
+        => await (from membership in db.BusinessMemberships.AsNoTracking()
+                  join business in db.Businesses.AsNoTracking() on membership.BusinessId equals business.Id
+                  where membership.UserId == userId && membership.IsActive
+                  orderby business.Name
+                  select new MyBusinessDto(business.Id, business.Name, business.Slug, membership.Role.ToString()))
+            .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<AppointmentRecord>> GetAppointmentsAsync(Guid businessId, DateOnly? date,
+        AppointmentStatus? status, CancellationToken cancellationToken)
+    {
+        var query = db.Appointments.AsNoTracking().Where(x => x.BusinessId == businessId);
+        if (status.HasValue) query = query.Where(x => x.Status == status.Value);
+        if (date.HasValue)
+        {
+            var business = await db.Businesses.AsNoTracking().SingleAsync(x => x.Id == businessId, cancellationToken);
+            var zone = TimeZoneInfo.FindSystemTimeZoneById(business.TimeZoneId);
+            var start = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(date.Value.ToDateTime(TimeOnly.MinValue), zone), TimeSpan.Zero);
+            var end = start.AddDays(1);
+            query = query.Where(x => x.StartAtUtc >= start && x.StartAtUtc < end);
+        }
+        var appointments = await query.OrderBy(x => x.StartAtUtc).ToListAsync(cancellationToken);
+        var records = new List<AppointmentRecord>();
+        foreach (var appointment in appointments) records.Add(await BuildRecord(appointment, cancellationToken));
+        return records;
+    }
+
+    public async Task<AppointmentRecord?> GetAppointmentAsync(Guid businessId, Guid appointmentId,
+        CancellationToken cancellationToken)
+    {
+        var appointment = await db.Appointments.SingleOrDefaultAsync(x => x.BusinessId == businessId && x.Id == appointmentId,
+            cancellationToken);
+        return appointment is null ? null : await BuildRecord(appointment, cancellationToken);
+    }
+    public Task SaveChangesAsync(CancellationToken cancellationToken) => db.SaveChangesAsync(cancellationToken);
+    public Task<Service?> GetServiceAsync(Guid businessId, Guid serviceId, CancellationToken cancellationToken)
+        => db.Services.SingleOrDefaultAsync(x => x.BusinessId == businessId && x.Id == serviceId, cancellationToken);
+    public void AddService(Service service) => db.Services.Add(service);
+
+    private async Task<AppointmentRecord> BuildRecord(Appointment appointment, CancellationToken cancellationToken)
+    {
+        var business = await db.Businesses.AsNoTracking().SingleAsync(x => x.Id == appointment.BusinessId, cancellationToken);
+        var consent = await db.ConsentReceipts.AsNoTracking().SingleAsync(x => x.Id == appointment.ConsentReceiptId, cancellationToken);
+        return new(appointment, business, consent);
+    }
+}

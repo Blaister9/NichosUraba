@@ -1,0 +1,23 @@
+@page "/panel"
+@rendermode InteractiveAuto
+@attribute [Authorize]
+@inject IUrabaConectaApi Api
+
+<PageTitle>Panel | UrabáConecta</PageTitle>
+<p class="eyebrow">Área privada</p><h1>Mis establecimientos</h1>
+@if (businesses is null) { <p class="notice">Cargando…</p> }
+else if (businesses.Count == 0) { <div class="empty">Su cuenta no tiene establecimientos asignados.</div> }
+else
+{
+    <div class="card-grid">
+        @foreach (var business in businesses)
+        {
+            <article class="business-card"><span class="tag">@business.MembershipRole</span><h2>@business.Name</h2>
+                <a class="button-link" href="/panel/@business.Id/citas">Administrar citas</a></article>
+        }
+    </div>
+}
+@code {
+    private IReadOnlyList<MyBusinessDto>? businesses;
+    protected override async Task OnInitializedAsync() => businesses = await Api.GetMyBusinessesAsync();
+}
