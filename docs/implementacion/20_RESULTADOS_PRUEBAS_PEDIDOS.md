@@ -15,4 +15,11 @@ dotnet test tests\UrabaConecta.IntegrationTests --configuration Release
 dotnet test tests\UrabaConecta.EndToEndTests --configuration Release
 ```
 
-Los resultados finales de la ejecución se registran en el cierre de la tarea. Las pruebas existentes de citas, configuración, membresías y turnos permanecen como regresión obligatoria.
+## Ejecución final local
+
+- Build Release: **0 errores, 0 advertencias**.
+- Unitarias: **51/51**.
+- Integración PostgreSQL real: **25/25**.
+- E2E Chromium real: **13/13**; el recorrido nuevo cubre ocho escenarios a 360 × 800 px.
+- Total: **89/89**, incluidas las 73 pruebas previas de regresión.
+- Migración aplicada en PostgreSQL local y `/health/live` + `/health/ready`: **HTTP 200**.
