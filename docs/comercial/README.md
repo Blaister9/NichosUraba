@@ -1,6 +1,7 @@
 # Paquete comercial de la primera cohorte
 
-Versión: 1.0 — 2026-07-26  
+Versión: 1.0 — 2026-07-26
+
 Estado: listo para ejecución controlada; precios, demanda y renovación aún son hipótesis.
 
 Este directorio contiene el método para conseguir **15 prospectos calificados** e incorporar **5 a 10 establecimientos** en Apartadó, Carepa, Chigorodó y Turbo. Las cantidades son metas internas de la cohorte, no estimaciones de mercado.
