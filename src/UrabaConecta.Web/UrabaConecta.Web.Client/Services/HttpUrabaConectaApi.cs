@@ -216,6 +216,32 @@ public sealed class HttpUrabaConectaApi(HttpClient http) : IUrabaConectaApi
         => await Read<PickupOrderAdminDto>(await http.PostAsJsonAsync(
             $"api/v1/businesses/{businessId}/orders/{orderId}/{E(action)}", request, Json, cancellationToken), cancellationToken);
 
+    public Task<PlatformBusinessListDto> GetPlatformBusinessesAsync(string? search = null,
+        string? municipality = null, string? status = null, string? module = null,
+        CancellationToken cancellationToken = default)
+        => Get<PlatformBusinessListDto>(
+            $"api/v1/admin/businesses?q={E(search)}&municipality={E(municipality)}&status={E(status)}&module={E(module)}",
+            cancellationToken);
+    public Task<PlatformBusinessDto> GetPlatformBusinessAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => Get<PlatformBusinessDto>($"api/v1/admin/businesses/{businessId}", cancellationToken);
+    public async Task<PlatformBusinessCreatedDto> CreatePlatformBusinessAsync(
+        CreatePlatformBusinessRequest request, CancellationToken cancellationToken = default)
+        => await Read<PlatformBusinessCreatedDto>(await http.PostAsJsonAsync(
+            "api/v1/admin/businesses", request, Json, cancellationToken), cancellationToken);
+    public async Task<PlatformBusinessDto> UpdatePlatformBusinessAsync(Guid businessId,
+        UpdatePlatformBusinessRequest request, CancellationToken cancellationToken = default)
+        => await Read<PlatformBusinessDto>(await http.PutAsJsonAsync(
+            $"api/v1/admin/businesses/{businessId}", request, Json, cancellationToken), cancellationToken);
+    public async Task<PlatformBusinessDto> ChangePlatformBusinessStateAsync(Guid businessId, string action,
+        PlatformBusinessStateRequest request, CancellationToken cancellationToken = default)
+        => await Read<PlatformBusinessDto>(await http.PostAsJsonAsync(
+            $"api/v1/admin/businesses/{businessId}/{E(action)}", request, Json, cancellationToken), cancellationToken);
+    public async Task<PlatformBusinessDto> UpdatePlatformModulesAsync(Guid businessId,
+        UpdatePlatformModulesRequest request, CancellationToken cancellationToken = default)
+        => await Read<PlatformBusinessDto>(await http.PutAsJsonAsync(
+            $"api/v1/admin/businesses/{businessId}/modules", request, Json, cancellationToken), cancellationToken);
+
     private async Task<BusinessMemberDto> PostVersion(Guid businessId, Guid membershipId, string action, long version,
         CancellationToken cancellationToken)
         => await Read<BusinessMemberDto>(await http.PostAsJsonAsync(

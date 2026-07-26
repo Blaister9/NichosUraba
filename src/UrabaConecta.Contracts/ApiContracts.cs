@@ -32,7 +32,8 @@ public sealed record AppointmentTrackingDto(string Status, string StatusLabel, s
 
 public sealed record MyBusinessDto(Guid Id, string Name, string Slug, string MembershipRole,
     bool CanManageConfiguration = false, bool CanManageAppointments = true, bool CanManageMembers = false,
-    bool CanManageQueues = false, bool CanManageOrders = false, bool SupportsPickupOrdering = false);
+    bool CanManageQueues = false, bool CanManageOrders = false, bool SupportsPickupOrdering = false,
+    string BusinessStatus = "Active");
 public sealed record MembershipPermissionsDto(bool CanManageAppointments, bool CanManageConfiguration,
     bool CanManageMembers, bool CanManageQueues = false, bool CanManageOrders = false);
 public sealed record BusinessMemberDto(Guid Id, string DisplayName, string Email, bool IsActive, bool IsOwner,
@@ -232,6 +233,80 @@ public sealed class PickupOrderCommandRequest
     [StringLength(160)] public string? Reason { get; set; }
 }
 
+public sealed record PlatformOptionDto(Guid Id, string Slug, string Name);
+public sealed record ReadinessItemDto(string Key, string Label, bool IsApplicable, bool IsComplete);
+public sealed record PlatformBusinessDto(Guid Id, string Name, string Slug, string Municipality,
+    string Category, string Status, bool IsPublished, IReadOnlyList<string> Modules,
+    string? OwnerName, string? OwnerEmail, IReadOnlyList<ReadinessItemDto> Readiness,
+    bool IsReady, string? SuspensionReason, long Version, Guid MunicipalityId = default,
+    Guid CategoryId = default, string Description = "", string Address = "", string PublicPhone = "",
+    string? WhatsAppUrl = null, string? LocationUrl = null);
+public sealed record PlatformBusinessListDto(IReadOnlyList<PlatformBusinessDto> Items,
+    IReadOnlyList<PlatformOptionDto> Municipalities, IReadOnlyList<PlatformOptionDto> Categories,
+    bool PilotAccountCreationEnabled);
+public sealed class CreatePlatformBusinessRequest
+{
+    [Required, StringLength(160, MinimumLength = 2)] public string Name { get; set; } = "";
+    [Required, StringLength(120, MinimumLength = 3)] public string Slug { get; set; } = "";
+    [Required] public Guid MunicipalityId { get; set; }
+    [Required] public Guid CategoryId { get; set; }
+    [StringLength(600)] public string Description { get; set; } = "";
+    [StringLength(240)] public string? Address { get; set; }
+    [StringLength(30)] public string? PublicPhone { get; set; }
+    [Url, StringLength(500)] public string? WhatsAppUrl { get; set; }
+    [Url, StringLength(500)] public string? LocationUrl { get; set; }
+    public bool Appointments { get; set; }
+    public bool VirtualQueues { get; set; }
+    public bool PickupOrders { get; set; }
+    public string? ExistingOwnerEmail { get; set; }
+    [StringLength(100)] public string? PilotDisplayName { get; set; }
+    [EmailAddress, StringLength(256)] public string? PilotEmail { get; set; }
+    [Range(1, 480)] public int QueueAverageMinutes { get; set; } = 20;
+    [Range(1, 500)] public int QueueMaximumWaiting { get; set; } = 20;
+    [StringLength(160)] public string QueueMessage { get; set; } = "Toma tu turno y consulta el avance.";
+    [Range(0, 1440)] public int PickupPreparationMinutes { get; set; } = 30;
+    [Range(5, 240)] public int PickupSlotMinutes { get; set; } = 15;
+    [Range(1, 500)] public int PickupCapacity { get; set; } = 5;
+    [StringLength(120)] public string? InitialServiceName { get; set; }
+    [Range(5, 480)] public int InitialServiceDurationMinutes { get; set; } = 45;
+    [StringLength(100)] public string? InitialProductCategory { get; set; }
+    [StringLength(120)] public string? InitialProductName { get; set; }
+    [Range(0, 100000000)] public decimal InitialProductPrice { get; set; }
+    public bool SaveAsDraft { get; set; } = true;
+}
+public sealed record PlatformBusinessCreatedDto(PlatformBusinessDto Business, string? TemporaryPassword);
+public sealed class UpdatePlatformBusinessRequest
+{
+    [Required, StringLength(160, MinimumLength = 2)] public string Name { get; set; } = "";
+    [Required, StringLength(120, MinimumLength = 3)] public string Slug { get; set; } = "";
+    [Required] public Guid MunicipalityId { get; set; }
+    [Required] public Guid CategoryId { get; set; }
+    [StringLength(600)] public string Description { get; set; } = "";
+    [StringLength(240)] public string? Address { get; set; }
+    [StringLength(30)] public string? PublicPhone { get; set; }
+    [Url, StringLength(500)] public string? WhatsAppUrl { get; set; }
+    [Url, StringLength(500)] public string? LocationUrl { get; set; }
+    public long Version { get; set; }
+}
+public sealed class PlatformBusinessStateRequest
+{
+    public long Version { get; set; }
+    [StringLength(240)] public string? Reason { get; set; }
+}
+public sealed class UpdatePlatformModulesRequest
+{
+    public bool Appointments { get; set; }
+    public bool VirtualQueues { get; set; }
+    public bool PickupOrders { get; set; }
+    public long Version { get; set; }
+}
+public sealed class ChangeTemporaryPasswordRequest
+{
+    [Required] public string CurrentPassword { get; set; } = "";
+    [Required, StringLength(100, MinimumLength = 10)] public string NewPassword { get; set; } = "";
+    [Required, Compare(nameof(NewPassword))] public string ConfirmPassword { get; set; } = "";
+}
+
 public sealed class ApiException(string code, string message, int statusCode = 400) : Exception(message)
 {
     public string Code { get; } = code;
@@ -329,4 +404,15 @@ public interface IUrabaConectaApi
         DateOnly? date = null, CancellationToken cancellationToken = default);
     Task<PickupOrderAdminDto> ChangePickupOrderAsync(Guid businessId, Guid orderId, string action,
         PickupOrderCommandRequest request, CancellationToken cancellationToken = default);
+    Task<PlatformBusinessListDto> GetPlatformBusinessesAsync(string? search = null, string? municipality = null,
+        string? status = null, string? module = null, CancellationToken cancellationToken = default);
+    Task<PlatformBusinessDto> GetPlatformBusinessAsync(Guid businessId, CancellationToken cancellationToken = default);
+    Task<PlatformBusinessCreatedDto> CreatePlatformBusinessAsync(CreatePlatformBusinessRequest request,
+        CancellationToken cancellationToken = default);
+    Task<PlatformBusinessDto> UpdatePlatformBusinessAsync(Guid businessId, UpdatePlatformBusinessRequest request,
+        CancellationToken cancellationToken = default);
+    Task<PlatformBusinessDto> ChangePlatformBusinessStateAsync(Guid businessId, string action,
+        PlatformBusinessStateRequest request, CancellationToken cancellationToken = default);
+    Task<PlatformBusinessDto> UpdatePlatformModulesAsync(Guid businessId, UpdatePlatformModulesRequest request,
+        CancellationToken cancellationToken = default);
 }

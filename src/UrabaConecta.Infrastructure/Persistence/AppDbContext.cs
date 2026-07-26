@@ -12,6 +12,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<Municipality> Municipalities => Set<Municipality>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Business> Businesses => Set<Business>();
+    public DbSet<BusinessModule> BusinessModules => Set<BusinessModule>();
+    public DbSet<PlatformAuditEntry> PlatformAuditEntries => Set<PlatformAuditEntry>();
     public DbSet<BusinessMembership> BusinessMemberships => Set<BusinessMembership>();
     public DbSet<MembershipAuditEntry> MembershipAuditEntries => Set<MembershipAuditEntry>();
     public DbSet<BusinessHour> BusinessHours => Set<BusinessHour>();
@@ -53,8 +55,27 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             x.Property(e => e.Description).HasMaxLength(600); x.Property(e => e.Address).HasMaxLength(240);
             x.Property(e => e.PublicPhone).HasMaxLength(30); x.Property(e => e.TimeZoneId).HasMaxLength(80);
             x.Property(e => e.Status).HasConversion<string>().HasMaxLength(20);
+            x.Property(e => e.WhatsAppUrl).HasMaxLength(500); x.Property(e => e.LocationUrl).HasMaxLength(500);
+            x.Property(e => e.SuspensionReason).HasMaxLength(240); x.Property(e => e.Version).IsConcurrencyToken();
             x.HasOne<Municipality>().WithMany().HasForeignKey(e => e.MunicipalityId).OnDelete(DeleteBehavior.Restrict);
             x.HasOne<Category>().WithMany().HasForeignKey(e => e.CategoryId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<BusinessModule>(x =>
+        {
+            x.ToTable("business_modules"); x.HasKey(e => new { e.BusinessId, e.Module });
+            x.Property(e => e.Module).HasConversion<string>().HasMaxLength(32);
+            x.Property(e => e.Version).IsConcurrencyToken();
+            x.HasOne<Business>().WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Cascade);
+        });
+        builder.Entity<PlatformAuditEntry>(x =>
+        {
+            x.ToTable("platform_audit_entries"); x.HasKey(e => e.Id);
+            x.HasIndex(e => new { e.BusinessId, e.OccurredAtUtc });
+            x.Property(e => e.Action).HasConversion<string>().HasMaxLength(48);
+            x.Property(e => e.PreviousState).HasColumnType("jsonb");
+            x.Property(e => e.NewState).HasColumnType("jsonb");
+            x.Property(e => e.CorrelationId).HasMaxLength(64);
+            x.HasOne<Business>().WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Cascade);
         });
         builder.Entity<BusinessMembership>(x =>
         {

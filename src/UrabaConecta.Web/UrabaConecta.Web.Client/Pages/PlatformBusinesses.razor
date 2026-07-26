@@ -1,0 +1,46 @@
+@page "/admin/negocios"
+@rendermode InteractiveAuto
+@attribute [Authorize(Roles = "PlatformAdmin")]
+@inject IUrabaConectaApi Api
+
+<PageTitle>Administración de plataforma | UrabáConecta</PageTitle>
+<p class="eyebrow">Administración de plataforma</p>
+<div class="title-actions"><h1>Negocios piloto</h1><a class="button-link primary" href="/admin/negocios/nuevo">Crear negocio</a></div>
+<p>Alta, preparación y control del acceso público de cada piloto. Esta vista no concede membresía al administrador.</p>
+<div class="filters">
+    <label>Buscar<input @bind="search" /></label>
+    <label>Estado<select @bind="status"><option value="">Todos</option><option>Draft</option><option>PendingConfiguration</option><option>Active</option><option>Suspended</option><option>Archived</option></select></label>
+    <label>Función<select @bind="module"><option value="">Todas</option><option value="Appointments">Citas</option><option value="VirtualQueues">Turnos</option><option value="PickupOrders">Pedidos</option></select></label>
+    <button class="secondary" @onclick="Load">Filtrar</button>
+</div>
+@if (data is null) { <p class="notice">Cargando…</p> }
+else if (data.Items.Count == 0) { <div class="empty">No hay negocios con estos filtros.</div> }
+else
+{
+    <div class="card-grid">
+        @foreach (var item in data.Items)
+        {
+            <article class="business-card">
+                <span class="tag">@State(item.Status)</span><h2>@item.Name</h2>
+                <p>@item.Municipality · @item.Category</p>
+                <p><strong>Responsable:</strong> @(item.OwnerName ?? "Sin asignar")</p>
+                <p>@string.Join(" · ", item.Modules.Select(Module))</p>
+                <p class="@(item.IsReady ? "success" : "notice")">Lista para activar: @(item.IsReady ? "sí" : "no")</p>
+                <a class="button-link secondary" href="/admin/negocios/@item.Id">Revisar</a>
+            </article>
+        }
+    </div>
+}
+@code {
+    private PlatformBusinessListDto? data;
+    private string? search, status, module;
+    protected override Task OnInitializedAsync() => Load();
+    private async Task Load() => data = await Api.GetPlatformBusinessesAsync(search, null, status, module);
+    private static string State(string value) => value switch
+    {
+        "Draft" => "Borrador", "PendingConfiguration" => "Configuración pendiente", "Active" => "Activo",
+        "Suspended" => "Suspendido", "Archived" => "Archivado", _ => value
+    };
+    private static string Module(string value) => value switch
+    { "Appointments" => "Citas", "VirtualQueues" => "Turnos", "PickupOrders" => "Pedidos", _ => value };
+}

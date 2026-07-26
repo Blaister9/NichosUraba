@@ -37,7 +37,8 @@ builder.Services.AddAuthorizationBuilder()
     .AddPolicy("Appointments.Manage", policy => policy.RequireRole("BusinessOwner", "BusinessWorker"))
     .AddPolicy("BusinessProfile.Manage", policy => policy.RequireRole("BusinessOwner"))
     .AddPolicy("BusinessConfiguration.Manage", policy => policy.RequireRole("BusinessOwner", "BusinessWorker"))
-    .AddPolicy("Workers.Manage", policy => policy.RequireRole("BusinessOwner", "BusinessWorker"));
+    .AddPolicy("Workers.Manage", policy => policy.RequireRole("BusinessOwner", "BusinessWorker"))
+    .AddPolicy("PlatformAdmin", policy => policy.RequireRole("PlatformAdmin"));
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
 {
     options.SignIn.RequireConfirmedAccount = true;
@@ -58,6 +59,7 @@ builder.Services.AddScoped<IUrabaStore, UrabaStore>();
 builder.Services.AddScoped<IMembershipAdministrationStore, MembershipAdministrationStore>();
 builder.Services.AddScoped<IQueueStore, QueueStore>();
 builder.Services.AddScoped<IOrderingStore, OrderingStore>();
+builder.Services.AddScoped<IPlatformAdministrationStore, PlatformAdministrationStore>();
 builder.Services.AddScoped<IIdentityAccountManager, IdentityAccountManager>();
 builder.Services.AddScoped<IPublicCodeService, PublicCodeService>();
 builder.Services.AddScoped<UrabaConecta.Application.IPersonalDataProtector, PersonalDataProtector>();
@@ -65,6 +67,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IUrabaUseCases, UrabaUseCases>();
 builder.Services.AddScoped<IQueueUseCases, QueueUseCases>();
 builder.Services.AddScoped<IOrderingUseCases, OrderingUseCases>();
+builder.Services.AddScoped<IPlatformAdministrationUseCases, PlatformAdministrationUseCases>();
 builder.Services.AddScoped<IQueueChangeNotifier, SignalRQueueChangeNotifier>();
 builder.Services.AddScoped<IUrabaConectaApi, ServerUrabaConectaApi>();
 builder.Services.AddSignalR();
@@ -94,7 +97,8 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment()) app.UseWebAssemblyDebugging();
 else { app.UseExceptionHandler(); app.UseHsts(); }
 app.UseExceptionHandler();
-app.UseStatusCodePagesWithReExecute("/not-found");
+app.UseWhen(context => !context.Request.Path.StartsWithSegments("/api"),
+    branch => branch.UseStatusCodePagesWithReExecute("/not-found"));
 app.UseHttpsRedirection();
 app.Use(async (context, next) =>
 {
@@ -106,6 +110,38 @@ app.Use(async (context, next) =>
     await next();
 });
 app.UseRateLimiter();
+app.UseAuthentication();
+app.UseAuthorization();
+app.Use(async (context, next) =>
+{
+    if (context.User.Identity?.IsAuthenticated == true &&
+        !context.Request.Path.StartsWithSegments("/Account/ChangeTemporaryPassword") &&
+        !context.Request.Path.StartsWithSegments("/Account/Logout") &&
+        !context.Request.Path.StartsWithSegments("/_blazor") &&
+        !context.Request.Path.StartsWithSegments("/_framework") &&
+        !context.Request.Path.StartsWithSegments("/health"))
+    {
+        var userManager = context.RequestServices.GetRequiredService<UserManager<ApplicationUser>>();
+        var user = await userManager.GetUserAsync(context.User);
+        if (user?.MustChangePassword == true)
+        {
+            if (context.Request.Path.StartsWithSegments("/api"))
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                await context.Response.WriteAsJsonAsync(new
+                {
+                    title = "Debe cambiar la contraseña temporal antes de continuar.",
+                    code = "PASSWORD_CHANGE_REQUIRED",
+                    status = StatusCodes.Status403Forbidden
+                });
+                return;
+            }
+            context.Response.Redirect("/Account/ChangeTemporaryPassword");
+            return;
+        }
+    }
+    await next();
+});
 app.UseAntiforgery();
 app.MapStaticAssets();
 app.MapHealthChecks("/health/live", new() { Predicate = _ => false });
@@ -157,6 +193,31 @@ publicApi.MapPost("/orders/{code}/cancel",
     async (string code, PickupOrderCommandRequest request, IOrderingUseCases orders, CancellationToken ct) =>
     { await orders.CancelPublicAsync(code, request.Version, ct); return Results.NoContent(); })
     .RequireRateLimiting("public-write");
+
+var platformApi = app.MapGroup("/api/v1/admin").RequireAuthorization("PlatformAdmin");
+platformApi.MapGet("/businesses",
+    (string? q, string? municipality, string? status, string? module,
+        IPlatformAdministrationUseCases useCases, CancellationToken ct) =>
+        useCases.ListAsync(q, municipality, status, module, ct));
+platformApi.MapGet("/businesses/{businessId:guid}",
+    (Guid businessId, IPlatformAdministrationUseCases useCases, CancellationToken ct) =>
+        useCases.GetAsync(businessId, ct));
+platformApi.MapPost("/businesses",
+    async (CreatePlatformBusinessRequest request, ClaimsPrincipal user,
+        IPlatformAdministrationUseCases useCases, CancellationToken ct) =>
+        Results.Created("", await useCases.CreateAsync(UserId(user), request, ct)));
+platformApi.MapPut("/businesses/{businessId:guid}",
+    (Guid businessId, UpdatePlatformBusinessRequest request, ClaimsPrincipal user,
+        IPlatformAdministrationUseCases useCases, CancellationToken ct) =>
+        useCases.UpdateAsync(UserId(user), businessId, request, ct));
+platformApi.MapPost("/businesses/{businessId:guid}/{action}",
+    (Guid businessId, string action, PlatformBusinessStateRequest request, ClaimsPrincipal user,
+        IPlatformAdministrationUseCases useCases, CancellationToken ct) =>
+        useCases.ChangeStateAsync(UserId(user), businessId, action, request, ct));
+platformApi.MapPut("/businesses/{businessId:guid}/modules",
+    (Guid businessId, UpdatePlatformModulesRequest request, ClaimsPrincipal user,
+        IPlatformAdministrationUseCases useCases, CancellationToken ct) =>
+        useCases.UpdateModulesAsync(UserId(user), businessId, request, ct));
 
 var privateApi = app.MapGroup("/api/v1/businesses").RequireAuthorization("BusinessMember");
 privateApi.MapGet("/mine", (ClaimsPrincipal user, IUrabaUseCases useCases, CancellationToken ct)

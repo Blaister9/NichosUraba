@@ -8,7 +8,7 @@ public sealed record SchedulingContext(Business Business, Service Service, IRead
     IReadOnlyList<(DateTimeOffset Start, DateTimeOffset End, Guid StaffId)> Occupied);
 
 public sealed record AppointmentRecord(Appointment Appointment, Business Business, ConsentReceipt Consent);
-public sealed record IdentityAccount(Guid UserId, string Email, string DisplayName);
+public sealed record IdentityAccount(Guid UserId, string Email, string DisplayName, bool MustChangePassword = false);
 public sealed record CreatedIdentityAccount(IdentityAccount Account, string TemporaryPassword);
 
 public interface IApplicationTransaction : IAsyncDisposable
@@ -73,6 +73,57 @@ public interface IIdentityAccountManager
     Task<IdentityAccount?> FindByExactEmailAsync(string email, CancellationToken cancellationToken);
     Task<CreatedIdentityAccount> CreateDevelopmentAsync(string displayName, string email,
         CancellationToken cancellationToken);
+    Task<CreatedIdentityAccount> CreatePilotAsync(string displayName, string email,
+        CancellationToken cancellationToken);
+}
+
+public sealed record PlatformBusinessRecord(Business Business, string Municipality, string Category,
+    IReadOnlyList<BusinessModule> Modules, IdentityAccount? Owner, bool HasHours, bool HasService,
+    bool HasQueueDefinition, bool HasPickupSettings, bool HasProductCategory, bool HasProduct, int OperationCount);
+
+public interface IPlatformAdministrationStore
+{
+    Task<IApplicationTransaction> BeginTransactionAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<PlatformBusinessRecord>> ListAsync(string? search, string? municipality, string? status,
+        string? module, CancellationToken cancellationToken);
+    Task<PlatformBusinessRecord?> GetAsync(Guid businessId, CancellationToken cancellationToken);
+    Task<Business?> LockBusinessAsync(Guid businessId, CancellationToken cancellationToken);
+    Task<bool> SlugExistsAsync(string slug, Guid? excludingId, CancellationToken cancellationToken);
+    Task<bool> MunicipalityExistsAsync(Guid id, CancellationToken cancellationToken);
+    Task<bool> CategoryExistsAsync(Guid id, CancellationToken cancellationToken);
+    Task<IReadOnlyList<PlatformOptionDto>> ListMunicipalitiesAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<PlatformOptionDto>> ListCategoriesAsync(CancellationToken cancellationToken);
+    Task<BusinessMembership?> GetOwnerAsync(Guid businessId, CancellationToken cancellationToken);
+    Task<BusinessMembership?> GetMembershipByUserAsync(Guid businessId, Guid userId, CancellationToken cancellationToken);
+    void AddBusiness(Business business);
+    void AddModule(BusinessModule module);
+    void AddMembership(BusinessMembership membership);
+    void AddHour(BusinessHour hour);
+    void AddService(Service service);
+    void AddStaff(StaffMember staff);
+    void AddStaffService(StaffService link);
+    void AddQueueDefinition(QueueDefinition definition);
+    void AddPickupSettings(PickupOrderSettings settings);
+    void AddProductCategory(ProductCategory category);
+    void AddProduct(Product product);
+    void AddAudit(PlatformAuditEntry audit);
+    void RemoveBusiness(Business business);
+    Task SaveChangesAsync(CancellationToken cancellationToken);
+}
+
+public interface IPlatformAdministrationUseCases
+{
+    Task<PlatformBusinessListDto> ListAsync(string? search, string? municipality, string? status, string? module,
+        CancellationToken cancellationToken = default);
+    Task<PlatformBusinessDto> GetAsync(Guid businessId, CancellationToken cancellationToken = default);
+    Task<PlatformBusinessCreatedDto> CreateAsync(Guid actorUserId, CreatePlatformBusinessRequest request,
+        CancellationToken cancellationToken = default);
+    Task<PlatformBusinessDto> UpdateAsync(Guid actorUserId, Guid businessId, UpdatePlatformBusinessRequest request,
+        CancellationToken cancellationToken = default);
+    Task<PlatformBusinessDto> ChangeStateAsync(Guid actorUserId, Guid businessId, string action,
+        PlatformBusinessStateRequest request, CancellationToken cancellationToken = default);
+    Task<PlatformBusinessDto> UpdateModulesAsync(Guid actorUserId, Guid businessId,
+        UpdatePlatformModulesRequest request, CancellationToken cancellationToken = default);
 }
 
 public interface IMembershipAdministrationStore
@@ -162,6 +213,7 @@ public interface IQueueStore
     Task<int> CountActiveAsync(Guid businessId, Guid sessionId, CancellationToken cancellationToken);
     Task<QueueTicket?> GetNextWaitingAsync(Guid businessId, Guid sessionId, CancellationToken cancellationToken);
     Task<bool> CanManageQueuesAsync(Guid userId, Guid businessId, CancellationToken cancellationToken);
+    Task<bool> IsBusinessActiveAsync(Guid businessId, CancellationToken cancellationToken);
     Task<(string BusinessName, string BusinessSlug)?> GetBusinessNameAsync(Guid businessId, CancellationToken cancellationToken);
     void AddDefinition(QueueDefinition definition);
     void AddSession(QueueSession session);

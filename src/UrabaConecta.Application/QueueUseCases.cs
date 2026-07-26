@@ -81,6 +81,7 @@ public sealed class QueueUseCases(IQueueStore store, IPublicCodeService codes, I
     public async Task<QueueAdminDto> OpenAsync(Guid userId, Guid businessId, CancellationToken ct = default)
     {
         await Demand(userId, businessId, ct);
+        await DemandActiveBusiness(businessId, ct);
         await using var tx = await store.BeginTransactionAsync(ct);
         var definition = await store.GetDefinitionAsync(businessId, ct)
             ?? throw new ApiException("QUEUE_NOT_CONFIGURED", "Configure la fila antes de abrir.", 409);
@@ -104,6 +105,7 @@ public sealed class QueueUseCases(IQueueStore store, IPublicCodeService codes, I
         CreateQueueTicketRequest request, CancellationToken ct = default)
     {
         await Demand(userId, businessId, ct);
+        await DemandActiveBusiness(businessId, ct);
         var definition = await store.GetDefinitionAsync(businessId, ct)
             ?? throw new ApiException("QUEUE_NOT_CONFIGURED", "La fila no está configurada.", 409);
         return await CreateTicket(definition, businessId, request, QueueTicketSource.WalkIn, ct);
@@ -254,6 +256,12 @@ public sealed class QueueUseCases(IQueueStore store, IPublicCodeService codes, I
     {
         if (!await store.CanManageQueuesAsync(userId, businessId, ct))
             throw new ApiException("MEMBERSHIP_FORBIDDEN", "No tiene permiso para administrar turnos.", 403);
+    }
+    private async Task DemandActiveBusiness(Guid businessId, CancellationToken ct)
+    {
+        if (!await store.IsBusinessActiveAsync(businessId, ct))
+            throw new ApiException("BUSINESS_SUSPENDED",
+                "Establecimiento suspendido. No se pueden iniciar operaciones nuevas.", 409);
     }
     private Task Notify(Guid definitionId, Guid? ticketId, Guid businessId, CancellationToken ct)
         => Task.WhenAll(notifier.PublicChangedAsync(definitionId, ct),

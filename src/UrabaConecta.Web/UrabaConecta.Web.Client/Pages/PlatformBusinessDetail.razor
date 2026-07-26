@@ -1,0 +1,96 @@
+@page "/admin/negocios/{BusinessId:guid}"
+@rendermode InteractiveAuto
+@attribute [Authorize(Roles = "PlatformAdmin")]
+@inject IUrabaConectaApi Api
+
+<PageTitle>Preparación del piloto | UrabáConecta</PageTitle>
+@if (business is null) { <p class="notice">Cargando…</p> }
+else
+{
+    <p class="eyebrow">Administración de plataforma</p>
+    <div class="title-actions"><h1>@business.Name</h1><span class="tag">@business.Status</span></div>
+    @if (business.Status == "Suspended") { <div class="notice"><strong>Negocio suspendido.</strong> No aparece en el directorio ni recibe operaciones públicas nuevas. El historial permanece disponible.</div> }
+    <div class="two-columns">
+        <section class="panel-card"><h2>Información del negocio</h2>
+            <label>Nombre<input @bind="profile.Name" /></label>
+            <label>Identificador público<input @bind="profile.Slug" /></label>
+            @if (catalog is not null)
+            {
+                <label>Municipio<select @bind="profile.MunicipalityId">@foreach (var x in catalog.Municipalities) { <option value="@x.Id">@x.Name</option> }</select></label>
+                <label>Categoría<select @bind="profile.CategoryId">@foreach (var x in catalog.Categories) { <option value="@x.Id">@x.Name</option> }</select></label>
+            }
+            <label>Descripción<textarea @bind="profile.Description"></textarea></label>
+            <label>Dirección<input @bind="profile.Address" /></label>
+            <label>Teléfono público<input @bind="profile.PublicPhone" /></label>
+            <button class="secondary" @onclick="SaveProfile">Guardar información</button>
+        </section>
+        <section class="panel-card"><h2>Lista de preparación</h2>
+            @foreach (var item in business.Readiness.Where(x => x.IsApplicable))
+            { <p class="checklist-item"><span aria-hidden="true">@(item.IsComplete ? "✓" : "○")</span> @item.Label</p> }
+            <p class="@(business.IsReady ? "success" : "notice")"><strong>@(business.IsReady ? "Listo para activar" : "Faltan requisitos")</strong></p>
+        </section>
+        <section class="panel-card"><h2>Funciones</h2>
+            <label class="check"><input type="checkbox" @bind="appointments" /> Citas</label>
+            <label class="check"><input type="checkbox" @bind="queues" /> Turnos virtuales</label>
+            <label class="check"><input type="checkbox" @bind="orders" /> Pedidos para recoger</label>
+            <button class="secondary" @onclick="SaveModules">Guardar funciones</button>
+            <p>Desactivar una función conserva su configuración y datos históricos.</p>
+        </section>
+    </div>
+    <section class="panel-card"><h2>Control del piloto</h2>
+        <p><strong>Responsable:</strong> @(business.OwnerName ?? "Sin asignar") · @business.OwnerEmail</p>
+        @if (business.Status is "Draft" or "PendingConfiguration" or "Suspended")
+        { <button class="primary" disabled="@(!business.IsReady)" @onclick="Activate">Activar</button> }
+        @if (business.Status == "Active")
+        { <label>Motivo de suspensión<input @bind="reason" /></label><button class="danger" @onclick="Suspend">Suspender</button> }
+        @if (business.Status != "Archived") { <button class="secondary" @onclick="Archive">Archivar</button> }
+        @if (business.Status is "Draft" or "PendingConfiguration") { <button class="danger" @onclick="Delete">Eliminar si no tiene operaciones</button> }
+        @if (message is not null) { <p class="notice">@message</p> }
+    </section>
+}
+@code {
+    [Parameter] public Guid BusinessId { get; set; }
+    private PlatformBusinessDto? business; private PlatformBusinessListDto? catalog;
+    private UpdatePlatformBusinessRequest profile = new();
+    private bool appointments, queues, orders; private string? reason, message;
+    protected override async Task OnParametersSetAsync() => await Reload();
+    private async Task Reload()
+    {
+        catalog ??= await Api.GetPlatformBusinessesAsync();
+        business = await Api.GetPlatformBusinessAsync(BusinessId);
+        appointments = business.Modules.Contains("Appointments"); queues = business.Modules.Contains("VirtualQueues"); orders = business.Modules.Contains("PickupOrders");
+        profile = new()
+        {
+            Name = business.Name, Slug = business.Slug, MunicipalityId = business.MunicipalityId,
+            CategoryId = business.CategoryId, Description = business.Description, Address = business.Address,
+            PublicPhone = business.PublicPhone, WhatsAppUrl = business.WhatsAppUrl,
+            LocationUrl = business.LocationUrl, Version = business.Version
+        };
+    }
+    private async Task SaveProfile()
+    {
+        try { business = await Api.UpdatePlatformBusinessAsync(BusinessId, profile); message = "Información actualizada."; await Reload(); }
+        catch (ApiException ex) { message = ex.Message; }
+    }
+    private async Task SaveModules()
+    {
+        if (business is null) return;
+        try { business = await Api.UpdatePlatformModulesAsync(BusinessId, new() { Appointments = appointments, VirtualQueues = queues, PickupOrders = orders, Version = business.Version }); message = "Funciones actualizadas."; }
+        catch (ApiException ex) { message = ex.Message; }
+    }
+    private async Task State(string action)
+    {
+        if (business is null) return;
+        try
+        {
+            await Api.ChangePlatformBusinessStateAsync(BusinessId, action, new() { Version = business.Version, Reason = reason });
+            if (action == "delete") { message = "Negocio eliminado."; business = null; return; }
+            await Reload(); message = "Estado actualizado.";
+        }
+        catch (ApiException ex) { message = ex.Message; }
+    }
+    private Task Activate() => State("activate");
+    private Task Suspend() => State("suspend");
+    private Task Archive() => State("archive");
+    private Task Delete() => State("delete");
+}

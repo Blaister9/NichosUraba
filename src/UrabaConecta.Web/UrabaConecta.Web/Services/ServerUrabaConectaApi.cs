@@ -6,7 +6,7 @@ using UrabaConecta.Contracts;
 namespace UrabaConecta.Web.Services;
 
 public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCases queues, IOrderingUseCases orders,
-    AuthenticationStateProvider authentication) : IUrabaConectaApi
+    IPlatformAdministrationUseCases platform, AuthenticationStateProvider authentication) : IUrabaConectaApi
 {
     public Task<IReadOnlyList<BusinessCardDto>> GetBusinessesAsync(string? search = null, string? municipality = null,
         string? category = null, CancellationToken cancellationToken = default)
@@ -157,6 +157,25 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
     public async Task<PickupOrderAdminDto> ChangePickupOrderAsync(Guid businessId, Guid orderId, string action,
         PickupOrderCommandRequest request, CancellationToken cancellationToken = default)
         => await orders.ChangeStatusAsync(await UserId(), businessId, orderId, action, request, cancellationToken);
+
+    public Task<PlatformBusinessListDto> GetPlatformBusinessesAsync(string? search = null,
+        string? municipality = null, string? status = null, string? module = null,
+        CancellationToken cancellationToken = default)
+        => platform.ListAsync(search, municipality, status, module, cancellationToken);
+    public Task<PlatformBusinessDto> GetPlatformBusinessAsync(Guid businessId,
+        CancellationToken cancellationToken = default) => platform.GetAsync(businessId, cancellationToken);
+    public async Task<PlatformBusinessCreatedDto> CreatePlatformBusinessAsync(CreatePlatformBusinessRequest request,
+        CancellationToken cancellationToken = default)
+        => await platform.CreateAsync(await UserId(), request, cancellationToken);
+    public async Task<PlatformBusinessDto> UpdatePlatformBusinessAsync(Guid businessId,
+        UpdatePlatformBusinessRequest request, CancellationToken cancellationToken = default)
+        => await platform.UpdateAsync(await UserId(), businessId, request, cancellationToken);
+    public async Task<PlatformBusinessDto> ChangePlatformBusinessStateAsync(Guid businessId, string action,
+        PlatformBusinessStateRequest request, CancellationToken cancellationToken = default)
+        => await platform.ChangeStateAsync(await UserId(), businessId, action, request, cancellationToken);
+    public async Task<PlatformBusinessDto> UpdatePlatformModulesAsync(Guid businessId,
+        UpdatePlatformModulesRequest request, CancellationToken cancellationToken = default)
+        => await platform.UpdateModulesAsync(await UserId(), businessId, request, cancellationToken);
 
     private async Task<Guid> UserId()
     {

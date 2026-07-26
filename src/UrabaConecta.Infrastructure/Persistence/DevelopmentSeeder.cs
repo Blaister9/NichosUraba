@@ -11,6 +11,7 @@ namespace UrabaConecta.Infrastructure.Persistence;
 public static class DevelopmentSeeder
 {
     public const string BellaOwnerEmail = "propietaria@bella.demo";
+    public const string PlatformAdminEmail = "admin@urabaconecta.demo";
     public const string OtherOwnerEmail = "propietario@otro.demo";
     public const string BellaWorkerEmail = "trabajadora@bella.demo";
     public const string BellaConfigurationWorkerEmail = "configuradora@bella.demo";
@@ -40,6 +41,7 @@ public static class DevelopmentSeeder
                 await roleManager.CreateAsync(new IdentityRole<Guid>(role));
 
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var platformAdmin = await EnsureUser(userManager, PlatformAdminEmail, "Administración UrabáConecta");
         var bellaOwner = await EnsureUser(userManager, BellaOwnerEmail, "Propietaria Bella");
         var otherOwner = await EnsureUser(userManager, OtherOwnerEmail, "Propietario negocio aislado");
         var bellaWorker = await EnsureUser(userManager, BellaWorkerEmail, "Trabajadora Bella");
@@ -50,6 +52,8 @@ public static class DevelopmentSeeder
         var sazonOwner = await EnsureUser(userManager, SazonOwnerEmail, "Propietario Sazón Local");
         var ordersWorker = await EnsureUser(userManager, SazonOrdersWorkerEmail, "Operador de pedidos");
         var noOrdersPermission = await EnsureUser(userManager, SazonNoPermissionEmail, "Trabajador sin pedidos");
+        if (!await userManager.IsInRoleAsync(platformAdmin, "PlatformAdmin"))
+            await userManager.AddToRoleAsync(platformAdmin, "PlatformAdmin");
         if (!await userManager.IsInRoleAsync(bellaOwner, "BusinessOwner")) await userManager.AddToRoleAsync(bellaOwner, "BusinessOwner");
         if (!await userManager.IsInRoleAsync(otherOwner, "BusinessOwner")) await userManager.AddToRoleAsync(otherOwner, "BusinessOwner");
         if (!await userManager.IsInRoleAsync(bellaWorker, "BusinessWorker")) await userManager.AddToRoleAsync(bellaWorker, "BusinessWorker");
@@ -71,6 +75,7 @@ public static class DevelopmentSeeder
             await EnsureQueueDemo(db, corteOwner.Id, queueWorker.Id, noPermission.Id);
             await EnsureOrderingDemo(db, sazonOwner.Id, ordersWorker.Id, noOrdersPermission.Id);
             await db.SaveChangesAsync();
+            await EnsureModules(db);
             await EnsureHistoricalDemo(db, codes, protector);
             await db.SaveChangesAsync();
             return;
@@ -109,6 +114,7 @@ public static class DevelopmentSeeder
         await EnsureQueueDemo(db, corteOwner.Id, queueWorker.Id, noPermission.Id);
         await EnsureOrderingDemo(db, sazonOwner.Id, ordersWorker.Id, noOrdersPermission.Id);
         await db.SaveChangesAsync();
+        await EnsureModules(db);
         await EnsureHistoricalDemo(db, codes, protector);
         await db.SaveChangesAsync();
     }
@@ -283,5 +289,20 @@ public static class DevelopmentSeeder
             order.Transition(PickupOrderStatus.Delivered, now, 3);
             db.AddRange(consent, order);
         }
+    }
+
+    private static async Task EnsureModules(AppDbContext db)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var expected = new[]
+        {
+            new BusinessModule(BellaBusinessId, BusinessModuleKind.Appointments, true, now),
+            new BusinessModule(CorteBusinessId, BusinessModuleKind.VirtualQueues, true, now),
+            new BusinessModule(SazonBusinessId, BusinessModuleKind.PickupOrders, true, now)
+        };
+        foreach (var module in expected)
+            if (!await db.BusinessModules.AnyAsync(x => x.BusinessId == module.BusinessId && x.Module == module.Module))
+                db.BusinessModules.Add(module);
+        await db.SaveChangesAsync();
     }
 }

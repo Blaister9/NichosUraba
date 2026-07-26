@@ -14,6 +14,7 @@ public sealed class OrderingStore(AppDbContext db) : IOrderingStore
     {
         var row = await (from b in db.Businesses join s in db.PickupOrderSettings on b.Id equals s.BusinessId
             where b.Slug == slug && b.IsPublished && b.Status == BusinessStatus.Active && s.IsEnabled
+                && db.BusinessModules.Any(m => m.BusinessId == b.Id && m.Module == BusinessModuleKind.PickupOrders && m.IsEnabled)
             select new { b, s }).SingleOrDefaultAsync(ct);
         return row is null ? null : (row.b, row.s);
     }

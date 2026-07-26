@@ -13,6 +13,8 @@ else
         @foreach (var business in businesses)
         {
             <article class="business-card"><span class="tag">@business.MembershipRole</span><h2>@business.Name</h2>
+                @if (business.BusinessStatus == "Suspended")
+                { <p class="notice"><strong>Establecimiento suspendido.</strong> Puede consultar el historial, pero no iniciar operaciones nuevas.</p> }
                 <div class="actions">
                 @if (business.CanManageAppointments)
                 {

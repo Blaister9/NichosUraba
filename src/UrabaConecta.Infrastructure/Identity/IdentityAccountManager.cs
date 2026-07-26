@@ -9,7 +9,7 @@ namespace UrabaConecta.Infrastructure.Identity;
 public sealed class IdentityAccountManager(UserManager<ApplicationUser> users, IHostEnvironment environment)
     : IIdentityAccountManager
 {
-    public bool DevelopmentAccountCreationEnabled => environment.IsDevelopment();
+    public bool DevelopmentAccountCreationEnabled => environment.IsDevelopment() || environment.IsEnvironment("Demo");
 
     public async Task<IdentityAccount?> FindByExactEmailAsync(string email, CancellationToken cancellationToken)
     {
@@ -40,9 +40,34 @@ public sealed class IdentityAccountManager(UserManager<ApplicationUser> users, I
         return new(ToAccount(user), password);
     }
 
+    public async Task<CreatedIdentityAccount> CreatePilotAsync(string displayName, string email,
+        CancellationToken cancellationToken)
+    {
+        if (!DevelopmentAccountCreationEnabled)
+            throw new ApiException("PILOT_ACCOUNT_DISABLED", "La creación directa no está disponible.", 404);
+        if (await users.FindByEmailAsync(email.Trim()) is not null)
+            throw new ApiException("ACCOUNT_EXISTS", "Ya existe una cuenta con ese correo.", 409);
+        var password = CreateTemporaryPassword();
+        var normalizedEmail = email.Trim().ToLowerInvariant();
+        var user = new ApplicationUser
+        {
+            Id = Guid.NewGuid(), UserName = normalizedEmail, Email = normalizedEmail,
+            EmailConfirmed = true, DisplayName = displayName.Trim(), MustChangePassword = true
+        };
+        var result = await users.CreateAsync(user, password);
+        if (!result.Succeeded)
+            throw new ApiException("ACCOUNT_CREATION_FAILED",
+                string.Join(" ", result.Errors.Select(x => x.Description)), 400);
+        var role = await users.AddToRoleAsync(user, "BusinessOwner");
+        if (!role.Succeeded)
+            throw new ApiException("ACCOUNT_CREATION_FAILED",
+                string.Join(" ", role.Errors.Select(x => x.Description)), 400);
+        return new(ToAccount(user), password);
+    }
+
     private static IdentityAccount ToAccount(ApplicationUser user)
         => new(user.Id, user.Email ?? "", string.IsNullOrWhiteSpace(user.DisplayName)
-            ? user.Email?.Split('@')[0] ?? "Cuenta" : user.DisplayName);
+            ? user.Email?.Split('@')[0] ?? "Cuenta" : user.DisplayName, user.MustChangePassword);
 
     private static string CreateTemporaryPassword()
     {

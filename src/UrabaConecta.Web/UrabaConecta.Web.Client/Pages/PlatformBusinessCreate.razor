@@ -1,0 +1,94 @@
+@page "/admin/negocios/nuevo"
+@rendermode InteractiveAuto
+@attribute [Authorize(Roles = "PlatformAdmin")]
+@inject IUrabaConectaApi Api
+@inject NavigationManager Navigation
+
+<PageTitle>Nuevo negocio piloto | UrabáConecta</PageTitle>
+<p class="eyebrow">Paso @step de 4</p><h1>Nuevo negocio piloto</h1>
+<ol class="wizard-steps"><li>Identidad</li><li>Funciones</li><li>Responsable</li><li>Revisión</li></ol>
+@if (catalog is null) { <p class="notice">Cargando catálogos…</p> }
+else if (created is not null)
+{
+    <section class="success-card">
+        <h2>@created.Business.Name fue creado</h2><p>Estado: @created.Business.Status.</p>
+        @if (created.TemporaryPassword is not null)
+        {
+            <div class="notice"><strong>Contraseña temporal — se muestra una sola vez</strong>
+                <p class="temporary-secret">@created.TemporaryPassword</p>
+                <p>Entrégala por un canal acordado. No se almacenará ni volverá a mostrarse.</p>
+            </div>
+        }
+        <a class="button-link primary" href="/admin/negocios/@created.Business.Id">Abrir lista de preparación</a>
+    </section>
+}
+else
+{
+    <EditForm Model="request" OnValidSubmit="Submit" class="appointment-form">
+        <DataAnnotationsValidator /><ValidationSummary />
+        @if (step == 1)
+        {
+            <label>Nombre comercial<InputText @bind-Value="request.Name" /></label>
+            <label>Identificador público<InputText @bind-Value="request.Slug" /></label>
+            <label>Municipio<InputSelect @bind-Value="request.MunicipalityId"><option value="">Seleccione</option>@foreach (var x in catalog.Municipalities) { <option value="@x.Id">@x.Name</option> }</InputSelect></label>
+            <label>Categoría<InputSelect @bind-Value="request.CategoryId"><option value="">Seleccione</option>@foreach (var x in catalog.Categories) { <option value="@x.Id">@x.Name</option> }</InputSelect></label>
+            <label>Descripción<InputTextArea @bind-Value="request.Description" /></label>
+            <label>Dirección<InputText @bind-Value="request.Address" /></label>
+            <label>Teléfono público<InputText @bind-Value="request.PublicPhone" /></label>
+        }
+        else if (step == 2)
+        {
+            <fieldset><legend>Funciones disponibles</legend>
+                <label class="check"><InputCheckbox @bind-Value="request.Appointments" /> Citas</label>
+                <label class="check"><InputCheckbox @bind-Value="request.VirtualQueues" /> Turnos virtuales</label>
+                <label class="check"><InputCheckbox @bind-Value="request.PickupOrders" /> Pedidos para recoger</label>
+            </fieldset>
+            @if (request.Appointments) { <label>Servicio inicial (opcional)<InputText @bind-Value="request.InitialServiceName" /></label> }
+            @if (request.VirtualQueues) { <label>Duración promedio por turno<InputNumber @bind-Value="request.QueueAverageMinutes" /></label><label>Cupo máximo<InputNumber @bind-Value="request.QueueMaximumWaiting" /></label> }
+            @if (request.PickupOrders) { <label>Categoría inicial (opcional)<InputText @bind-Value="request.InitialProductCategory" /></label><label>Producto inicial (opcional)<InputText @bind-Value="request.InitialProductName" /></label> }
+        }
+        else if (step == 3)
+        {
+            <p>Vincula una cuenta existente o crea una cuenta piloto. La cuenta piloto deberá cambiar su contraseña al primer ingreso.</p>
+            <label>Correo de cuenta existente<InputText @bind-Value="request.ExistingOwnerEmail" /></label>
+            @if (catalog.PilotAccountCreationEnabled)
+            {
+                <p class="divider">o crear cuenta piloto</p>
+                <label>Nombre de la persona<InputText @bind-Value="request.PilotDisplayName" /></label>
+                <label>Correo piloto<InputText @bind-Value="request.PilotEmail" /></label>
+            }
+        }
+        else
+        {
+            <div class="review-card"><h2>Revisión</h2>
+                <p><strong>@request.Name</strong> · @catalog.Municipalities.FirstOrDefault(x => x.Id == request.MunicipalityId)?.Name</p>
+                <p>Funciones: @SelectedModules()</p>
+                <p>Responsable: @(request.ExistingOwnerEmail ?? request.PilotEmail ?? "sin asignar")</p>
+                <label class="check"><InputCheckbox @bind-Value="request.SaveAsDraft" /> Guardar como borrador</label>
+                <p class="notice">Desmarca “borrador” para intentar activar únicamente si toda la lista de preparación queda completa.</p>
+            </div>
+        }
+        @if (error is not null) { <p class="validation-message">@error</p> }
+        <div class="actions">
+            @if (step > 1) { <button type="button" class="secondary" @onclick="Previous">Atrás</button> }
+            @if (step < 4) { <button type="button" class="primary" @onclick="Next">Continuar</button> }
+            else { <button type="submit" class="primary" disabled="@saving">Crear negocio</button> }
+        </div>
+    </EditForm>
+}
+@code {
+    private int step = 1; private bool saving; private string? error;
+    private PlatformBusinessListDto? catalog; private PlatformBusinessCreatedDto? created;
+    private readonly CreatePlatformBusinessRequest request = new() { Appointments = true };
+    protected override async Task OnInitializedAsync() => catalog = await Api.GetPlatformBusinessesAsync();
+    private void Next() { error = null; if (step == 2 && !request.Appointments && !request.VirtualQueues && !request.PickupOrders) { error = "Selecciona al menos una función."; return; } step++; }
+    private void Previous() { error = null; step--; }
+    private async Task Submit()
+    {
+        saving = true; error = null;
+        try { created = await Api.CreatePlatformBusinessAsync(request); }
+        catch (ApiException ex) { error = ex.Message; }
+        finally { saving = false; }
+    }
+    private string SelectedModules() => string.Join(", ", new[] { request.Appointments ? "Citas" : null, request.VirtualQueues ? "Turnos" : null, request.PickupOrders ? "Pedidos" : null }.Where(x => x is not null));
+}

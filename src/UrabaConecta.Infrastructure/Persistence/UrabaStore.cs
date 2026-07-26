@@ -25,9 +25,9 @@ public sealed class UrabaStore(AppDbContext db) : IUrabaStore
         if (!string.IsNullOrWhiteSpace(category)) query = query.Where(x => x.c.Slug == category);
         return await query.OrderBy(x => x.b.Name).Select(x => new BusinessCardDto(x.b.Slug, x.b.Name,
             new(x.c.Slug, x.c.Name), new(x.m.Slug, x.m.Name), x.b.Description, x.b.Address,
-            db.QueueDefinitions.Any(q => q.BusinessId == x.b.Id && q.IsActive && q.IsEnabled),
-            db.PickupOrderSettings.Any(s => s.BusinessId == x.b.Id && s.IsEnabled),
-            db.Services.Any(s => s.BusinessId == x.b.Id && s.IsActive)))
+            db.BusinessModules.Any(m => m.BusinessId == x.b.Id && m.Module == BusinessModuleKind.VirtualQueues && m.IsEnabled),
+            db.BusinessModules.Any(m => m.BusinessId == x.b.Id && m.Module == BusinessModuleKind.PickupOrders && m.IsEnabled),
+            db.BusinessModules.Any(m => m.BusinessId == x.b.Id && m.Module == BusinessModuleKind.Appointments && m.IsEnabled)))
             .ToListAsync(cancellationToken);
     }
 
@@ -39,19 +39,22 @@ public sealed class UrabaStore(AppDbContext db) : IUrabaStore
                           where b.Slug == slug && b.Status == BusinessStatus.Active && b.IsPublished
                           select new { b, m, c }).SingleOrDefaultAsync(cancellationToken);
         if (data is null) return null;
-        var hours = await db.BusinessHours.AsNoTracking().Where(x => x.BusinessId == data.b.Id)
+        var hasAppointments = await db.BusinessModules.AnyAsync(x => x.BusinessId == data.b.Id &&
+            x.Module == BusinessModuleKind.Appointments && x.IsEnabled, cancellationToken);
+        var hours = await db.BusinessHours.AsNoTracking().Where(x => hasAppointments && x.BusinessId == data.b.Id)
             .OrderBy(x => x.Day).Select(x => new BusinessHourDto(x.Day, x.OpensAt.ToString("HH:mm"), x.ClosesAt.ToString("HH:mm")))
             .ToListAsync(cancellationToken);
-        var services = await db.Services.AsNoTracking().Where(x => x.BusinessId == data.b.Id && x.IsActive)
+        var services = await db.Services.AsNoTracking().Where(x => hasAppointments &&
+                x.BusinessId == data.b.Id && x.IsActive)
             .OrderBy(x => x.DisplayOrder).ThenBy(x => x.Name)
             .Select(x => new ServiceDto(x.Id, x.Name, x.Description, x.DurationMinutes, x.ReferencePrice,
                 x.DisplayOrder, x.IsActive, 0, x.Version))
             .ToListAsync(cancellationToken);
         return new(data.b.Slug, data.b.Name, data.b.Description, data.b.Address, data.b.PublicPhone,
             new(data.c.Slug, data.c.Name), new(data.m.Slug, data.m.Name), hours, services,
-            await db.QueueDefinitions.AnyAsync(q => q.BusinessId == data.b.Id && q.IsActive && q.IsEnabled,
+            await db.BusinessModules.AnyAsync(q => q.BusinessId == data.b.Id && q.Module == BusinessModuleKind.VirtualQueues && q.IsEnabled,
                 cancellationToken),
-            await db.PickupOrderSettings.AnyAsync(s => s.BusinessId == data.b.Id && s.IsEnabled,
+            await db.BusinessModules.AnyAsync(s => s.BusinessId == data.b.Id && s.Module == BusinessModuleKind.PickupOrders && s.IsEnabled,
                 cancellationToken));
     }
 
@@ -61,6 +64,8 @@ public sealed class UrabaStore(AppDbContext db) : IUrabaStore
         var business = await db.Businesses.AsNoTracking().SingleOrDefaultAsync(x => x.Slug == slug &&
             x.Status == BusinessStatus.Active && x.IsPublished, cancellationToken);
         if (business is null) return null;
+        if (!await db.BusinessModules.AnyAsync(x => x.BusinessId == business.Id &&
+            x.Module == BusinessModuleKind.Appointments && x.IsEnabled, cancellationToken)) return null;
         var service = await db.Services.AsNoTracking().SingleOrDefaultAsync(x =>
             x.BusinessId == business.Id && x.Id == serviceId, cancellationToken);
         if (service is null) return null;
@@ -129,7 +134,8 @@ public sealed class UrabaStore(AppDbContext db) : IUrabaStore
                       membership.Role == MembershipRole.Owner || membership.CanManageMembers,
                       membership.Role == MembershipRole.Owner || membership.CanManageQueues,
                       membership.Role == MembershipRole.Owner || membership.CanManageOrders,
-                      db.PickupOrderSettings.Any(s => s.BusinessId == business.Id)))
+                      db.PickupOrderSettings.Any(s => s.BusinessId == business.Id),
+                      business.Status.ToString()))
             .ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<AppointmentRecord>> GetAppointmentsAsync(Guid businessId, DateOnly? date,

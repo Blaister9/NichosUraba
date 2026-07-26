@@ -1,6 +1,6 @@
 namespace UrabaConecta.Domain;
 
-public enum BusinessStatus { Active, Suspended }
+public enum BusinessStatus { Draft, PendingConfiguration, Active, Suspended, Archived }
 public enum MembershipRole { Owner, Worker }
 public enum MembershipAuditAction
 {
@@ -34,7 +34,7 @@ public sealed class Category
     public bool IsActive { get; private set; } = true;
 }
 
-public sealed class Business
+public sealed partial class Business
 {
     private Business() { }
     public Business(Guid id, string slug, string name, Guid municipalityId, Guid categoryId,

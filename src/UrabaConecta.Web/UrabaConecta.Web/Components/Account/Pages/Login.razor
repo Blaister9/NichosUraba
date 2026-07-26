@@ -4,6 +4,7 @@
 @using Microsoft.AspNetCore.Identity
 @using UrabaConecta.Infrastructure.Identity
 @inject SignInManager<ApplicationUser> SignInManager
+@inject UserManager<ApplicationUser> UserManager
 @inject ILogger<Login> Logger
 @inject IdentityRedirectManager RedirectManager
 
@@ -35,7 +36,14 @@
     private async Task LoginUser()
     {
         var result = await SignInManager.PasswordSignInAsync(Input.Email, Input.Password, Input.RememberMe, lockoutOnFailure: true);
-        if (result.Succeeded) { Logger.LogInformation("Inicio de sesión exitoso."); RedirectManager.RedirectTo(ReturnUrl ?? "/panel"); }
+        if (result.Succeeded)
+        {
+            Logger.LogInformation("Inicio de sesión exitoso.");
+            var user = await UserManager.FindByEmailAsync(Input.Email);
+            RedirectManager.RedirectTo(user?.MustChangePassword == true
+                ? "/Account/ChangeTemporaryPassword"
+                : ReturnUrl ?? "/panel");
+        }
         else if (result.IsLockedOut) errorMessage = "La cuenta está bloqueada temporalmente.";
         else errorMessage = "Correo o contraseña incorrectos.";
     }

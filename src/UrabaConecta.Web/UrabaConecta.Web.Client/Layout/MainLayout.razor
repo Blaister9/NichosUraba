@@ -8,6 +8,7 @@
             <Authorized><a href="/panel">Panel</a><a href="/Account/Manage" target="_self">Cuenta</a></Authorized>
             <NotAuthorized><a href="/Account/Login" target="_self">Ingresar</a></NotAuthorized>
         </AuthorizeView>
+        <AuthorizeView Roles="PlatformAdmin"><Authorized><a href="/admin/negocios">Administración</a></Authorized></AuthorizeView>
     </nav>
 </header>
 <main class="page-shell">@Body</main>

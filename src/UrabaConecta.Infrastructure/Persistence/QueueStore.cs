@@ -14,13 +14,16 @@ public sealed class QueueStore(AppDbContext db) : IQueueStore
     public Task<QueueDefinition?> GetPublicDefinitionAsync(string slug, CancellationToken ct)
         => db.QueueDefinitions.SingleOrDefaultAsync(q => q.IsActive && q.IsEnabled &&
             db.Businesses.Any(b => b.Id == q.BusinessId && b.Slug == slug && b.IsPublished &&
-                b.Status == BusinessStatus.Active), ct);
+                b.Status == BusinessStatus.Active) &&
+            db.BusinessModules.Any(m => m.BusinessId == q.BusinessId &&
+                m.Module == BusinessModuleKind.VirtualQueues && m.IsEnabled), ct);
 
     public async Task<(QueueDefinition Definition, Business Business)?> GetPublicContextAsync(string slug, CancellationToken ct)
     {
         var row = await (from q in db.QueueDefinitions
             join b in db.Businesses on q.BusinessId equals b.Id
             where q.IsActive && q.IsEnabled && b.Slug == slug && b.IsPublished && b.Status == BusinessStatus.Active
+                && db.BusinessModules.Any(m => m.BusinessId == b.Id && m.Module == BusinessModuleKind.VirtualQueues && m.IsEnabled)
             select new { q, b }).SingleOrDefaultAsync(ct);
         return row is null ? null : (row.q, row.b);
     }
@@ -65,6 +68,9 @@ public sealed class QueueStore(AppDbContext db) : IQueueStore
     public Task<bool> CanManageQueuesAsync(Guid userId, Guid businessId, CancellationToken ct)
         => db.BusinessMemberships.AnyAsync(x => x.UserId == userId && x.BusinessId == businessId && x.IsActive &&
             (x.Role == MembershipRole.Owner || x.CanManageQueues), ct);
+    public Task<bool> IsBusinessActiveAsync(Guid businessId, CancellationToken ct)
+        => db.Businesses.AnyAsync(x => x.Id == businessId &&
+            x.Status == BusinessStatus.Active && x.IsPublished, ct);
     public async Task<(string BusinessName, string BusinessSlug)?> GetBusinessNameAsync(Guid businessId, CancellationToken ct)
     {
         var x = await db.Businesses.Where(b => b.Id == businessId).Select(b => new { b.Name, b.Slug }).SingleOrDefaultAsync(ct);

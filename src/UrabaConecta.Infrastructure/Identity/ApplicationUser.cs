@@ -5,4 +5,5 @@ namespace UrabaConecta.Infrastructure.Identity;
 public sealed class ApplicationUser : IdentityUser<Guid>
 {
     public string DisplayName { get; set; } = "";
+    public bool MustChangePassword { get; set; }
 }
