@@ -1,0 +1,81 @@
+@page "/panel/{BusinessId:guid}/configuracion/pedidos"
+@rendermode InteractiveAuto
+@attribute [Authorize]
+@inject IUrabaConectaApi Api
+
+<PageTitle>Configurar pedidos | UrabáConecta</PageTitle>
+<a class="back-link" href="/panel/@BusinessId/configuracion">← Configuración</a>
+<p class="eyebrow">Configuración</p><h1>Pedidos y catálogo</h1>
+@if (error is not null) { <div class="error" role="alert">@error</div> }
+@if (settings is not null)
+{
+    <EditForm Model="settingsForm" OnValidSubmit="SaveSettings" FormName="order-settings" class="config-form">
+        <DataAnnotationsValidator /><h2>Recepción de pedidos</h2>
+        <label class="check-option"><InputCheckbox @bind-Value="settingsForm.IsEnabled" /> Módulo público activo</label>
+        <label>Mensaje <InputText @bind-Value="settingsForm.PublicMessage" /></label>
+        <label>Preparación mínima (min) <InputNumber @bind-Value="settingsForm.MinimumPreparationMinutes" /></label>
+        <label>Intervalo de franja (min) <InputNumber @bind-Value="settingsForm.SlotIntervalMinutes" /></label>
+        <label>Capacidad activa por franja <InputNumber @bind-Value="settingsForm.MaximumActivePerSlot" /></label>
+        <label>Desde <InputText @bind-Value="fromText" /></label><label>Hasta <InputText @bind-Value="untilText" /></label>
+        <button class="primary">Guardar configuración</button>
+    </EditForm>
+}
+<section class="config-form">
+    <h2>Categorías</h2>
+    @foreach (var category in categories) { <p><strong>@category.Name</strong> · orden @category.DisplayOrder · @(category.IsActive ? "Activa" : "Inactiva")</p> }
+    <EditForm Model="categoryForm" OnValidSubmit="AddCategory" FormName="add-category">
+        <DataAnnotationsValidator /><label>Nueva categoría <InputText @bind-Value="categoryForm.Name" /></label>
+        <label>Orden <InputNumber @bind-Value="categoryForm.DisplayOrder" /></label><button class="secondary">Agregar</button>
+    </EditForm>
+</section>
+<section class="config-form">
+    <h2>Productos</h2>
+    @foreach (var product in products) { <p><strong>@product.Name</strong> · @product.ReferencePrice.ToString("C0", Colombia) · @(product.IsActive ? "Activo" : "Inactivo")</p> }
+    <EditForm Model="productForm" OnValidSubmit="AddProduct" FormName="add-product">
+        <DataAnnotationsValidator /><label>Categoría <InputSelect @bind-Value="productForm.CategoryId">
+            <option value="@Guid.Empty">Selecciona</option>@foreach (var category in categories.Where(x => x.IsActive)) { <option value="@category.Id">@category.Name</option> }
+        </InputSelect></label>
+        <label>Nombre <InputText @bind-Value="productForm.Name" /></label>
+        <label>Descripción <InputText @bind-Value="productForm.Description" /></label>
+        <label>Precio <InputNumber @bind-Value="productForm.ReferencePrice" /></label>
+        <label>Orden <InputNumber @bind-Value="productForm.DisplayOrder" /></label><button class="secondary">Agregar</button>
+    </EditForm>
+</section>
+@code {
+    [Parameter] public Guid BusinessId { get; set; }
+    private PickupOrderSettingsDto? settings; private SavePickupOrderSettingsRequest settingsForm = new();
+    private IReadOnlyList<ProductCategoryDto> categories = []; private IReadOnlyList<ProductDto> products = [];
+    private SaveProductCategoryRequest categoryForm = new(); private SaveProductRequest productForm = new();
+    private string fromText = "11:00", untilText = "20:30"; private string? error;
+    private static readonly System.Globalization.CultureInfo Colombia = new("es-CO");
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            settings = await Api.GetPickupOrderSettingsAsync(BusinessId);
+            settingsForm = new() { IsEnabled = settings.IsEnabled, PublicMessage = settings.PublicMessage,
+                MinimumPreparationMinutes = settings.MinimumPreparationMinutes, SlotIntervalMinutes = settings.SlotIntervalMinutes,
+                MaximumActivePerSlot = settings.MaximumActivePerSlot, ReceivesFrom = settings.ReceivesFrom,
+                ReceivesUntil = settings.ReceivesUntil, Version = settings.Version };
+            fromText = settings.ReceivesFrom.ToString("HH:mm"); untilText = settings.ReceivesUntil.ToString("HH:mm");
+            categories = await Api.GetProductCategoriesAsync(BusinessId); products = await Api.GetProductsAsync(BusinessId);
+        } catch (ApiException ex) { error = ex.Message; }
+    }
+    private async Task SaveSettings()
+    {
+        if (!TimeOnly.TryParse(fromText, out var from) || !TimeOnly.TryParse(untilText, out var until)) { error = "Use horas HH:mm."; return; }
+        settingsForm.ReceivesFrom = from; settingsForm.ReceivesUntil = until;
+        try { settings = await Api.SavePickupOrderSettingsAsync(BusinessId, settingsForm); settingsForm.Version = settings.Version; error = null; }
+        catch (ApiException ex) { error = ex.Message; }
+    }
+    private async Task AddCategory()
+    {
+        try { await Api.SaveProductCategoryAsync(BusinessId, null, categoryForm); categories = await Api.GetProductCategoriesAsync(BusinessId); categoryForm = new(); }
+        catch (ApiException ex) { error = ex.Message; }
+    }
+    private async Task AddProduct()
+    {
+        try { await Api.SaveProductAsync(BusinessId, null, productForm); products = await Api.GetProductsAsync(BusinessId); productForm = new(); }
+        catch (ApiException ex) { error = ex.Message; }
+    }
+}

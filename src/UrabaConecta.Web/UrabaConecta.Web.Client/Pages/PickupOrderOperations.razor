@@ -1,0 +1,60 @@
+@page "/panel/{BusinessId:guid}/pedidos"
+@rendermode InteractiveAuto
+@attribute [Authorize]
+@inject IUrabaConectaApi Api
+
+<PageTitle>Pedidos | UrabáConecta</PageTitle>
+<a class="back-link" href="/panel">← Establecimientos</a>
+<p class="eyebrow">Operación</p><h1>Pedidos para recoger</h1>
+<div class="actions">
+    <button class="secondary" @onclick="Load">Actualizar</button>
+    <a class="button-link secondary" href="/panel/@BusinessId/configuracion/pedidos">Configurar catálogo</a>
+</div>
+@if (error is not null) { <div class="error" role="alert">@error</div> }
+@foreach (var order in orders)
+{
+    <article class="queue-row" data-testid="admin-order">
+        <div class="ticket-badge">#@order.OrderNumber</div>
+        <div><strong>@order.CustomerAlias · @order.Total.ToString("C0", Colombia)</strong>
+            <br /><span class="meta">@Label(order.Status) · @Local(order.PickupStart) · @order.Phone</span>
+            @foreach (var line in order.Lines) { <div>@line.Quantity × @line.ProductName</div> }
+        </div>
+        <div class="actions">
+            @if (order.Status == "Pending") { <button class="primary" disabled="@(!interactiveReady)" @onclick="() => Accept(order)">Aceptar</button><button class="danger" disabled="@(!interactiveReady)" @onclick="() => Reject(order)">Rechazar</button> }
+            @if (order.Status == "Accepted") { <button class="primary" disabled="@(!interactiveReady)" @onclick="() => Prepare(order)">Preparar</button> }
+            @if (order.Status == "Preparing") { <button class="primary" disabled="@(!interactiveReady)" @onclick="() => Ready(order)">Listo</button> }
+            @if (order.Status == "ReadyForPickup") { <button class="primary" disabled="@(!interactiveReady)" @onclick="() => Deliver(order)">Entregado</button> }
+            @if (order.Status is "Pending" or "Accepted" or "Preparing" or "ReadyForPickup")
+            { <button class="danger" disabled="@(!interactiveReady)" @onclick="() => Cancel(order)">Cancelar</button> }
+        </div>
+    </article>
+}
+@if (orders.Count == 0 && error is null) { <div class="empty"><p>No hay pedidos todavía.</p></div> }
+@code {
+    [Parameter] public Guid BusinessId { get; set; }
+    private IReadOnlyList<PickupOrderAdminDto> orders = []; private string? error; private bool interactiveReady;
+    private static readonly System.Globalization.CultureInfo Colombia = new("es-CO");
+    protected override async Task OnParametersSetAsync() => await Load();
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+        interactiveReady = true; StateHasChanged();
+    }
+    private async Task Load() { try { error = null; orders = await Api.GetPickupOrdersAsync(BusinessId); } catch (ApiException ex) { error = ex.Message; } }
+    private async Task Act(PickupOrderAdminDto order, string action, string? reason = null)
+    {
+        try { await Api.ChangePickupOrderAsync(BusinessId, order.Id, action, new() { Version = order.Version, Reason = reason }); await Load(); }
+        catch (ApiException ex) { error = ex.Message; await Load(); }
+    }
+    private Task Accept(PickupOrderAdminDto o) => Act(o, "accept");
+    private Task Reject(PickupOrderAdminDto o) => Act(o, "reject", "No disponible");
+    private Task Prepare(PickupOrderAdminDto o) => Act(o, "prepare");
+    private Task Ready(PickupOrderAdminDto o) => Act(o, "ready");
+    private Task Deliver(PickupOrderAdminDto o) => Act(o, "deliver");
+    private Task Cancel(PickupOrderAdminDto o) => Act(o, "cancel", "Cancelado por el establecimiento");
+    private static string Label(string s) => s switch { "Pending" => "Pendiente", "Accepted" => "Aceptado",
+        "Preparing" => "En preparación", "ReadyForPickup" => "Listo para recoger", "Delivered" => "Entregado",
+        "Rejected" => "Rechazado", _ => "Cancelado" };
+    private static string Local(DateTimeOffset value) => TimeZoneInfo.ConvertTime(value,
+        TimeZoneInfo.FindSystemTimeZoneById("America/Bogota")).ToString("g");
+}

@@ -165,6 +165,57 @@ public sealed class HttpUrabaConectaApi(HttpClient http) : IUrabaConectaApi
             $"api/v1/businesses/{businessId}/queue/tickets/{ticketId}/{E(action)}",
             request, Json, cancellationToken), cancellationToken);
 
+    public async Task<PickupMenuDto?> GetPickupMenuAsync(string slug, CancellationToken cancellationToken = default)
+    {
+        var response = await http.GetAsync($"api/v1/public/businesses/{E(slug)}/menu", cancellationToken);
+        return response.StatusCode == HttpStatusCode.NotFound ? null : await Read<PickupMenuDto>(response, cancellationToken);
+    }
+    public Task<PickupSlotListDto> GetPickupSlotsAsync(string slug, DateOnly? date = null,
+        CancellationToken cancellationToken = default)
+        => Get<PickupSlotListDto>($"api/v1/public/businesses/{E(slug)}/pickup-slots?date={date:yyyy-MM-dd}", cancellationToken);
+    public async Task<PickupOrderCreatedDto> CreatePickupOrderAsync(string slug, CreatePickupOrderRequest request,
+        CancellationToken cancellationToken = default)
+        => await Read<PickupOrderCreatedDto>(await http.PostAsJsonAsync(
+            $"api/v1/public/businesses/{E(slug)}/orders", request, Json, cancellationToken), cancellationToken);
+    public async Task<PickupOrderTrackingDto?> GetPickupOrderAsync(string code, CancellationToken cancellationToken = default)
+    {
+        var response = await http.GetAsync($"api/v1/public/orders/{E(code)}", cancellationToken);
+        return response.StatusCode == HttpStatusCode.NotFound ? null : await Read<PickupOrderTrackingDto>(response, cancellationToken);
+    }
+    public async Task CancelPickupOrderAsync(string code, long version, CancellationToken cancellationToken = default)
+        => await Ensure(await http.PostAsJsonAsync($"api/v1/public/orders/{E(code)}/cancel",
+            new PickupOrderCommandRequest { Version = version }, Json, cancellationToken), cancellationToken);
+    public Task<PickupOrderSettingsDto> GetPickupOrderSettingsAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => Get<PickupOrderSettingsDto>($"api/v1/businesses/{businessId}/order-settings", cancellationToken);
+    public async Task<PickupOrderSettingsDto> SavePickupOrderSettingsAsync(Guid businessId,
+        SavePickupOrderSettingsRequest request, CancellationToken cancellationToken = default)
+        => await Read<PickupOrderSettingsDto>(await http.PutAsJsonAsync(
+            $"api/v1/businesses/{businessId}/order-settings", request, Json, cancellationToken), cancellationToken);
+    public Task<IReadOnlyList<ProductCategoryDto>> GetProductCategoriesAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => Get<IReadOnlyList<ProductCategoryDto>>($"api/v1/businesses/{businessId}/product-categories", cancellationToken);
+    public async Task<ProductCategoryDto> SaveProductCategoryAsync(Guid businessId, Guid? categoryId,
+        SaveProductCategoryRequest request, CancellationToken cancellationToken = default)
+        => await Read<ProductCategoryDto>(categoryId.HasValue
+            ? await http.PutAsJsonAsync($"api/v1/businesses/{businessId}/product-categories/{categoryId}", request, Json, cancellationToken)
+            : await http.PostAsJsonAsync($"api/v1/businesses/{businessId}/product-categories", request, Json, cancellationToken), cancellationToken);
+    public Task<IReadOnlyList<ProductDto>> GetProductsAsync(Guid businessId, CancellationToken cancellationToken = default)
+        => Get<IReadOnlyList<ProductDto>>($"api/v1/businesses/{businessId}/products", cancellationToken);
+    public async Task<ProductDto> SaveProductAsync(Guid businessId, Guid? productId, SaveProductRequest request,
+        CancellationToken cancellationToken = default)
+        => await Read<ProductDto>(productId.HasValue
+            ? await http.PutAsJsonAsync($"api/v1/businesses/{businessId}/products/{productId}", request, Json, cancellationToken)
+            : await http.PostAsJsonAsync($"api/v1/businesses/{businessId}/products", request, Json, cancellationToken), cancellationToken);
+    public Task<IReadOnlyList<PickupOrderAdminDto>> GetPickupOrdersAsync(Guid businessId, string? status = null,
+        DateOnly? date = null, CancellationToken cancellationToken = default)
+        => Get<IReadOnlyList<PickupOrderAdminDto>>(
+            $"api/v1/businesses/{businessId}/orders?status={E(status)}&date={date:yyyy-MM-dd}", cancellationToken);
+    public async Task<PickupOrderAdminDto> ChangePickupOrderAsync(Guid businessId, Guid orderId, string action,
+        PickupOrderCommandRequest request, CancellationToken cancellationToken = default)
+        => await Read<PickupOrderAdminDto>(await http.PostAsJsonAsync(
+            $"api/v1/businesses/{businessId}/orders/{orderId}/{E(action)}", request, Json, cancellationToken), cancellationToken);
+
     private async Task<BusinessMemberDto> PostVersion(Guid businessId, Guid membershipId, string action, long version,
         CancellationToken cancellationToken)
         => await Read<BusinessMemberDto>(await http.PostAsJsonAsync(

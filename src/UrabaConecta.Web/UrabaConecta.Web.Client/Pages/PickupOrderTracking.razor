@@ -1,0 +1,39 @@
+@page "/seguimiento/pedidos/{Code}"
+@rendermode InteractiveAuto
+@inject IUrabaConectaApi Api
+
+<PageTitle>Seguimiento del pedido | UrabáConecta</PageTitle>
+<a class="back-link" href="/">← Inicio</a>
+@if (error is not null) { <div class="error" role="alert">@error</div> }
+else if (order is null) { <p class="notice">Consultando pedido…</p> }
+else
+{
+    <section class="success narrow" data-testid="order-tracking">
+        <p class="eyebrow">@order.BusinessName</p><h1>Pedido #@order.OrderNumber</h1>
+        <span class="status">@order.StatusLabel</span>
+        <p>Recoger: @Local(order.PickupStart)<br />Celular: @order.PhoneMasked</p>
+        @foreach (var line in order.Lines) { <p>@line.Quantity × @line.ProductName <strong>@line.LineTotal.ToString("C0", Colombia)</strong></p> }
+        <p><strong>Total: @order.Total.ToString("C0", Colombia)</strong></p>
+        @if (order.CanCancel) { <button class="danger" disabled="@busy" @onclick="Cancel">Cancelar pedido</button> }
+    </section>
+}
+@code {
+    [Parameter] public string Code { get; set; } = "";
+    private PickupOrderTrackingDto? order; private string? error; private bool busy;
+    private static readonly System.Globalization.CultureInfo Colombia = new("es-CO");
+    protected override async Task OnParametersSetAsync() => await Load();
+    private async Task Load()
+    {
+        try { order = await Api.GetPickupOrderAsync(Code); if (order is null) error = "No encontramos el pedido."; }
+        catch (ApiException ex) { error = ex.Message; }
+    }
+    private async Task Cancel()
+    {
+        busy = true;
+        try { await Api.CancelPickupOrderAsync(Code, order!.Version); await Load(); }
+        catch (ApiException ex) { error = ex.Message; }
+        finally { busy = false; }
+    }
+    private static string Local(DateTimeOffset value) =>
+        TimeZoneInfo.ConvertTime(value, TimeZoneInfo.FindSystemTimeZoneById("America/Bogota")).ToString("f");
+}

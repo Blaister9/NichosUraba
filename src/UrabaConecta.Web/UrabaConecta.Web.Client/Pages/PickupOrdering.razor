@@ -1,0 +1,95 @@
+@page "/negocios/{Slug}/pedidos"
+@rendermode InteractiveAuto
+@inject IUrabaConectaApi Api
+@inject NavigationManager Navigation
+
+<PageTitle>Pedidos para recoger | UrabáConecta</PageTitle>
+<a class="back-link" href="/negocios/@Slug">← Volver al establecimiento</a>
+@if (error is not null) { <div class="error" role="alert">@error</div> }
+@if (menu is null && error is null) { <p class="notice">Cargando menú…</p> }
+else if (menu is not null && created is null)
+{
+    <p class="eyebrow">@menu.BusinessName</p><h1>Pedido para recoger</h1><p>@menu.PublicMessage</p>
+    @foreach (var category in menu.Categories)
+    {
+        <section><h2>@category.Name</h2><div class="card-grid">
+        @foreach (var product in menu.Products.Where(x => x.CategoryId == category.Id))
+        {
+            <article class="service-card" data-testid="product-card">
+                <h3>@product.Name</h3><p>@product.Description</p>
+                <strong>@product.ReferencePrice.ToString("C0", Colombia)</strong>
+                <div class="actions">
+                    <button class="secondary" type="button" disabled="@(!interactiveReady)" @onclick="() => Change(product.Id, -1)">−</button>
+                    <span data-testid="quantity">@Quantity(product.Id)</span>
+                    <button class="secondary" type="button" disabled="@(!interactiveReady)" @onclick="() => Change(product.Id, 1)">+</button>
+                </div>
+            </article>
+        }</div></section>
+    }
+    <section class="config-form">
+        <h2>Tu pedido</h2>
+        <p><strong>@CartCount unidades · @CartTotal.ToString("C0", Colombia)</strong></p>
+        <EditForm Model="request" OnValidSubmit="Submit" FormName="pickup-order">
+            <DataAnnotationsValidator /><ValidationSummary />
+            <label>Hora para recoger
+                <InputSelect @bind-Value="selectedSlot">
+                    <option value="">Selecciona una franja</option>
+                    @foreach (var slot in slots) { <option value="@slot.Start.ToString("O")">@Local(slot.Start)</option> }
+                </InputSelect>
+            </label>
+            <label>Nombre o alias <InputText @bind-Value="request.CustomerAlias" /></label>
+            <label>Celular <InputText @bind-Value="request.Phone" /></label>
+            <label>Nota general (opcional) <InputTextArea @bind-Value="request.Notes" /></label>
+            <label class="check-option"><InputCheckbox @bind-Value="request.ConsentAccepted" />
+                Acepto el uso de estos datos para preparar el pedido y contactarme.</label>
+            <p class="meta">El pago se realiza directamente en el establecimiento. UrabáConecta no procesa pagos.</p>
+            <button class="primary" disabled="@(!interactiveReady || busy || CartCount == 0 || string.IsNullOrEmpty(selectedSlot))">Confirmar pedido</button>
+        </EditForm>
+    </section>
+}
+else if (created is not null)
+{
+    <section class="success narrow" data-testid="order-created">
+        <p class="eyebrow">Pedido recibido</p><h1>Pedido #@created.OrderNumber</h1>
+        <p>Total @created.Total.ToString("C0", Colombia). Guarda el enlace privado para consultar el estado.</p>
+        <a class="button-link" href="/seguimiento/pedidos/@created.TrackingCode">Seguir mi pedido</a>
+    </section>
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = "";
+    private PickupMenuDto? menu; private IReadOnlyList<PickupSlotDto> slots = [];
+    private readonly Dictionary<Guid, int> quantities = [];
+    private CreatePickupOrderRequest request = new() { ConsentNoticeVersion = "pilot-1" };
+    private PickupOrderCreatedDto? created; private string selectedSlot = ""; private string? error; private bool busy;
+    private bool interactiveReady;
+    private static readonly System.Globalization.CultureInfo Colombia = new("es-CO");
+    protected override async Task OnParametersSetAsync()
+    {
+        try { menu = await Api.GetPickupMenuAsync(Slug); slots = (await Api.GetPickupSlotsAsync(Slug)).Slots; }
+        catch (ApiException ex) { error = ex.Message; }
+    }
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+        interactiveReady = true;
+        StateHasChanged();
+    }
+    private int Quantity(Guid id) => quantities.GetValueOrDefault(id);
+    private void Change(Guid id, int delta) => quantities[id] = Math.Clamp(Quantity(id) + delta, 0, 20);
+    private int CartCount => quantities.Values.Sum();
+    private decimal CartTotal => menu?.Products.Sum(x => x.ReferencePrice * Quantity(x.Id)) ?? 0;
+    private async Task Submit()
+    {
+        if (!DateTimeOffset.TryParse(selectedSlot, out var pickup)) { error = "Selecciona una franja."; return; }
+        request.PickupStart = pickup;
+        request.Lines = quantities.Where(x => x.Value > 0)
+            .Select(x => new CreatePickupOrderLineRequest { ProductId = x.Key, Quantity = x.Value }).ToList();
+        busy = true; error = null;
+        try { created = await Api.CreatePickupOrderAsync(Slug, request); }
+        catch (ApiException ex) { error = ex.Message; slots = (await Api.GetPickupSlotsAsync(Slug)).Slots; }
+        finally { busy = false; }
+    }
+    private static string Local(DateTimeOffset value) =>
+        TimeZoneInfo.ConvertTime(value, TimeZoneInfo.FindSystemTimeZoneById("America/Bogota")).ToString("ddd d MMM, h:mm tt");
+}

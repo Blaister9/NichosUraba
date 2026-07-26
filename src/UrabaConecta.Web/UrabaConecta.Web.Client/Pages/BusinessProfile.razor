@@ -19,6 +19,13 @@ else
             <a class="button-link" href="/negocios/@Slug/turnos">Ver fila virtual</a>
         </section>
     }
+    @if (business.HasPickupOrdering)
+    {
+        <section class="queue-promo"><h2>Pedidos para recoger</h2>
+            <p>Elige del menú, reserva una franja y paga directamente en el establecimiento.</p>
+            <a class="button-link" href="/negocios/@Slug/pedidos">Ver menú</a>
+        </section>
+    }
     <section><h2>Servicios</h2><div class="card-grid">
         @foreach (var service in business.Services)
         {

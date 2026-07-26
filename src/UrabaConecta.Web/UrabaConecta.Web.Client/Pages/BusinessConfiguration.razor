@@ -29,6 +29,10 @@ else if (business is not null)
         {
             <a class="config-card" href="/panel/@BusinessId/configuracion/turnos"><span>05</span><h2>Turnos</h2><p>Nombre, capacidad, duración y publicación de la fila.</p></a>
         }
+        @if (business.SupportsPickupOrdering)
+        {
+            <a class="config-card" href="/panel/@BusinessId/configuracion/pedidos"><span>06</span><h2>Pedidos</h2><p>Catálogo, precios, franjas y capacidad.</p></a>
+        }
     </div>
 }
 
