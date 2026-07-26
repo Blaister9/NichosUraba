@@ -98,6 +98,7 @@ else if (data is not null)
                         <label class="check-option"><input type="checkbox" @bind="editor.Appointments" /> Administrar citas</label>
                         <label class="check-option"><input type="checkbox" @bind="editor.Configuration" /> Configurar negocio</label>
                         <label class="check-option"><input type="checkbox" @bind="editor.Members" /> Administrar equipo</label>
+                        <label class="check-option"><input type="checkbox" @bind="editor.Queues" /> Administrar turnos</label>
                     </fieldset>
                     <div class="actions">
                         @if (!member.IsOwner)
@@ -179,7 +180,8 @@ else if (data is not null)
             editors.Clear();
             foreach (var item in data.Items)
                 editors[item.Id] = new(item.Permissions.CanManageAppointments,
-                    item.Permissions.CanManageConfiguration, item.Permissions.CanManageMembers);
+                    item.Permissions.CanManageConfiguration, item.Permissions.CanManageMembers,
+                    item.Permissions.CanManageQueues);
         }
         catch (ApiException ex) { error = ex.Message; }
     }
@@ -189,6 +191,7 @@ else if (data is not null)
         <label class="check-option"><input type="checkbox" @bind="model.CanManageAppointments" /> Administrar citas</label>
         <label class="check-option"><input type="checkbox" @bind="model.CanManageConfiguration" /> Configurar negocio</label>
         <label class="check-option"><input type="checkbox" @bind="model.CanManageMembers" /> Administrar equipo</label>
+        <label class="check-option"><input type="checkbox" @bind="model.CanManageQueues" /> Administrar turnos</label>
     </fieldset>;
 
     private async Task LinkExisting()
@@ -222,7 +225,7 @@ else if (data is not null)
             await Api.UpdateMemberPermissionsAsync(BusinessId, member.Id, new UpdateMemberPermissionsRequest
             {
                 CanManageAppointments = editor.Appointments, CanManageConfiguration = editor.Configuration,
-                CanManageMembers = editor.Members, Version = member.Version
+                CanManageMembers = editor.Members, CanManageQueues = editor.Queues, Version = member.Version
             });
             success = $"Permisos de {member.DisplayName} actualizados.";
         });
@@ -271,7 +274,7 @@ else if (data is not null)
             await Api.RevokeOwnershipAsync(BusinessId, member.Id, new RevokeOwnershipRequest
             {
                 CanManageAppointments = editor.Appointments, CanManageConfiguration = editor.Configuration,
-                CanManageMembers = editor.Members, Version = member.Version
+                CanManageMembers = editor.Members, CanManageQueues = editor.Queues, Version = member.Version
             });
             success = $"{member.DisplayName} dejó de ser propietaria.";
         });
@@ -300,10 +303,11 @@ else if (data is not null)
         "MemberDeactivated" => "Membresía desactivada", "PermissionsChanged" => "Permisos modificados",
         "OwnerGranted" => "Propiedad otorgada", "OwnerRevoked" => "Propiedad retirada", _ => action
     };
-    private sealed class PermissionEditor(bool appointments, bool configuration, bool members)
+    private sealed class PermissionEditor(bool appointments, bool configuration, bool members, bool queues)
     {
         public bool Appointments { get; set; } = appointments;
         public bool Configuration { get; set; } = configuration;
         public bool Members { get; set; } = members;
+        public bool Queues { get; set; } = queues;
     }
 }

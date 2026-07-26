@@ -12,6 +12,13 @@ else
         <span class="tag">@business.Category.Name</span><h1>@business.Name</h1><p>@business.Description</p>
         <p><strong>@business.Municipality.Name</strong><br />@business.Address<br />@business.PublicPhone</p>
     </section>
+    @if (business.HasVirtualQueue)
+    {
+        <section class="queue-promo"><h2>Atención por orden de llegada</h2>
+            <p>Consulta el estado y toma un turno sin crear una cuenta.</p>
+            <a class="button-link" href="/negocios/@Slug/turnos">Ver fila virtual</a>
+        </section>
+    }
     <section><h2>Servicios</h2><div class="card-grid">
         @foreach (var service in business.Services)
         {

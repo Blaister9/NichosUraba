@@ -1,0 +1,78 @@
+@page "/negocios/{Slug}/turnos"
+@rendermode InteractiveAuto
+@implements IAsyncDisposable
+@inject IUrabaConectaApi Api
+@inject NavigationManager Navigation
+
+<PageTitle>Fila virtual | UrabáConecta</PageTitle>
+<a class="back-link" href="/negocios/@Slug">← Volver al establecimiento</a>
+@if (status is null && error is null) { <p class="notice">Consultando la fila…</p> }
+else if (error is not null) { <div class="error" role="alert">@error</div> }
+else if (status is not null)
+{
+    <section class="queue-hero">
+        <p class="eyebrow">@status.BusinessName</p><h1>@status.QueueName</h1>
+        <p>@status.PublicMessage</p>
+        <div class="queue-numbers">
+            <div><span>Atendiendo</span><strong>@(status.CurrentNumber?.ToString() ?? "—")</strong></div>
+            <div><span>En espera</span><strong>@status.WaitingCount</strong></div>
+            <div><span>Espera aproximada</span><strong>~@status.ApproximateWaitMinutes min</strong></div>
+        </div>
+        <span class="status @status.SessionStatus.ToLowerInvariant()">@SessionLabel(status.SessionStatus)</span>
+    </section>
+    @if (created is null)
+    {
+        <EditForm Model="request" OnValidSubmit="Join" FormName="join-queue" class="config-form narrow">
+            <DataAnnotationsValidator /><ValidationSummary />
+            <h2>Tomar un turno</h2>
+            <label>Alias corto (opcional) <InputText @bind-Value="request.Alias" maxlength="40" /></label>
+            <p class="meta">No pedimos nombre completo, teléfono ni documento.</p>
+            <button class="primary" disabled="@(!status.CanJoin || busy)">Tomar turno</button>
+        </EditForm>
+    }
+    else
+    {
+        <section class="success narrow" data-testid="queue-created">
+            <h2>Tu turno es el <strong>@created.Number</strong></h2>
+            <p>Guarda el enlace para revisar tu posición sin entregar otros datos.</p>
+            <a class="button-link" href="/seguimiento/turnos/@created.TrackingCode">Seguir mi turno</a>
+        </section>
+    }
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = "";
+    private QueuePublicStatusDto? status;
+    private QueueTicketCreatedDto? created;
+    private CreateQueueTicketRequest request = new();
+    private Microsoft.AspNetCore.SignalR.Client.HubConnection? hub;
+    private string? error;
+    private bool busy;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await Load();
+        if (hub is not null) await hub.DisposeAsync();
+        hub = new Microsoft.AspNetCore.SignalR.Client.HubConnectionBuilder()
+            .WithUrl(Navigation.ToAbsoluteUri("/hubs/queue")).WithAutomaticReconnect().Build();
+        hub.On("QueueChanged", async () => { await Load(); await InvokeAsync(StateHasChanged); });
+        hub.Reconnected += async _ => { await hub.InvokeAsync("SubscribePublic", Slug); await Load(); };
+        try { await hub.StartAsync(); await hub.InvokeAsync("SubscribePublic", Slug); } catch { /* HTTP remains source of truth. */ }
+    }
+    private async Task Load()
+    {
+        error = null;
+        try { status = await Api.GetPublicQueueAsync(Slug); if (status is null) error = "La fila virtual no está disponible."; }
+        catch (ApiException ex) { error = ex.Message; }
+    }
+    private async Task Join()
+    {
+        busy = true; error = null;
+        try { created = await Api.JoinQueueAsync(Slug, request); }
+        catch (ApiException ex) { error = ex.Message; await Load(); }
+        finally { busy = false; }
+    }
+    private static string SessionLabel(string value) => value switch
+    { "Open" => "Abierta", "Paused" => "Pausada", _ => "Cerrada" };
+    public async ValueTask DisposeAsync() { if (hub is not null) await hub.DisposeAsync(); }
+}

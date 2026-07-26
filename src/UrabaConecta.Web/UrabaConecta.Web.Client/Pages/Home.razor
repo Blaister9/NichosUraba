@@ -6,15 +6,15 @@
 <section class="hero">
     <p class="eyebrow">Directorio local demostrativo</p>
     <h1>Encuentre servicios cerca de usted</h1>
-    <p>Consulte información pública y solicite una cita sin crear cuenta.</p>
+    <p>Consulte información pública, solicite una cita o tome un turno sin crear cuenta.</p>
 </section>
 <section class="search-panel" aria-label="Filtros del directorio">
     <label>Buscar por nombre<InputText @bind-Value="search" placeholder="Ej. Bella" /></label>
     <label>Municipio<InputSelect @bind-Value="municipality">
-        <option value="">Todos</option><option value="apartado">Apartadó</option><option value="turbo">Turbo</option>
+        <option value="">Todos</option><option value="apartado">Apartadó</option><option value="turbo">Turbo</option><option value="chigorodo">Chigorodó</option>
     </InputSelect></label>
     <label>Categoría<InputSelect @bind-Value="category">
-        <option value="">Todas</option><option value="belleza-cuidado-personal">Belleza y cuidado personal</option>
+        <option value="">Todas</option><option value="belleza-cuidado-personal">Belleza y cuidado personal</option><option value="barberia">Barbería</option>
     </InputSelect></label>
     <button class="primary" @onclick="Load">Buscar</button>
 </section>
@@ -32,6 +32,7 @@ else
             <article class="business-card">
                 <span class="tag">@business.Category.Name</span><h2>@business.Name</h2>
                 <p>@business.Description</p><p><strong>@business.Municipality.Name</strong> · @business.Address</p>
+                @if (business.HasVirtualQueue) { <span class="tag">Fila virtual disponible</span> }
                 <a class="button-link" href="/negocios/@business.Slug">Ver establecimiento</a>
             </article>
         }

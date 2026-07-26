@@ -25,6 +25,10 @@ else
                 @if (business.CanManageMembers)
                 {
                     <a class="secondary button-link" href="/panel/@business.Id/equipo">Equipo y permisos</a>
+                }
+                @if (business.CanManageQueues)
+                {
+                    <a class="button-link" href="/panel/@business.Id/turnos">Operar turnos</a>
                 }</div>
             </article>
         }

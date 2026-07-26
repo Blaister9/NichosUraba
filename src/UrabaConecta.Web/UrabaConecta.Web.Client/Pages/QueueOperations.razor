@@ -1,0 +1,103 @@
+@page "/panel/{BusinessId:guid}/turnos"
+@rendermode InteractiveAuto
+@attribute [Authorize]
+@implements IAsyncDisposable
+@inject IUrabaConectaApi Api
+@inject NavigationManager Navigation
+
+<PageTitle>Operación de turnos | UrabáConecta</PageTitle>
+<a class="back-link" href="/panel">← Establecimientos</a>
+<p class="eyebrow">Operación</p><h1>Turnos virtuales</h1>
+@if (error is not null) { <div class="error" role="alert">@error <button class="inline-button" @onclick="Load">Recargar</button></div> }
+@if (data is null && error is null) { <p class="notice">Cargando jornada…</p> }
+else if (data is not null)
+{
+    <section class="queue-toolbar">
+        <div><strong>@data.Definition.BusinessName</strong><br /><span>@data.Definition.Name · @SessionLabel(data.SessionStatus)</span></div>
+        <div class="actions">
+            <a class="secondary button-link" href="/panel/@BusinessId/configuracion/turnos">Configurar</a>
+            @if (data.SessionStatus == "Closed") { <button class="primary" @onclick="Open" disabled="@(!interactiveReady || busy)">Abrir jornada</button> }
+            @if (data.SessionStatus == "Open") { <button class="secondary" @onclick="Pause" disabled="@(!interactiveReady || busy)">Pausar</button> }
+            @if (data.SessionStatus == "Paused") { <button class="primary" @onclick="Resume" disabled="@(!interactiveReady || busy)">Reanudar</button> }
+            @if (data.SessionStatus != "Closed") { <button class="danger" @onclick="Close" disabled="@(!interactiveReady || busy)">Cerrar jornada</button> }
+        </div>
+    </section>
+    <div class="queue-numbers">
+        <div><span>Atendiendo</span><strong>@(data.CurrentNumber?.ToString() ?? "—")</strong></div>
+        <div><span>En espera</span><strong>@data.WaitingCount</strong></div>
+        <div><span>Siguiente número</span><strong>@data.NextNumber</strong></div>
+    </div>
+    @if (data.SessionStatus != "Closed")
+    {
+        <section class="queue-actions">
+            <button class="primary call-next" @onclick="CallNext" disabled="@(!interactiveReady || busy || data.WaitingCount == 0)">Llamar siguiente</button>
+            <EditForm Model="walkIn" OnValidSubmit="AddWalkIn" FormName="walk-in" class="walk-in-form">
+                <label>Alias presencial opcional <InputText @bind-Value="walkIn.Alias" maxlength="40" /></label>
+                <button class="secondary" disabled="@(!interactiveReady || busy || data.SessionStatus != "Open")">Agregar presencial</button>
+            </EditForm>
+        </section>
+    }
+    <section class="queue-board" aria-live="polite">
+        @foreach (var ticket in data.Tickets.Where(x => x.Status is not ("Completed" or "Cancelled")))
+        {
+            <article class="queue-row" data-ticket="@ticket.Number">
+                <div class="ticket-badge">@ticket.Number</div>
+                <div><strong>@(ticket.Alias ?? "Sin alias")</strong><br /><span class="meta">@StatusLabel(ticket.Status) · @(ticket.Source == "WalkIn" ? "Presencial" : "En línea")</span></div>
+                <div class="actions">
+                    @if (ticket.Status == "Called") { <button class="secondary" disabled="@(!interactiveReady || busy)" @onclick="() => Recall(ticket)">Volver a llamar</button><button class="primary" disabled="@(!interactiveReady || busy)" @onclick="() => Start(ticket)">Iniciar atención</button><button class="secondary" disabled="@(!interactiveReady || busy)" @onclick="() => Skip(ticket)">No se presentó</button> }
+                    @if (ticket.Status == "InService") { <button class="primary" disabled="@(!interactiveReady || busy)" @onclick="() => Complete(ticket)">Completar</button> }
+                    @if (ticket.Status == "Skipped" && ticket.RestoreCount == 0) { <button class="secondary" disabled="@(!interactiveReady || busy)" @onclick="() => Restore(ticket)">Devolver a espera</button> }
+                    @if (ticket.Status is "Waiting" or "Called" or "InService" or "Skipped") { <button class="danger" disabled="@(!interactiveReady || busy)" @onclick="() => Cancel(ticket)">Cancelar</button> }
+                </div>
+            </article>
+        }
+    </section>
+}
+@code {
+    [Parameter] public Guid BusinessId { get; set; }
+    private QueueAdminDto? data; private CreateQueueTicketRequest walkIn = new();
+    private Microsoft.AspNetCore.SignalR.Client.HubConnection? hub;
+    private string? error; private bool busy; private bool interactiveReady;
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+        interactiveReady = true;
+        StateHasChanged();
+    }
+    protected override async Task OnParametersSetAsync()
+    {
+        await Load();
+        if (hub is not null) await hub.DisposeAsync();
+        hub = new Microsoft.AspNetCore.SignalR.Client.HubConnectionBuilder()
+            .WithUrl(Navigation.ToAbsoluteUri("/hubs/queue")).WithAutomaticReconnect().Build();
+        hub.On("OperationsChanged", async () => { await Load(); await InvokeAsync(StateHasChanged); });
+        hub.Reconnected += async _ => { await hub.InvokeAsync("SubscribeOperations", BusinessId); await Load(); };
+        try { await hub.StartAsync(); await hub.InvokeAsync("SubscribeOperations", BusinessId); } catch { }
+    }
+    private async Task Load() { error = null; try { data = await Api.GetQueueAdminAsync(BusinessId); } catch (ApiException ex) { error = ex.Message; } }
+    private Task Open() => Run(() => Api.OpenQueueAsync(BusinessId));
+    private Task Pause() => Run(() => Api.PauseQueueAsync(BusinessId, data!.SessionVersion!.Value));
+    private Task Resume() => Run(() => Api.ResumeQueueAsync(BusinessId, data!.SessionVersion!.Value));
+    private Task Close() => Run(() => Api.CloseQueueAsync(BusinessId, data!.SessionVersion!.Value));
+    private Task CallNext() => Run(() => Api.CallNextAsync(BusinessId, data!.SessionVersion!.Value));
+    private async Task AddWalkIn() { await Run(async () => { await Api.AddWalkInAsync(BusinessId, walkIn); return await Api.GetQueueAdminAsync(BusinessId); }); walkIn = new(); }
+    private Task Act(QueueTicketAdminDto ticket, string action) => Run(() => Api.ChangeQueueTicketAsync(BusinessId,
+        ticket.Id, action, new() { TicketVersion = ticket.Version, SessionVersion = data!.SessionVersion!.Value }));
+    private Task Recall(QueueTicketAdminDto ticket) => Act(ticket, "recall");
+    private Task Start(QueueTicketAdminDto ticket) => Act(ticket, "start");
+    private Task Skip(QueueTicketAdminDto ticket) => Act(ticket, "skip");
+    private Task Complete(QueueTicketAdminDto ticket) => Act(ticket, "complete");
+    private Task Restore(QueueTicketAdminDto ticket) => Act(ticket, "restore");
+    private Task Cancel(QueueTicketAdminDto ticket) => Act(ticket, "cancel");
+    private async Task Run(Func<Task<QueueAdminDto>> action)
+    {
+        busy = true; error = null;
+        try { data = await action(); }
+        catch (ApiException ex) { error = ex.Message; await Load(); }
+        finally { busy = false; }
+    }
+    private static string SessionLabel(string s) => s switch { "Open" => "Abierta", "Paused" => "Pausada", _ => "Cerrada" };
+    private static string StatusLabel(string s) => s switch { "Waiting" => "En espera", "Called" => "Llamado",
+        "InService" => "En atención", "Skipped" => "No se presentó", _ => s };
+    public async ValueTask DisposeAsync() { if (hub is not null) await hub.DisposeAsync(); }
+}

@@ -1,0 +1,47 @@
+@page "/panel/{BusinessId:guid}/configuracion/turnos"
+@rendermode InteractiveAuto
+@attribute [Authorize]
+@inject IUrabaConectaApi Api
+
+<PageTitle>Configurar turnos | UrabáConecta</PageTitle>
+<a class="back-link" href="/panel/@BusinessId/turnos">← Operación de turnos</a>
+<p class="eyebrow">Configuración</p><h1>Fila virtual</h1>
+<p class="meta">Los cambios no cierran jornadas ni cancelan turnos silenciosamente.</p>
+@if (error is not null) { <div class="error" role="alert">@error</div> }
+@if (success is not null) { <div class="success" role="status">@success</div> }
+@if (model is null && error is null) { <p class="notice">Cargando configuración…</p> }
+else if (model is not null)
+{
+    <EditForm Model="model" OnValidSubmit="Save" FormName="queue-config" class="config-form narrow">
+        <DataAnnotationsValidator /><ValidationSummary />
+        <label>Nombre de la fila <InputText @bind-Value="model.Name" /></label>
+        <label>Duración promedio (minutos) <InputNumber @bind-Value="model.AverageDurationMinutes" /></label>
+        <label>Máximo de turnos en espera <InputNumber @bind-Value="model.MaximumWaiting" /></label>
+        <label>Mensaje público <InputTextArea @bind-Value="model.PublicMessage" /></label>
+        <label class="switch-row"><InputCheckbox @bind-Value="model.IsEnabled" /> Fila virtual habilitada</label>
+        <button class="primary" disabled="@busy">Guardar configuración</button>
+    </EditForm>
+}
+@code {
+    [Parameter] public Guid BusinessId { get; set; }
+    private SaveQueueDefinitionRequest? model;
+    private string? error; private string? success; private bool busy;
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            var data = await Api.GetQueueAdminAsync(BusinessId);
+            model = new() { Name = data.Definition.Name, AverageDurationMinutes = data.Definition.AverageDurationMinutes,
+                MaximumWaiting = data.Definition.MaximumWaiting, PublicMessage = data.Definition.PublicMessage,
+                IsEnabled = data.Definition.IsEnabled, Version = data.Definition.Version };
+        }
+        catch (ApiException ex) { error = ex.Message; }
+    }
+    private async Task Save()
+    {
+        if (model is null) return; busy = true; error = success = null;
+        try { var saved = await Api.SaveQueueDefinitionAsync(BusinessId, model); model.Version = saved.Version; success = "Configuración guardada."; }
+        catch (ApiException ex) { error = ex.Message; }
+        finally { busy = false; }
+    }
+}

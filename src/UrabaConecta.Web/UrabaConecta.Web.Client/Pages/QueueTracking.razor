@@ -1,0 +1,79 @@
+@page "/seguimiento/turnos/{Code}"
+@rendermode InteractiveAuto
+@implements IAsyncDisposable
+@inject IUrabaConectaApi Api
+@inject NavigationManager Navigation
+
+<PageTitle>Seguimiento de turno | UrabáConecta</PageTitle>
+@if (ticket is null && error is null) { <p class="notice">Consultando tu turno…</p> }
+else if (error is not null) { <div class="error" role="alert">@error</div> }
+else if (ticket is not null)
+{
+    <section class="queue-ticket narrow">
+        <p class="eyebrow">@ticket.BusinessName · @ticket.QueueName</p>
+        <span>Tu turno</span><strong class="ticket-number">@ticket.Number</strong>
+        <h1>@ticket.StatusLabel</h1>
+        @if (ticket.Status == "Waiting")
+        {
+            <p><strong>@ticket.PeopleAhead</strong> turno(s) delante · espera aproximada <strong>~@ticket.ApproximateWaitMinutes min</strong>.</p>
+        }
+        <p class="meta">El tiempo es aproximado y puede cambiar. Esta página se actualiza en tiempo real y al reconectar.</p>
+        @if (ticket.CanCancel)
+        {
+            <button class="danger" @onclick="Cancel" disabled="@busy">Cancelar mi turno</button>
+        }
+    </section>
+}
+
+@code {
+    [Parameter] public string Code { get; set; } = "";
+    private QueueTicketTrackingDto? ticket;
+    private Microsoft.AspNetCore.SignalR.Client.HubConnection? hub;
+    private readonly CancellationTokenSource refreshCancellation = new();
+    private string? error;
+    private bool busy;
+    protected override async Task OnParametersSetAsync()
+    {
+        await Load();
+        if (hub is not null) await hub.DisposeAsync();
+        hub = new Microsoft.AspNetCore.SignalR.Client.HubConnectionBuilder()
+            .WithUrl(Navigation.ToAbsoluteUri("/hubs/queue")).WithAutomaticReconnect().Build();
+        hub.On("TicketChanged", async () => { await Load(); await InvokeAsync(StateHasChanged); });
+        hub.Reconnected += async _ => { await hub.InvokeAsync("SubscribeTicket", Code); await Load(); };
+        try { await hub.StartAsync(); await hub.InvokeAsync("SubscribeTicket", Code); } catch { }
+        _ = RefreshLoop();
+    }
+    private async Task Load()
+    {
+        error = null;
+        try { ticket = await Api.GetQueueTicketAsync(Code); if (ticket is null) error = "No encontramos el turno."; }
+        catch (ApiException ex) { error = ex.Message; }
+    }
+    private async Task Cancel()
+    {
+        if (ticket is null) return;
+        busy = true;
+        try { await Api.CancelQueueTicketAsync(Code, ticket.Version); await Load(); }
+        catch (ApiException ex) { error = ex.Message; }
+        finally { busy = false; }
+    }
+    private async Task RefreshLoop()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(refreshCancellation.Token))
+            {
+                await Load();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+    public async ValueTask DisposeAsync()
+    {
+        refreshCancellation.Cancel();
+        refreshCancellation.Dispose();
+        if (hub is not null) await hub.DisposeAsync();
+    }
+}

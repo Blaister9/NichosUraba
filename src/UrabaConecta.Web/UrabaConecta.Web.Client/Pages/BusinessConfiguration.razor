@@ -25,6 +25,10 @@ else if (business is not null)
         <a class="config-card" href="/panel/@BusinessId/configuracion/personal"><span>02</span><h2>Personal</h2><p>Perfiles operativos y servicios que prestan.</p></a>
         <a class="config-card" href="/panel/@BusinessId/configuracion/horarios"><span>03</span><h2>Horarios</h2><p>Apertura habitual por día, hora de Colombia.</p></a>
         <a class="config-card" href="/panel/@BusinessId/configuracion/excepciones"><span>04</span><h2>Excepciones</h2><p>Cierres y aperturas para fechas concretas.</p></a>
+        @if (business.CanManageQueues)
+        {
+            <a class="config-card" href="/panel/@BusinessId/configuracion/turnos"><span>05</span><h2>Turnos</h2><p>Nombre, capacidad, duración y publicación de la fila.</p></a>
+        }
     </div>
 }
 
