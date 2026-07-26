@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>UrabaConecta — Primera cohorte</title>
+  <style>
+    :root{--ink:#142824;--muted:#5d716c;--paper:#f4f0e7;--card:#fffdf8;--green:#146b55;--lime:#cfe85d;--amber:#f2b84b;--line:#d8ddd5}
+    *{box-sizing:border-box} body{margin:0;background:var(--paper);color:var(--ink);font-family:Inter,Segoe UI,Arial,sans-serif}
+    main{min-height:100vh}.slide{display:none;min-height:100vh;padding:clamp(28px,6vw,82px);align-content:center;position:relative}
+    .slide.active{display:grid}.eyebrow{text-transform:uppercase;letter-spacing:.16em;font-size:.76rem;font-weight:800;color:var(--green)}
+    h1{font-size:clamp(2.7rem,7vw,6.3rem);line-height:.92;max-width:1050px;margin:.22em 0}.title{font-size:clamp(2.1rem,5vw,4.6rem)}
+    h2{font-size:clamp(1.7rem,3vw,3rem);margin:.25em 0}.lead{font-size:clamp(1.15rem,2.1vw,1.65rem);line-height:1.45;max-width:920px}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:28px}.grid.two{grid-template-columns:repeat(2,1fr)}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:0 8px 28px #17382d0c}
+    .card strong{display:block;color:var(--green);font-size:1.05rem;margin-bottom:8px}.big{font-size:clamp(2.6rem,5vw,4.8rem);font-weight:900;color:var(--green)}
+    ul{padding-left:1.15em;line-height:1.5}li{margin:.35em 0}.tag{display:inline-block;background:var(--lime);padding:5px 10px;border-radius:999px;font-size:.8rem;font-weight:800}
+    .warn{border-left:7px solid var(--amber)}.source{font-size:.76rem;color:var(--muted);line-height:1.35;margin-top:14px}
+    .steps{counter-reset:s}.step{display:grid;grid-template-columns:42px 1fr;gap:12px;align-items:start;margin:12px 0}.step:before{counter-increment:s;content:counter(s);width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:var(--green);color:white;font-weight:800}
+    footer{position:fixed;bottom:14px;left:20px;right:20px;display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:.82rem;z-index:2}
+    button{border:0;border-radius:999px;padding:9px 14px;background:var(--ink);color:white;cursor:pointer;margin-left:6px}
+    a{color:var(--green);overflow-wrap:anywhere}.kicker{max-width:780px;border-top:4px solid var(--lime);padding-top:18px}
+    @media(max-width:800px){.grid,.grid.two{grid-template-columns:1fr}.slide{align-content:start;padding:38px 22px 90px}.card{padding:17px}footer{background:var(--paper);padding:8px 0}}
+    @media print{footer{display:none}.slide{display:grid!important;page-break-after:always;min-height:100vh}}
+  </style>
+</head>
+<body>
+<main>
+  <section class="slide active">
+    <div class="eyebrow">Decisión de cohorte · 2026-07-26</div>
+    <h1>Probar uso.<br>Probar pago.<br><span style="color:var(--green)">No prometer.</span></h1>
+    <p class="lead kicker">Primera cohorte comercial de UrabaConecta: un experimento asistido de 30 días en cuatro municipios.</p>
+    <p><span class="tag">Hipótesis, no mercado validado</span></p>
+  </section>
+
+  <section class="slide">
+    <div class="eyebrow">Meta interna</div>
+    <h2 class="title">Un embudo pequeño y verificable</h2>
+    <div class="grid">
+      <div class="card"><div class="big">15</div><strong>prospectos calificados</strong><span>6 Apartadó · 3 Carepa · 3 Chigorodó · 3 Turbo</span></div>
+      <div class="card"><div class="big">5–10</div><strong>negocios incorporados</strong><span>solo con 12/16 o más y sin función esencial ausente</span></div>
+      <div class="card"><div class="big">30</div><strong>días de prueba</strong><span>uso, soporte, precio y renovación</span></div>
+    </div>
+    <p class="source">Cifras: metas operativas internas de la cohorte; no son estimaciones de mercado.</p>
+  </section>
+
+  <section class="slide">
+    <div class="eyebrow">Foco inicial</div>
+    <h2 class="title">Una tarea frecuente, un módulo</h2>
+    <div class="grid">
+      <div class="card"><strong>Citas</strong><p>Uñas, pestañas/cejas, peluquerías, barberías, spas y peluquerías caninas.</p></div>
+      <div class="card"><strong>Turnos</strong><p>Barberías con llegada espontánea y lavaderos de carros o motos.</p></div>
+      <div class="card"><strong>Pedidos para recoger</strong><p>Comidas rápidas, reposterías y panaderías con catálogo corto. Restaurante pequeño solo si recoger es un flujo real.</p></div>
+    </div>
+    <p class="source">Priorización: inferencia de compatibilidad con el producto actual; debe validarse negocio por negocio.</p>
+  </section>
+
+  <section class="slide">
+    <div class="eyebrow">Oferta</div>
+    <h2 class="title">Precio explícitamente hipotético</h2>
+    <div class="grid two">
+      <div class="card"><strong>Piloto de 30 días</strong><div class="big">COP 39.900</div><p>Un módulo, configuración, hasta dos responsables y revisión semanal.</p><p>Segundo módulo: +COP 15.000. Tres módulos: COP 69.900.</p></div>
+      <div class="card"><strong>Después del piloto</strong><div class="big">49.900</div><p>COP/mes por un módulo; dos: COP 69.900; tres: COP 89.900.</p><p>Configuración posterior: COP 80.000 una vez.</p></div>
+    </div>
+    <p class="source">Valores definidos como hipótesis comercial por el equipo. No existe aún evidencia local de disposición de pago.</p>
+  </section>
+
+  <section class="slide">
+    <div class="eyebrow">Selección</div>
+    <h2 class="title">Ocho preguntas, 16 puntos</h2>
+    <div class="grid two">
+      <div class="card"><ul><li>Acceso al propietario</li><li>Frecuencia</li><li>Dolor observable</li><li>Compatibilidad actual</li></ul></div>
+      <div class="card"><ul><li>Responsable operativo</li><li>Mantenimiento de datos</li><li>Aceptación del piloto</li><li>Aceptación del precio</li></ul></div>
+    </div>
+    <p class="lead"><strong>12–16:</strong> incorporar. <strong>9–11:</strong> nutrir o probar problema. <strong>0–8:</strong> descartar por ahora.</p>
+    <p class="source">Escala interna: 0, 1 o 2 por criterio. Aceptar el precio verbalmente no equivale a pagar.</p>
+  </section>
+
+  <section class="slide">
+    <div class="eyebrow">Límites</div>
+    <h2 class="title">Lo que no se vende</h2>
+    <div class="grid two">
+      <div class="card warn"><strong>Funciones ausentes</strong><p>Pagos, domicilios, inventario, facturación, POS, órdenes de taller, historia clínica y WhatsApp automático.</p></div>
+      <div class="card warn"><strong>Promesas prohibidas</strong><p>Aumento de ventas, ahorro garantizado, integración futura, desarrollo a la medida o liderazgo de mercado.</p></div>
+    </div>
+    <p class="lead">Si una función ausente es indispensable, no se incorpora el negocio.</p>
+  </section>
+
+  <section class="slide">
+    <div class="eyebrow">Decisión al día 30</div>
+    <h2 class="title">Mínimos para continuar</h2>
+    <div class="grid">
+      <div class="card"><div class="big">4</div><strong>publican enlace</strong></div>
+      <div class="card"><div class="big">3</div><strong>activos semanalmente</strong></div>
+      <div class="card"><div class="big">3</div><strong>con ≥10 operaciones</strong></div>
+      <div class="card"><div class="big">2</div><strong>renovaciones pagadas</strong></div>
+      <div class="card"><div class="big">1</div><strong>referencia</strong></div>
+      <div class="card"><strong>Más</strong><p>5 incorporados, soporte sostenible y ningún riesgo crítico de privacidad.</p></div>
+    </div>
+    <p class="source">Umbrales internos. GO significa seguir validando el mismo alcance, no declarar product–market fit ni construir.</p>
+  </section>
+
+  <section class="slide">
+    <div class="eyebrow">Primer movimiento</div>
+    <h2 class="title">La acción exacta de mañana</h2>
+    <div class="card">
+      <div class="steps">
+        <div class="step"><div><strong>A las 8:00 a. m.</strong> crear la hoja privada `Cohorte-01 / Prospectos` y copiar la plantilla sin contactos.</div></div>
+        <div class="step"><div><strong>A las 8:15 a. m.</strong> asignar roles A/B/C y diez códigos de candidatos a cada socia.</div></div>
+        <div class="step"><div><strong>Antes de las 10:00 a. m.</strong> cada socia contacta dos negocios con acceso al propietario usando el guion y agenda un diagnóstico de 12 minutos.</div></div>
+      </div>
+    </div>
+    <p class="source">Meta interna de ejecución. Datos reales únicamente en espacio privado con acceso restringido.</p>
+  </section>
+
+  <section class="slide">
+    <div class="eyebrow">Fuentes · consulta 2026-07-26</div>
+    <h2 class="title">Referencias, no validación local</h2>
+    <div class="grid two">
+      <div class="card"><strong>Competidores y alternativas</strong>
+        <ul>
+          <li><a href="https://agendapro.com/co/planes">https://agendapro.com/co/planes</a></li>
+          <li><a href="https://www.fresha.com/es/pricing">https://www.fresha.com/es/pricing</a></li>
+          <li><a href="https://waitwhile.com/es/pricing/">https://waitwhile.com/es/pricing/</a></li>
+          <li><a href="https://www.gloriafood.com/pricing">https://www.gloriafood.com/pricing</a></li>
+          <li><a href="https://support.google.com/calendar/answer/10729749?hl=es">Google Calendar: horarios de citas</a></li>
+          <li><a href="https://calendly.com/pt/help/choose-the-right-calendly-plan-for-your-team">Calendly: planes</a></li>
+        </ul>
+      </div>
+      <div class="card"><strong>Contexto institucional</strong>
+        <ul>
+          <li><a href="https://ctde.ccuraba.org.co/">https://ctde.ccuraba.org.co/</a></li>
+          <li><a href="https://ccuraba.org.co/site/wp-content/uploads/2025/03/INFORME-DE-GESTION-2024.pdf">CCU — Informe de Gestión 2024</a></li>
+          <li><a href="https://ccuraba.org.co/site/wp-content/uploads/2023/01/INFORME-DE-LABORES-2022-1.pdf">CCU — Informe de Labores 2022</a></li>
+          <li><a href="https://mintic.gov.co/portal/inicio/Sala-de-prensa/Noticias/396235%3ADisponibles-mas-de-5-000-cupos-en-Tu-Negocio-en-Linea-2024-para-empresarios-de-MiPyme-y-comerciantes-de-economia-popular-y-comunitaria">MinTIC — Tu Negocio en Línea 2024</a></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</main>
+<footer><span id="count">1 / 9</span><span>← → teclado <button id="prev" aria-label="Anterior">←</button><button id="next" aria-label="Siguiente">→</button></span></footer>
+<script>
+  const slides=[...document.querySelectorAll('.slide')]; let current=0;
+  function show(i){current=(i+slides.length)%slides.length;slides.forEach((s,n)=>s.classList.toggle('active',n===current));document.querySelector('#count').textContent=`${current+1} / ${slides.length}`;}
+  document.querySelector('#prev').onclick=()=>show(current-1);document.querySelector('#next').onclick=()=>show(current+1);
+  addEventListener('keydown',e=>{if(['ArrowRight','PageDown',' '].includes(e.key))show(current+1);if(['ArrowLeft','PageUp'].includes(e.key))show(current-1);});
+</script>
+</body>
+</html>
