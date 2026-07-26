@@ -2,7 +2,7 @@
 
 ## Alcance implementado
 
-Vertical demostrativa para **Restaurante Sazón Local**, Carepa (`restaurant-sazon-local`). Permite consultar menú por categorías, armar un carrito, escoger una franja con capacidad, crear un pedido sin cuenta ni pago en línea, conservar un enlace privado y seguir su estado.
+Vertical demostrativa para **Restaurante Sazón Local**, Carepa (`restaurante-sazon-local`). Permite consultar menú por categorías, armar un carrito, escoger una franja con capacidad, crear un pedido sin cuenta ni pago en línea, conservar un enlace privado y seguir su estado.
 
 El panel privado separa dos capacidades:
 

@@ -187,7 +187,7 @@ public static class DevelopmentSeeder
             db.Add(category);
         }
         if (!await db.Businesses.AnyAsync(x => x.Id == SazonBusinessId))
-            db.Add(new Business(SazonBusinessId, "restaurant-sazon-local", "Restaurante Sazón Local",
+            db.Add(new Business(SazonBusinessId, "restaurante-sazon-local", "Restaurante Sazón Local",
                 municipality.Id, category.Id, "Restaurante ficticio con pedidos para recoger.",
                 "Centro, Carepa", "300 000 0003"));
         await db.SaveChangesAsync();
@@ -204,19 +204,19 @@ public static class DevelopmentSeeder
                 new TimeOnly(11, 0), new TimeOnly(20, 30)));
         var categories = new[]
         {
-            new ProductCategory(Guid.Parse("60000000-0000-0000-0000-000000000001"), SazonBusinessId, "Almuerzos", 1),
-            new ProductCategory(Guid.Parse("60000000-0000-0000-0000-000000000002"), SazonBusinessId, "Comidas rápidas", 2),
+            new ProductCategory(Guid.Parse("60000000-0000-0000-0000-000000000001"), SazonBusinessId, "Hamburguesas", 1),
+            new ProductCategory(Guid.Parse("60000000-0000-0000-0000-000000000002"), SazonBusinessId, "Acompañamientos", 2),
             new ProductCategory(Guid.Parse("60000000-0000-0000-0000-000000000003"), SazonBusinessId, "Bebidas", 3)
         };
         foreach (var item in categories)
             if (!await db.ProductCategories.AnyAsync(x => x.Id == item.Id)) db.ProductCategories.Add(item);
         var products = new[]
         {
-            new Product(Guid.Parse("70000000-0000-0000-0000-000000000001"), SazonBusinessId, categories[0].Id, "Corrientazo de pollo", "Sopa, seco y bebida.", 18000, 1),
-            new Product(Guid.Parse("70000000-0000-0000-0000-000000000002"), SazonBusinessId, categories[0].Id, "Corrientazo de carne", "Sopa, seco y bebida.", 20000, 2),
-            new Product(Guid.Parse("70000000-0000-0000-0000-000000000003"), SazonBusinessId, categories[1].Id, "Hamburguesa de la casa", "Carne, queso y vegetales.", 22000, 1),
-            new Product(Guid.Parse("70000000-0000-0000-0000-000000000004"), SazonBusinessId, categories[1].Id, "Salchipapa", "Porción personal.", 16000, 2),
-            new Product(Guid.Parse("70000000-0000-0000-0000-000000000005"), SazonBusinessId, categories[2].Id, "Limonada natural", "Vaso de 16 oz.", 6000, 1)
+            new Product(Guid.Parse("70000000-0000-0000-0000-000000000001"), SazonBusinessId, categories[0].Id, "Hamburguesa tradicional", "Carne, queso y vegetales.", 18000, 1),
+            new Product(Guid.Parse("70000000-0000-0000-0000-000000000002"), SazonBusinessId, categories[0].Id, "Hamburguesa especial", "Hamburguesa especial de la casa.", 24000, 2),
+            new Product(Guid.Parse("70000000-0000-0000-0000-000000000003"), SazonBusinessId, categories[1].Id, "Papas fritas", "Porción personal.", 8000, 1),
+            new Product(Guid.Parse("70000000-0000-0000-0000-000000000004"), SazonBusinessId, categories[2].Id, "Limonada natural", "Vaso de 16 oz.", 6000, 1),
+            new Product(Guid.Parse("70000000-0000-0000-0000-000000000005"), SazonBusinessId, categories[2].Id, "Gaseosa personal", "Presentación personal.", 5000, 2)
         };
         foreach (var item in products)
             if (!await db.Products.AnyAsync(x => x.Id == item.Id)) db.Products.Add(item);

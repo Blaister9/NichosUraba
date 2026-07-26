@@ -12,14 +12,14 @@ public sealed class OrderingJourneyTests(BrowserFixture fixture) : IClassFixture
         var visitor = await visitorContext.NewPageAsync();
 
         // 1. Directorio -> restaurante -> pedidos.
-        await visitor.GotoAsync($"{fixture.BaseUrl}/negocios/restaurant-sazon-local");
+        await visitor.GotoAsync($"{fixture.BaseUrl}/negocios/restaurante-sazon-local");
         await Expect(visitor.GetByRole(AriaRole.Heading, new() { Name = "Restaurante Sazón Local" })).ToBeVisibleAsync();
         await Expect(visitor.GetByRole(AriaRole.Link, new() { Name = "Ver menú" })).ToBeVisibleAsync();
-        await visitor.GotoAsync($"{fixture.BaseUrl}/negocios/restaurant-sazon-local/pedidos");
+        await visitor.GotoAsync($"{fixture.BaseUrl}/negocios/restaurante-sazon-local/pedidos");
         await Expect(visitor.GetByRole(AriaRole.Heading, new() { Name = "Pedido para recoger" })).ToBeVisibleAsync();
 
         // 2. Menú por categorías y carrito recalculado.
-        await Expect(visitor.GetByRole(AriaRole.Heading, new() { Name = "Almuerzos" })).ToBeVisibleAsync();
+        await Expect(visitor.GetByRole(AriaRole.Heading, new() { Name = "Hamburguesas" })).ToBeVisibleAsync();
         await visitor.Locator("[data-testid=product-card]").First.GetByRole(AriaRole.Button, new() { Name = "+" }).ClickAsync();
         await Expect(visitor.GetByText("1 unidades")).ToBeVisibleAsync();
 
@@ -57,7 +57,7 @@ public sealed class OrderingJourneyTests(BrowserFixture fixture) : IClassFixture
         await Login(owner, DevelopmentSeeder.SazonOwnerEmail);
         await owner.GotoAsync($"{fixture.BaseUrl}/panel/{DevelopmentSeeder.SazonBusinessId}/configuracion/pedidos");
         await Expect(owner.GetByRole(AriaRole.Heading, new() { Name = "Pedidos y catálogo" })).ToBeVisibleAsync();
-        await Expect(owner.GetByText("Hamburguesa de la casa")).ToBeVisibleAsync();
+        await Expect(owner.GetByText("Hamburguesa especial")).ToBeVisibleAsync();
 
         // 8. Aislamiento y composición móvil sin desbordamiento.
         await using var deniedContext = await MobileContext();

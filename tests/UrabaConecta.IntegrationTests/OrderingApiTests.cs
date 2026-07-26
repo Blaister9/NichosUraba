@@ -18,7 +18,7 @@ public sealed partial class OrderingApiTests(PostgresWebFactory factory) : IClas
     {
         using var client = Client();
         var menu = await client.GetFromJsonAsync<PickupMenuDto>(
-            "/api/v1/public/businesses/restaurant-sazon-local/menu", Json);
+            "/api/v1/public/businesses/restaurante-sazon-local/menu", Json);
         Assert.Equal(3, menu!.Categories.Count); Assert.Equal(5, menu.Products.Count);
         var created = await Create(client, "Ana", menu.Products[0].Id);
         var tracked = await client.GetFromJsonAsync<PickupOrderTrackingDto>(
@@ -36,12 +36,12 @@ public sealed partial class OrderingApiTests(PostgresWebFactory factory) : IClas
     {
         using var client = Client();
         var menu = await client.GetFromJsonAsync<PickupMenuDto>(
-            "/api/v1/public/businesses/restaurant-sazon-local/menu", Json);
+            "/api/v1/public/businesses/restaurante-sazon-local/menu", Json);
         var slots = await client.GetFromJsonAsync<PickupSlotListDto>(
-            "/api/v1/public/businesses/restaurant-sazon-local/pickup-slots", Json);
+            "/api/v1/public/businesses/restaurante-sazon-local/pickup-slots", Json);
         var slot = slots!.Slots.Last();
         var calls = Enumerable.Range(0, 6).Select(i => client.PostAsJsonAsync(
-            "/api/v1/public/businesses/restaurant-sazon-local/orders",
+            "/api/v1/public/businesses/restaurante-sazon-local/orders",
             Request($"C{i}", menu!.Products[0].Id, slot.Start), Json));
         var responses = await Task.WhenAll(calls);
         Assert.Equal(5, responses.Count(x => x.StatusCode == HttpStatusCode.Created));
@@ -53,7 +53,7 @@ public sealed partial class OrderingApiTests(PostgresWebFactory factory) : IClas
     {
         using var client = Client();
         var menu = await client.GetFromJsonAsync<PickupMenuDto>(
-            "/api/v1/public/businesses/restaurant-sazon-local/menu", Json);
+            "/api/v1/public/businesses/restaurante-sazon-local/menu", Json);
         var product = menu!.Products[0];
         var created = await Create(client, "Precio", product.Id);
         await using var scope = factory.Services.CreateAsyncScope();
@@ -85,7 +85,7 @@ public sealed partial class OrderingApiTests(PostgresWebFactory factory) : IClas
     {
         using var publicClient = Client(); using var owner = Client();
         var menu = await publicClient.GetFromJsonAsync<PickupMenuDto>(
-            "/api/v1/public/businesses/restaurant-sazon-local/menu", Json);
+            "/api/v1/public/businesses/restaurante-sazon-local/menu", Json);
         var created = await Create(publicClient, "Estado", menu!.Products[0].Id);
         await Login(owner, DevelopmentSeeder.SazonOwnerEmail);
         var orders = await owner.GetFromJsonAsync<IReadOnlyList<PickupOrderAdminDto>>(
@@ -105,8 +105,8 @@ public sealed partial class OrderingApiTests(PostgresWebFactory factory) : IClas
     private async Task<PickupOrderCreatedDto> Create(HttpClient client, string alias, Guid productId)
     {
         var slots = await client.GetFromJsonAsync<PickupSlotListDto>(
-            "/api/v1/public/businesses/restaurant-sazon-local/pickup-slots", Json);
-        var response = await client.PostAsJsonAsync("/api/v1/public/businesses/restaurant-sazon-local/orders",
+            "/api/v1/public/businesses/restaurante-sazon-local/pickup-slots", Json);
+        var response = await client.PostAsJsonAsync("/api/v1/public/businesses/restaurante-sazon-local/orders",
             Request(alias, productId, slots!.Slots.First().Start), Json);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         return (await response.Content.ReadFromJsonAsync<PickupOrderCreatedDto>(Json))!;
