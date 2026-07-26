@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Configuration;
 using UrabaConecta.Application;
 using UrabaConecta.Domain;
 using UrabaConecta.Infrastructure.Identity;
@@ -21,6 +22,7 @@ public static class DevelopmentSeeder
     public const string SazonOwnerEmail = "propietario@sazon.demo";
     public const string SazonOrdersWorkerEmail = "pedidos@sazon.demo";
     public const string SazonNoPermissionEmail = "sinpedidos@sazon.demo";
+    // Credencial exclusivamente local para Development y pruebas. Demo exige secretos externos distintos.
     public const string DemoPassword = "UrabaDemo!2026";
     public static readonly Guid BellaBusinessId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     public static readonly Guid OtherBusinessId = Guid.Parse("22222222-2222-2222-2222-222222222222");
@@ -35,23 +37,33 @@ public static class DevelopmentSeeder
         var codes = scope.ServiceProvider.GetRequiredService<IPublicCodeService>();
         var protector = scope.ServiceProvider.GetRequiredService<UrabaConecta.Application.IPersonalDataProtector>();
         await db.Database.MigrateAsync();
+        var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+        if (environment.IsEnvironment("Demo") &&
+            !configuration.GetValue<bool>("DemoSeed:Enabled"))
+            return;
+        var businessPassword = environment.IsDevelopment()
+            ? DemoPassword
+            : RequiredSecret(configuration, "DemoSeed:BusinessPassword");
+        var adminPassword = environment.IsDevelopment()
+            ? DemoPassword
+            : RequiredSecret(configuration, "DemoSeed:AdminPassword");
         var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
         foreach (var role in new[] { "PlatformAdmin", "BusinessOwner", "BusinessWorker" })
             if (!await roleManager.RoleExistsAsync(role))
                 await roleManager.CreateAsync(new IdentityRole<Guid>(role));
 
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-        var platformAdmin = await EnsureUser(userManager, PlatformAdminEmail, "Administración UrabáConecta");
-        var bellaOwner = await EnsureUser(userManager, BellaOwnerEmail, "Propietaria Bella");
-        var otherOwner = await EnsureUser(userManager, OtherOwnerEmail, "Propietario negocio aislado");
-        var bellaWorker = await EnsureUser(userManager, BellaWorkerEmail, "Trabajadora Bella");
-        var configurationWorker = await EnsureUser(userManager, BellaConfigurationWorkerEmail, "Configuradora Bella");
-        var corteOwner = await EnsureUser(userManager, CorteOwnerEmail, "Propietario El Corte");
-        var queueWorker = await EnsureUser(userManager, CorteQueueWorkerEmail, "Operador de turnos");
-        var noPermission = await EnsureUser(userManager, CorteNoPermissionEmail, "Trabajador sin permiso");
-        var sazonOwner = await EnsureUser(userManager, SazonOwnerEmail, "Propietario Sazón Local");
-        var ordersWorker = await EnsureUser(userManager, SazonOrdersWorkerEmail, "Operador de pedidos");
-        var noOrdersPermission = await EnsureUser(userManager, SazonNoPermissionEmail, "Trabajador sin pedidos");
+        var platformAdmin = await EnsureUser(userManager, PlatformAdminEmail, "Administración UrabáConecta", adminPassword);
+        var bellaOwner = await EnsureUser(userManager, BellaOwnerEmail, "Propietaria Bella", businessPassword);
+        var otherOwner = await EnsureUser(userManager, OtherOwnerEmail, "Propietario negocio aislado", businessPassword);
+        var bellaWorker = await EnsureUser(userManager, BellaWorkerEmail, "Trabajadora Bella", businessPassword);
+        var configurationWorker = await EnsureUser(userManager, BellaConfigurationWorkerEmail, "Configuradora Bella", businessPassword);
+        var corteOwner = await EnsureUser(userManager, CorteOwnerEmail, "Propietario El Corte", businessPassword);
+        var queueWorker = await EnsureUser(userManager, CorteQueueWorkerEmail, "Operador de turnos", businessPassword);
+        var noPermission = await EnsureUser(userManager, CorteNoPermissionEmail, "Trabajador sin permiso", businessPassword);
+        var sazonOwner = await EnsureUser(userManager, SazonOwnerEmail, "Propietario Sazón Local", businessPassword);
+        var ordersWorker = await EnsureUser(userManager, SazonOrdersWorkerEmail, "Operador de pedidos", businessPassword);
+        var noOrdersPermission = await EnsureUser(userManager, SazonNoPermissionEmail, "Trabajador sin pedidos", businessPassword);
         if (!await userManager.IsInRoleAsync(platformAdmin, "PlatformAdmin"))
             await userManager.AddToRoleAsync(platformAdmin, "PlatformAdmin");
         if (!await userManager.IsInRoleAsync(bellaOwner, "BusinessOwner")) await userManager.AddToRoleAsync(bellaOwner, "BusinessOwner");
@@ -120,7 +132,7 @@ public static class DevelopmentSeeder
     }
 
     private static async Task<ApplicationUser> EnsureUser(UserManager<ApplicationUser> manager, string email,
-        string displayName)
+        string displayName, string password)
     {
         var existing = await manager.FindByEmailAsync(email);
         if (existing is not null)
@@ -136,10 +148,15 @@ public static class DevelopmentSeeder
         {
             Id = Guid.NewGuid(), UserName = email, Email = email, EmailConfirmed = true, DisplayName = displayName
         };
-        var result = await manager.CreateAsync(user, DemoPassword);
+        var result = await manager.CreateAsync(user, password);
         if (!result.Succeeded) throw new InvalidOperationException(string.Join("; ", result.Errors.Select(x => x.Description)));
         return user;
     }
+
+    private static string RequiredSecret(IConfiguration configuration, string key)
+        => !string.IsNullOrWhiteSpace(configuration[key])
+            ? configuration[key]!
+            : throw new InvalidOperationException($"Falta {key} para el ambiente Demo.");
 
     private static async Task EnsureMembership(AppDbContext db, Guid businessId, Guid userId, MembershipRole role,
         bool canManageConfiguration = false, bool canManageQueues = false, bool canManageOrders = false)

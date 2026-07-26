@@ -12,4 +12,4 @@
 
 **9:00–10:00.** Regrese al panel, muestre que cada cuenta ve solo acciones autorizadas y cierre indicando que es una demo controlada, no un despliegue productivo.
 
-Contraseña común de demo: `UrabaDemo!2026`. Si algo falla, use los datos sembrados tras un reinicio limpio y no improvise cambios en vivo.
+Las credenciales del despliegue se entregan por el canal privado acordado y nunca se escriben en Git, logs, URL ni capturas. Si algo falla, use los datos sembrados tras un reinicio y no improvise cambios en vivo.

@@ -3,6 +3,7 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using UrabaConecta.Application;
 using UrabaConecta.Contracts;
@@ -14,6 +15,8 @@ using UrabaConecta.Web.Components.Account;
 using UrabaConecta.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+if (int.TryParse(Environment.GetEnvironmentVariable("PORT"), out var railwayPort))
+    builder.WebHost.UseUrls($"http://0.0.0.0:{railwayPort}");
 builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
 builder.Logging.AddFilter("Microsoft.AspNetCore.SignalR", LogLevel.Warning);
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
@@ -31,6 +34,11 @@ builder.Services.AddAuthentication(options =>
     options.DefaultScheme = IdentityConstants.ApplicationScheme;
     options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
 }).AddIdentityCookies();
+if (!builder.Environment.IsDevelopment())
+{
+    builder.Services.ConfigureApplicationCookie(options =>
+        options.Cookie.SecurePolicy = CookieSecurePolicy.Always);
+}
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy("BusinessMember", policy => policy.RequireAuthenticatedUser())
     .AddPolicy("BusinessOwner", policy => policy.RequireRole("BusinessOwner"))
@@ -55,6 +63,14 @@ var dataProtection = builder.Services.AddDataProtection().SetApplicationName("Ur
 var keysPath = builder.Configuration["DataProtection:KeysPath"];
 if (!string.IsNullOrWhiteSpace(keysPath))
     dataProtection.PersistKeysToFileSystem(new DirectoryInfo(keysPath));
+else if (builder.Environment.IsEnvironment("Demo"))
+    throw new InvalidOperationException("Falta DataProtection:KeysPath para el ambiente Demo.");
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 builder.Services.AddScoped<IUrabaStore, UrabaStore>();
 builder.Services.AddScoped<IMembershipAdministrationStore, MembershipAdministrationStore>();
 builder.Services.AddScoped<IQueueStore, QueueStore>();
@@ -94,6 +110,7 @@ builder.Services.AddRateLimiter(options =>
 });
 
 var app = builder.Build();
+app.UseForwardedHeaders();
 if (app.Environment.IsDevelopment()) app.UseWebAssemblyDebugging();
 else { app.UseExceptionHandler(); app.UseHsts(); }
 app.UseExceptionHandler();

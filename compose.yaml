@@ -8,6 +8,9 @@ services:
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-urabaconecta};Username=${POSTGRES_USER:-urabaconecta};Password=${POSTGRES_PASSWORD}
       URABACONECTA_TRACKING_HMAC_KEY: ${URABACONECTA_TRACKING_HMAC_KEY}
       DataProtection__KeysPath: /app/keys
+      DemoSeed__Enabled: ${DEMO_SEED_ENABLED:-true}
+      DemoSeed__AdminPassword: ${DEMO_SEED_ADMIN_PASSWORD}
+      DemoSeed__BusinessPassword: ${DEMO_SEED_BUSINESS_PASSWORD}
     ports:
       - "${APP_PORT:-8088}:8080"
     volumes:

@@ -7,3 +7,4 @@ playwright-report/
 test-results/
 src/UrabaConecta.Web/UrabaConecta.Web/Data/app.db*
 src/UrabaConecta.Web/UrabaConecta.Web/keys/
+private/
