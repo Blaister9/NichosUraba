@@ -25,7 +25,8 @@ public sealed class UrabaStore(AppDbContext db) : IUrabaStore
         if (!string.IsNullOrWhiteSpace(category)) query = query.Where(x => x.c.Slug == category);
         return await query.OrderBy(x => x.b.Name).Select(x => new BusinessCardDto(x.b.Slug, x.b.Name,
             new(x.c.Slug, x.c.Name), new(x.m.Slug, x.m.Name), x.b.Description, x.b.Address,
-            db.QueueDefinitions.Any(q => q.BusinessId == x.b.Id && q.IsActive && q.IsEnabled)))
+            db.QueueDefinitions.Any(q => q.BusinessId == x.b.Id && q.IsActive && q.IsEnabled),
+            db.PickupOrderSettings.Any(s => s.BusinessId == x.b.Id && s.IsEnabled)))
             .ToListAsync(cancellationToken);
     }
 
@@ -48,6 +49,8 @@ public sealed class UrabaStore(AppDbContext db) : IUrabaStore
         return new(data.b.Slug, data.b.Name, data.b.Description, data.b.Address, data.b.PublicPhone,
             new(data.c.Slug, data.c.Name), new(data.m.Slug, data.m.Name), hours, services,
             await db.QueueDefinitions.AnyAsync(q => q.BusinessId == data.b.Id && q.IsActive && q.IsEnabled,
+                cancellationToken),
+            await db.PickupOrderSettings.AnyAsync(s => s.BusinessId == data.b.Id && s.IsEnabled,
                 cancellationToken));
     }
 
@@ -123,7 +126,9 @@ public sealed class UrabaStore(AppDbContext db) : IUrabaStore
                       membership.Role == MembershipRole.Owner || membership.CanManageConfiguration,
                       membership.Role == MembershipRole.Owner || membership.CanManageAppointments,
                       membership.Role == MembershipRole.Owner || membership.CanManageMembers,
-                      membership.Role == MembershipRole.Owner || membership.CanManageQueues))
+                      membership.Role == MembershipRole.Owner || membership.CanManageQueues,
+                      membership.Role == MembershipRole.Owner || membership.CanManageOrders,
+                      db.PickupOrderSettings.Any(s => s.BusinessId == business.Id)))
             .ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<AppointmentRecord>> GetAppointmentsAsync(Guid businessId, DateOnly? date,

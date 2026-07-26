@@ -24,6 +24,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<QueueDefinition> QueueDefinitions => Set<QueueDefinition>();
     public DbSet<QueueSession> QueueSessions => Set<QueueSession>();
     public DbSet<QueueTicket> QueueTickets => Set<QueueTicket>();
+    public DbSet<ProductCategory> ProductCategories => Set<ProductCategory>();
+    public DbSet<Product> Products => Set<Product>();
+    public DbSet<PickupOrderSettings> PickupOrderSettings => Set<PickupOrderSettings>();
+    public DbSet<PickupOrder> PickupOrders => Set<PickupOrder>();
+    public DbSet<PickupOrderLine> PickupOrderLines => Set<PickupOrderLine>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -128,6 +133,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         {
             x.ToTable("consent_receipts"); x.HasKey(e => e.Id); x.HasIndex(e => new { e.BusinessId, e.AcceptedAtUtc });
             x.HasIndex(e => e.AppointmentId).IsUnique(); x.Property(e => e.NoticeVersion).HasMaxLength(40);
+            x.HasIndex(e => e.PickupOrderId).IsUnique();
             x.Property(e => e.Purpose).HasMaxLength(240);
             x.HasOne<Business>().WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Restrict);
         });
@@ -197,5 +203,79 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             x.HasOne<QueueSession>().WithMany().HasForeignKey(e => new { e.BusinessId, e.QueueSessionId })
                 .HasPrincipalKey(e => new { e.BusinessId, e.Id }).OnDelete(DeleteBehavior.Restrict);
         });
+        builder.Entity<ProductCategory>(x =>
+        {
+            x.ToTable("ordering_product_categories", t =>
+                t.HasCheckConstraint("ck_product_category_order", "\"DisplayOrder\" >= 0"));
+            x.HasKey(e => e.Id); x.HasIndex(e => new { e.BusinessId, e.Id }).IsUnique();
+            x.HasIndex(e => new { e.BusinessId, e.IsActive, e.DisplayOrder });
+            x.Property(e => e.Name).HasMaxLength(100); x.Property(e => e.Version).IsConcurrencyToken();
+            x.HasOne<Business>().WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<Product>(x =>
+        {
+            x.ToTable("ordering_products", t =>
+            {
+                t.HasCheckConstraint("ck_product_price", "\"ReferencePrice\" >= 0");
+                t.HasCheckConstraint("ck_product_order", "\"DisplayOrder\" >= 0");
+            });
+            x.HasKey(e => e.Id); x.HasIndex(e => new { e.BusinessId, e.Id }).IsUnique();
+            x.HasIndex(e => new { e.BusinessId, e.ProductCategoryId, e.IsActive, e.DisplayOrder });
+            x.Property(e => e.Name).HasMaxLength(120); x.Property(e => e.Description).HasMaxLength(500);
+            x.Property(e => e.ReferencePrice).HasPrecision(12, 2); x.Property(e => e.Version).IsConcurrencyToken();
+            x.HasOne<ProductCategory>().WithMany().HasForeignKey(e => new { e.BusinessId, e.ProductCategoryId })
+                .HasPrincipalKey(e => new { e.BusinessId, e.Id }).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<PickupOrderSettings>(x =>
+        {
+            x.ToTable("ordering_pickup_settings", t =>
+            {
+                t.HasCheckConstraint("ck_pickup_settings_range", "\"ReceivesFrom\" < \"ReceivesUntil\"");
+                t.HasCheckConstraint("ck_pickup_settings_capacity", "\"MaximumActivePerSlot\" BETWEEN 1 AND 500");
+            });
+            x.HasKey(e => e.Id); x.HasIndex(e => e.BusinessId).IsUnique();
+            x.Property(e => e.PublicMessage).HasMaxLength(200); x.Property(e => e.Version).IsConcurrencyToken();
+            x.HasOne<Business>().WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<PickupOrder>(x =>
+        {
+            x.ToTable("ordering_pickup_orders", t =>
+            {
+                t.HasCheckConstraint("ck_pickup_order_range", "\"PickupStartUtc\" < \"PickupEndUtc\"");
+                t.HasCheckConstraint("ck_pickup_order_totals", "\"Subtotal\" >= 0 AND \"Total\" >= 0");
+            });
+            x.HasKey(e => e.Id); x.HasIndex(e => new { e.BusinessId, e.Id }).IsUnique();
+            x.HasIndex(e => new { e.BusinessId, e.PublicOrderNumber }).IsUnique();
+            x.HasIndex(e => e.PublicCodeHash).IsUnique();
+            x.HasIndex(e => new { e.BusinessId, e.Status, e.CreatedAtUtc });
+            x.HasIndex(e => new { e.BusinessId, e.PickupStartUtc, e.Status });
+            x.Property(e => e.Status).HasConversion<string>().HasMaxLength(24);
+            x.Property(e => e.ProtectedCustomerAlias).HasMaxLength(1000);
+            x.Property(e => e.ProtectedCustomerPhone).HasMaxLength(1000);
+            x.Property(e => e.PhoneLast4).HasMaxLength(4); x.Property(e => e.ProtectedNotes).HasMaxLength(2000);
+            x.Property(e => e.PublicCodeHash).HasMaxLength(64); x.Property(e => e.ConsentVersion).HasMaxLength(40);
+            x.Property(e => e.CancellationReason).HasMaxLength(160);
+            x.Property(e => e.Subtotal).HasPrecision(12, 2); x.Property(e => e.Total).HasPrecision(12, 2);
+            x.Property(e => e.Version).IsConcurrencyToken();
+            x.HasMany(e => e.Lines).WithOne().HasForeignKey(e => new { e.BusinessId, e.PickupOrderId })
+                .HasPrincipalKey(e => new { e.BusinessId, e.Id }).OnDelete(DeleteBehavior.Cascade);
+            x.HasOne<Business>().WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<PickupOrderLine>(x =>
+        {
+            x.ToTable("ordering_pickup_order_lines", t =>
+            {
+                t.HasCheckConstraint("ck_pickup_line_quantity", "\"Quantity\" BETWEEN 1 AND 20");
+                t.HasCheckConstraint("ck_pickup_line_prices", "\"UnitPriceSnapshot\" >= 0 AND \"LineTotal\" >= 0");
+            });
+            x.HasKey(e => e.Id); x.HasIndex(e => new { e.BusinessId, e.PickupOrderId });
+            x.Property(e => e.ProductNameSnapshot).HasMaxLength(120);
+            x.Property(e => e.ProtectedNotes).HasMaxLength(1000);
+            x.Property(e => e.UnitPriceSnapshot).HasPrecision(12, 2); x.Property(e => e.LineTotal).HasPrecision(12, 2);
+            x.HasOne<Product>().WithMany().HasForeignKey(e => new { e.BusinessId, e.ProductId })
+                .HasPrincipalKey(e => new { e.BusinessId, e.Id }).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<ConsentReceipt>().HasOne<PickupOrder>().WithOne()
+            .HasForeignKey<ConsentReceipt>(e => e.PickupOrderId).OnDelete(DeleteBehavior.Restrict);
     }
 }

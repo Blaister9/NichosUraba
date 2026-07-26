@@ -16,6 +16,57 @@ public interface IApplicationTransaction : IAsyncDisposable
     Task CommitAsync(CancellationToken cancellationToken);
 }
 
+public interface IOrderingStore
+{
+    Task<IApplicationTransaction> BeginTransactionAsync(CancellationToken cancellationToken);
+    Task<(Business Business, PickupOrderSettings Settings)?> GetPublicContextAsync(string slug, CancellationToken cancellationToken);
+    Task<PickupOrderSettings?> GetSettingsAsync(Guid businessId, CancellationToken cancellationToken);
+    Task<PickupOrderSettings?> LockSettingsAsync(Guid businessId, CancellationToken cancellationToken);
+    Task LockSlotAsync(Guid businessId, DateTimeOffset start, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ProductCategory>> GetCategoriesAsync(Guid businessId, bool activeOnly, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Product>> GetProductsAsync(Guid businessId, bool activeOnly, CancellationToken cancellationToken);
+    Task<ProductCategory?> GetCategoryAsync(Guid businessId, Guid id, CancellationToken cancellationToken);
+    Task<Product?> GetProductAsync(Guid businessId, Guid id, CancellationToken cancellationToken);
+    Task<Business?> GetBusinessAsync(Guid businessId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<BusinessHour>> GetHoursAsync(Guid businessId, CancellationToken cancellationToken);
+    Task<int> CountActiveInSlotAsync(Guid businessId, DateTimeOffset start, CancellationToken cancellationToken);
+    Task<PickupOrder?> FindByCodeAsync(string hash, CancellationToken cancellationToken);
+    Task<PickupOrder?> GetOrderAsync(Guid businessId, Guid orderId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<PickupOrder>> ListOrdersAsync(Guid businessId, string? status, DateOnly? date,
+        CancellationToken cancellationToken);
+    Task<bool> CanManageOrdersAsync(Guid userId, Guid businessId, CancellationToken cancellationToken);
+    Task<bool> CanManageConfigurationAsync(Guid userId, Guid businessId, CancellationToken cancellationToken);
+    void AddCategory(ProductCategory category);
+    void AddProduct(Product product);
+    void AddSettings(PickupOrderSettings settings);
+    void AddOrder(PickupOrder order);
+    void AddConsent(ConsentReceipt consent);
+    Task SaveChangesAsync(CancellationToken cancellationToken);
+}
+
+public interface IOrderingUseCases
+{
+    Task<PickupMenuDto?> GetMenuAsync(string slug, CancellationToken cancellationToken = default);
+    Task<PickupSlotListDto> GetSlotsAsync(string slug, DateOnly? date = null, CancellationToken cancellationToken = default);
+    Task<PickupOrderCreatedDto> CreateAsync(string slug, CreatePickupOrderRequest request,
+        CancellationToken cancellationToken = default);
+    Task<PickupOrderTrackingDto?> TrackAsync(string code, CancellationToken cancellationToken = default);
+    Task CancelPublicAsync(string code, long version, CancellationToken cancellationToken = default);
+    Task<PickupOrderSettingsDto> GetSettingsAsync(Guid userId, Guid businessId, CancellationToken cancellationToken = default);
+    Task<PickupOrderSettingsDto> SaveSettingsAsync(Guid userId, Guid businessId, SavePickupOrderSettingsRequest request,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<ProductCategoryDto>> GetCategoriesAsync(Guid userId, Guid businessId, CancellationToken cancellationToken = default);
+    Task<ProductCategoryDto> SaveCategoryAsync(Guid userId, Guid businessId, Guid? categoryId,
+        SaveProductCategoryRequest request, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<ProductDto>> GetProductsAsync(Guid userId, Guid businessId, CancellationToken cancellationToken = default);
+    Task<ProductDto> SaveProductAsync(Guid userId, Guid businessId, Guid? productId,
+        SaveProductRequest request, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<PickupOrderAdminDto>> ListOrdersAsync(Guid userId, Guid businessId, string? status,
+        DateOnly? date, CancellationToken cancellationToken = default);
+    Task<PickupOrderAdminDto> ChangeStatusAsync(Guid userId, Guid businessId, Guid orderId, string action,
+        PickupOrderCommandRequest request, CancellationToken cancellationToken = default);
+}
+
 public interface IIdentityAccountManager
 {
     bool DevelopmentAccountCreationEnabled { get; }

@@ -33,13 +33,13 @@ public sealed partial class UrabaUseCases
         var memberships = await membershipStore.LockBusinessMembershipsAsync(businessId, cancellationToken);
         var actor = DemandActor(memberships, userId);
         DemandAssign(actor, null, request.CanManageAppointments, request.CanManageConfiguration,
-            request.CanManageMembers, request.CanManageQueues);
+            request.CanManageMembers, request.CanManageQueues, request.CanManageOrders);
         if (memberships.Any(x => x.UserId == account.UserId))
             throw new ApiException("MEMBERSHIP_EXISTS", "La cuenta ya tiene una membresía en este establecimiento.", 409);
         var now = timeProvider.GetUtcNow();
         var member = new BusinessMembership(Guid.NewGuid(), businessId, account.UserId, MembershipRole.Worker,
             request.CanManageConfiguration, request.CanManageAppointments, request.CanManageMembers, now,
-            request.CanManageQueues);
+            request.CanManageQueues, request.CanManageOrders);
         membershipStore.AddMembership(member);
         AddAudit(member, actor.UserId, MembershipAuditAction.MemberLinked, "{}", Snapshot(member), now);
         await membershipStore.SaveMembershipChangesAsync(cancellationToken);
@@ -59,7 +59,7 @@ public sealed partial class UrabaUseCases
         var memberships = await membershipStore.LockBusinessMembershipsAsync(businessId, cancellationToken);
         var actor = DemandActor(memberships, userId);
         DemandAssign(actor, null, request.CanManageAppointments, request.CanManageConfiguration,
-            request.CanManageMembers, request.CanManageQueues);
+            request.CanManageMembers, request.CanManageQueues, request.CanManageOrders);
         if (await identityAccounts.FindByExactEmailAsync(request.Email.Trim(), cancellationToken) is not null)
             throw new ApiException("ACCOUNT_EXISTS", "Ya existe una cuenta con ese correo. Use vincular cuenta.", 409);
         var created = await identityAccounts.CreateDevelopmentAsync(request.DisplayName.Trim(), request.Email.Trim(),
@@ -67,7 +67,7 @@ public sealed partial class UrabaUseCases
         var now = timeProvider.GetUtcNow();
         var member = new BusinessMembership(Guid.NewGuid(), businessId, created.Account.UserId, MembershipRole.Worker,
             request.CanManageConfiguration, request.CanManageAppointments, request.CanManageMembers, now,
-            request.CanManageQueues);
+            request.CanManageQueues, request.CanManageOrders);
         membershipStore.AddMembership(member);
         AddAudit(member, actor.UserId, MembershipAuditAction.MemberLinked, "{}", Snapshot(member), now);
         await membershipStore.SaveMembershipChangesAsync(cancellationToken);
@@ -81,9 +81,9 @@ public sealed partial class UrabaUseCases
             (actor, target, now, _) =>
             {
                 DemandAssign(actor, target, request.CanManageAppointments, request.CanManageConfiguration,
-                    request.CanManageMembers, request.CanManageQueues);
+                    request.CanManageMembers, request.CanManageQueues, request.CanManageOrders);
                 target.UpdatePermissions(request.CanManageAppointments, request.CanManageConfiguration,
-                    request.CanManageMembers, request.CanManageQueues, now, request.Version);
+                    request.CanManageMembers, request.CanManageQueues, request.CanManageOrders, now, request.Version);
             }, cancellationToken);
 
     public Task<BusinessMemberDto> ActivateMemberAsync(Guid userId, Guid businessId, Guid membershipId, long version,
@@ -92,7 +92,7 @@ public sealed partial class UrabaUseCases
             (actor, target, now, _) =>
             {
                 DemandAssign(actor, target, target.CanManageAppointments, target.CanManageConfiguration,
-                    target.CanManageMembers, target.CanManageQueues);
+                    target.CanManageMembers, target.CanManageQueues, target.CanManageOrders);
                 target.Activate(now, version);
             }, cancellationToken);
 
@@ -102,7 +102,7 @@ public sealed partial class UrabaUseCases
             (actor, target, now, members) =>
             {
                 DemandAssign(actor, target, target.CanManageAppointments, target.CanManageConfiguration,
-                    target.CanManageMembers, target.CanManageQueues);
+                    target.CanManageMembers, target.CanManageQueues, target.CanManageOrders);
                 TryMembershipDomain(() => MembershipAdministrationRules.DemandOwnerCanBeRemoved(target,
                     members.Count(x => x.IsActive && x.Role == MembershipRole.Owner)));
                 target.Deactivate(now, version);
@@ -126,7 +126,7 @@ public sealed partial class UrabaUseCases
                 TryMembershipDomain(() => MembershipAdministrationRules.DemandOwnerCanBeRemoved(target,
                     members.Count(x => x.IsActive && x.Role == MembershipRole.Owner)));
                 target.RevokeOwnership(request.CanManageAppointments, request.CanManageConfiguration,
-                    request.CanManageMembers, request.CanManageQueues, now, request.Version);
+                    request.CanManageMembers, request.CanManageQueues, request.CanManageOrders, now, request.Version);
             }, cancellationToken);
 
     public async Task<IReadOnlyList<MembershipAuditDto>> ListMembershipAuditAsync(Guid userId, Guid businessId,
@@ -178,12 +178,12 @@ public sealed partial class UrabaUseCases
     }
 
     private static void DemandAssign(BusinessMembership actor, BusinessMembership? target,
-        bool appointments, bool configuration, bool members, bool queues)
+        bool appointments, bool configuration, bool members, bool queues, bool orders)
     {
         target ??= new BusinessMembership(Guid.NewGuid(), actor.BusinessId, Guid.NewGuid(), MembershipRole.Worker,
-            configuration, appointments, members, canManageQueues: queues);
+            configuration, appointments, members, canManageQueues: queues, canManageOrders: orders);
         TryMembershipDomain(() => MembershipAdministrationRules.DemandCanAssign(actor, target,
-            appointments, configuration, members, queues));
+            appointments, configuration, members, queues, orders));
     }
 
     private void AddAudit(BusinessMembership target, Guid actorUserId, MembershipAuditAction action,
@@ -203,6 +203,7 @@ public sealed partial class UrabaUseCases
         member.CanManageConfiguration,
         member.CanManageMembers,
         member.CanManageQueues,
+        member.CanManageOrders,
         member.Version
     });
 

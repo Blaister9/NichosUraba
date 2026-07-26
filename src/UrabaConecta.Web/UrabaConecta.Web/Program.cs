@@ -53,12 +53,14 @@ builder.Services.AddDataProtection();
 builder.Services.AddScoped<IUrabaStore, UrabaStore>();
 builder.Services.AddScoped<IMembershipAdministrationStore, MembershipAdministrationStore>();
 builder.Services.AddScoped<IQueueStore, QueueStore>();
+builder.Services.AddScoped<IOrderingStore, OrderingStore>();
 builder.Services.AddScoped<IIdentityAccountManager, IdentityAccountManager>();
 builder.Services.AddScoped<IPublicCodeService, PublicCodeService>();
 builder.Services.AddScoped<UrabaConecta.Application.IPersonalDataProtector, PersonalDataProtector>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IUrabaUseCases, UrabaUseCases>();
 builder.Services.AddScoped<IQueueUseCases, QueueUseCases>();
+builder.Services.AddScoped<IOrderingUseCases, OrderingUseCases>();
 builder.Services.AddScoped<IQueueChangeNotifier, SignalRQueueChangeNotifier>();
 builder.Services.AddScoped<IUrabaConectaApi, ServerUrabaConectaApi>();
 builder.Services.AddSignalR();
@@ -125,6 +127,20 @@ publicApi.MapGet("/queue/tickets/{code}",
 publicApi.MapPost("/queue/tickets/{code}/cancel",
     async (string code, QueueSessionCommandRequest request, IQueueUseCases queues, CancellationToken ct) =>
     { await queues.CancelPublicAsync(code, request.Version, ct); return Results.NoContent(); })
+    .RequireRateLimiting("public-write");
+publicApi.MapGet("/businesses/{slug}/menu", async (string slug, IOrderingUseCases orders, CancellationToken ct) =>
+    await orders.GetMenuAsync(slug, ct) is { } result ? Results.Ok(result) : Results.NotFound());
+publicApi.MapGet("/businesses/{slug}/pickup-slots",
+    (string slug, DateOnly? date, IOrderingUseCases orders, CancellationToken ct) => orders.GetSlotsAsync(slug, date, ct));
+publicApi.MapPost("/businesses/{slug}/orders",
+    async (string slug, CreatePickupOrderRequest request, IOrderingUseCases orders, CancellationToken ct) =>
+        Results.Created("", await orders.CreateAsync(slug, request, ct))).RequireRateLimiting("public-write");
+publicApi.MapGet("/orders/{code}", async (string code, IOrderingUseCases orders, CancellationToken ct) =>
+    await orders.TrackAsync(code, ct) is { } result ? Results.Ok(result) : Results.NotFound())
+    .RequireRateLimiting("public-write");
+publicApi.MapPost("/orders/{code}/cancel",
+    async (string code, PickupOrderCommandRequest request, IOrderingUseCases orders, CancellationToken ct) =>
+    { await orders.CancelPublicAsync(code, request.Version, ct); return Results.NoContent(); })
     .RequireRateLimiting("public-write");
 
 var privateApi = app.MapGroup("/api/v1/businesses").RequireAuthorization("BusinessMember");
@@ -276,6 +292,42 @@ privateApi.MapPost("/{businessId:guid}/queue/tickets/{ticketId:guid}/{action}",
     (Guid businessId, Guid ticketId, string action, QueueTicketCommandRequest request,
         ClaimsPrincipal user, IQueueUseCases queues, CancellationToken ct) =>
         queues.ChangeTicketAsync(UserId(user), businessId, ticketId, action, request, ct));
+privateApi.MapGet("/{businessId:guid}/order-settings",
+    (Guid businessId, ClaimsPrincipal user, IOrderingUseCases orders, CancellationToken ct)
+        => orders.GetSettingsAsync(UserId(user), businessId, ct));
+privateApi.MapPut("/{businessId:guid}/order-settings",
+    (Guid businessId, SavePickupOrderSettingsRequest request, ClaimsPrincipal user,
+        IOrderingUseCases orders, CancellationToken ct) => orders.SaveSettingsAsync(UserId(user), businessId, request, ct));
+privateApi.MapGet("/{businessId:guid}/product-categories",
+    (Guid businessId, ClaimsPrincipal user, IOrderingUseCases orders, CancellationToken ct)
+        => orders.GetCategoriesAsync(UserId(user), businessId, ct));
+privateApi.MapPost("/{businessId:guid}/product-categories",
+    async (Guid businessId, SaveProductCategoryRequest request, ClaimsPrincipal user,
+        IOrderingUseCases orders, CancellationToken ct) =>
+        Results.Created("", await orders.SaveCategoryAsync(UserId(user), businessId, null, request, ct)));
+privateApi.MapPut("/{businessId:guid}/product-categories/{categoryId:guid}",
+    (Guid businessId, Guid categoryId, SaveProductCategoryRequest request, ClaimsPrincipal user,
+        IOrderingUseCases orders, CancellationToken ct)
+        => orders.SaveCategoryAsync(UserId(user), businessId, categoryId, request, ct));
+privateApi.MapGet("/{businessId:guid}/products",
+    (Guid businessId, ClaimsPrincipal user, IOrderingUseCases orders, CancellationToken ct)
+        => orders.GetProductsAsync(UserId(user), businessId, ct));
+privateApi.MapPost("/{businessId:guid}/products",
+    async (Guid businessId, SaveProductRequest request, ClaimsPrincipal user,
+        IOrderingUseCases orders, CancellationToken ct) =>
+        Results.Created("", await orders.SaveProductAsync(UserId(user), businessId, null, request, ct)));
+privateApi.MapPut("/{businessId:guid}/products/{productId:guid}",
+    (Guid businessId, Guid productId, SaveProductRequest request, ClaimsPrincipal user,
+        IOrderingUseCases orders, CancellationToken ct)
+        => orders.SaveProductAsync(UserId(user), businessId, productId, request, ct));
+privateApi.MapGet("/{businessId:guid}/orders",
+    (Guid businessId, string? status, DateOnly? date, ClaimsPrincipal user,
+        IOrderingUseCases orders, CancellationToken ct)
+        => orders.ListOrdersAsync(UserId(user), businessId, status, date, ct));
+privateApi.MapPost("/{businessId:guid}/orders/{orderId:guid}/{action}",
+    (Guid businessId, Guid orderId, string action, PickupOrderCommandRequest request,
+        ClaimsPrincipal user, IOrderingUseCases orders, CancellationToken ct)
+        => orders.ChangeStatusAsync(UserId(user), businessId, orderId, action, request, ct));
 
 app.MapHub<QueueHub>("/hubs/queue");
 app.MapRazorComponents<App>()

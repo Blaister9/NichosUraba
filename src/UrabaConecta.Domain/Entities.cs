@@ -63,12 +63,12 @@ public sealed class BusinessMembership : IBusinessOwned
     public BusinessMembership(Guid id, Guid businessId, Guid userId, MembershipRole role,
         bool canManageConfiguration = false, bool canManageAppointments = true,
         bool canManageMembers = false, DateTimeOffset? createdAtUtc = null,
-        bool canManageQueues = false)
+        bool canManageQueues = false, bool canManageOrders = false)
     {
         (Id, BusinessId, UserId, Role) = (id, businessId, userId, role);
         CreatedAtUtc = UpdatedAtUtc = createdAtUtc ?? DateTimeOffset.UtcNow;
-        SetPermissions(canManageAppointments, canManageConfiguration, canManageMembers, canManageQueues);
-        if (role == MembershipRole.Owner) SetPermissions(true, true, true, true);
+        SetPermissions(canManageAppointments, canManageConfiguration, canManageMembers, canManageQueues, canManageOrders);
+        if (role == MembershipRole.Owner) SetPermissions(true, true, true, true, true);
     }
     public Guid Id { get; private set; }
     public Guid BusinessId { get; private set; }
@@ -79,30 +79,35 @@ public sealed class BusinessMembership : IBusinessOwned
     public bool CanManageConfiguration { get; private set; }
     public bool CanManageMembers { get; private set; }
     public bool CanManageQueues { get; private set; }
+    public bool CanManageOrders { get; private set; }
     public DateTimeOffset CreatedAtUtc { get; private set; }
     public DateTimeOffset UpdatedAtUtc { get; private set; }
     public DateTimeOffset? DeactivatedAtUtc { get; private set; }
     public long Version { get; private set; }
 
-    public bool HasPermission(bool appointments, bool configuration, bool members, bool queues = false)
+    public bool HasPermission(bool appointments, bool configuration, bool members, bool queues = false, bool orders = false)
         => (!appointments || Role == MembershipRole.Owner || CanManageAppointments)
            && (!configuration || Role == MembershipRole.Owner || CanManageConfiguration)
            && (!members || Role == MembershipRole.Owner || CanManageMembers)
-           && (!queues || Role == MembershipRole.Owner || CanManageQueues);
+           && (!queues || Role == MembershipRole.Owner || CanManageQueues)
+           && (!orders || Role == MembershipRole.Owner || CanManageOrders);
 
     public void UpdatePermissions(bool appointments, bool configuration, bool members,
-        bool queues,
+        bool queues, bool orders,
         DateTimeOffset now, long expectedVersion)
     {
         EnsureVersion(expectedVersion);
-        if (Role == MembershipRole.Owner && (!appointments || !configuration || !members || !queues))
+        if (Role == MembershipRole.Owner && (!appointments || !configuration || !members || !queues || !orders))
             throw new DomainException("OWNER_PERMISSIONS_REQUIRED", "Una persona propietaria conserva todos los permisos.");
-        SetPermissions(appointments, configuration, members, queues);
+        SetPermissions(appointments, configuration, members, queues, orders);
         Touch(now);
     }
     public void UpdatePermissions(bool appointments, bool configuration, bool members,
         DateTimeOffset now, long expectedVersion)
-        => UpdatePermissions(appointments, configuration, members, CanManageQueues, now, expectedVersion);
+        => UpdatePermissions(appointments, configuration, members, CanManageQueues, CanManageOrders, now, expectedVersion);
+    public void UpdatePermissions(bool appointments, bool configuration, bool members, bool queues,
+        DateTimeOffset now, long expectedVersion)
+        => UpdatePermissions(appointments, configuration, members, queues, CanManageOrders, now, expectedVersion);
 
     public void Activate(DateTimeOffset now, long expectedVersion)
     {
@@ -123,23 +128,26 @@ public sealed class BusinessMembership : IBusinessOwned
         EnsureVersion(expectedVersion);
         if (!IsActive) throw new DomainException("INACTIVE_MEMBER", "Active la membresía antes de transferir propiedad.");
         if (Role == MembershipRole.Owner) throw new DomainException("ALREADY_OWNER", "La persona ya es propietaria.");
-        Role = MembershipRole.Owner; SetPermissions(true, true, true, true); Touch(now);
+        Role = MembershipRole.Owner; SetPermissions(true, true, true, true, true); Touch(now);
     }
 
-    public void RevokeOwnership(bool appointments, bool configuration, bool members, bool queues,
+    public void RevokeOwnership(bool appointments, bool configuration, bool members, bool queues, bool orders,
         DateTimeOffset now, long expectedVersion)
     {
         EnsureVersion(expectedVersion);
         if (Role != MembershipRole.Owner) throw new DomainException("NOT_OWNER", "La persona no es propietaria.");
-        Role = MembershipRole.Worker; SetPermissions(appointments, configuration, members, queues); Touch(now);
+        Role = MembershipRole.Worker; SetPermissions(appointments, configuration, members, queues, orders); Touch(now);
     }
     public void RevokeOwnership(bool appointments, bool configuration, bool members,
         DateTimeOffset now, long expectedVersion)
-        => RevokeOwnership(appointments, configuration, members, false, now, expectedVersion);
+        => RevokeOwnership(appointments, configuration, members, false, false, now, expectedVersion);
+    public void RevokeOwnership(bool appointments, bool configuration, bool members, bool queues,
+        DateTimeOffset now, long expectedVersion)
+        => RevokeOwnership(appointments, configuration, members, queues, CanManageOrders, now, expectedVersion);
 
-    private void SetPermissions(bool appointments, bool configuration, bool members, bool queues)
-        => (CanManageAppointments, CanManageConfiguration, CanManageMembers, CanManageQueues) =
-            (appointments, configuration, members, queues);
+    private void SetPermissions(bool appointments, bool configuration, bool members, bool queues, bool orders)
+        => (CanManageAppointments, CanManageConfiguration, CanManageMembers, CanManageQueues, CanManageOrders) =
+            (appointments, configuration, members, queues, orders);
     private void Touch(DateTimeOffset now) { UpdatedAtUtc = now; Version++; }
     private void EnsureVersion(long expected)
     {
@@ -324,5 +332,7 @@ public sealed class ConsentReceipt : IBusinessOwned
     public string Purpose { get; private set; } = "";
     public DateTimeOffset AcceptedAtUtc { get; private set; }
     public Guid? AppointmentId { get; private set; }
+    public Guid? PickupOrderId { get; private set; }
     public void LinkAppointment(Guid appointmentId) => AppointmentId = appointmentId;
+    public void LinkPickupOrder(Guid orderId) => PickupOrderId = orderId;
 }

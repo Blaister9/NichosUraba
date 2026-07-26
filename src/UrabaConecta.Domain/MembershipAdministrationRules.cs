@@ -9,7 +9,7 @@ public static class MembershipAdministrationRules
     }
 
     public static void DemandCanAssign(BusinessMembership actor, BusinessMembership target,
-        bool appointments, bool configuration, bool members, bool queues = false)
+        bool appointments, bool configuration, bool members, bool queues = false, bool orders = false)
     {
         DemandCanAdminister(actor);
         if (actor.Role != MembershipRole.Owner && target.Role == MembershipRole.Owner)
@@ -17,7 +17,7 @@ public static class MembershipAdministrationRules
         if (actor.Role != MembershipRole.Owner && actor.Id == target.Id)
             throw new DomainException("SELF_GRANT_FORBIDDEN", "No puede otorgarse permisos a sí misma.");
         if (actor.Role != MembershipRole.Owner &&
-            !actor.HasPermission(appointments, configuration, members, queues))
+            !actor.HasPermission(appointments, configuration, members, queues, orders))
             throw new DomainException("PERMISSION_ESCALATION", "No puede otorgar permisos que no posee.");
     }
 

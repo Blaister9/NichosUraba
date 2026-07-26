@@ -16,10 +16,14 @@ public static class DevelopmentSeeder
     public const string CorteOwnerEmail = "propietario@corte.demo";
     public const string CorteQueueWorkerEmail = "turnos@corte.demo";
     public const string CorteNoPermissionEmail = "sinasignacion@corte.demo";
+    public const string SazonOwnerEmail = "propietario@sazon.demo";
+    public const string SazonOrdersWorkerEmail = "pedidos@sazon.demo";
+    public const string SazonNoPermissionEmail = "sinpedidos@sazon.demo";
     public const string DemoPassword = "UrabaDemo!2026";
     public static readonly Guid BellaBusinessId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     public static readonly Guid OtherBusinessId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     public static readonly Guid CorteBusinessId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+    public static readonly Guid SazonBusinessId = Guid.Parse("55555555-5555-5555-5555-555555555555");
 
     public static async Task SeedDevelopmentAsync(this IServiceProvider services, IHostEnvironment environment)
     {
@@ -40,6 +44,9 @@ public static class DevelopmentSeeder
         var corteOwner = await EnsureUser(userManager, CorteOwnerEmail, "Propietario El Corte");
         var queueWorker = await EnsureUser(userManager, CorteQueueWorkerEmail, "Operador de turnos");
         var noPermission = await EnsureUser(userManager, CorteNoPermissionEmail, "Trabajador sin permiso");
+        var sazonOwner = await EnsureUser(userManager, SazonOwnerEmail, "Propietario Sazón Local");
+        var ordersWorker = await EnsureUser(userManager, SazonOrdersWorkerEmail, "Operador de pedidos");
+        var noOrdersPermission = await EnsureUser(userManager, SazonNoPermissionEmail, "Trabajador sin pedidos");
         if (!await userManager.IsInRoleAsync(bellaOwner, "BusinessOwner")) await userManager.AddToRoleAsync(bellaOwner, "BusinessOwner");
         if (!await userManager.IsInRoleAsync(otherOwner, "BusinessOwner")) await userManager.AddToRoleAsync(otherOwner, "BusinessOwner");
         if (!await userManager.IsInRoleAsync(bellaWorker, "BusinessWorker")) await userManager.AddToRoleAsync(bellaWorker, "BusinessWorker");
@@ -48,6 +55,9 @@ public static class DevelopmentSeeder
         if (!await userManager.IsInRoleAsync(corteOwner, "BusinessOwner")) await userManager.AddToRoleAsync(corteOwner, "BusinessOwner");
         if (!await userManager.IsInRoleAsync(queueWorker, "BusinessWorker")) await userManager.AddToRoleAsync(queueWorker, "BusinessWorker");
         if (!await userManager.IsInRoleAsync(noPermission, "BusinessWorker")) await userManager.AddToRoleAsync(noPermission, "BusinessWorker");
+        if (!await userManager.IsInRoleAsync(sazonOwner, "BusinessOwner")) await userManager.AddToRoleAsync(sazonOwner, "BusinessOwner");
+        if (!await userManager.IsInRoleAsync(ordersWorker, "BusinessWorker")) await userManager.AddToRoleAsync(ordersWorker, "BusinessWorker");
+        if (!await userManager.IsInRoleAsync(noOrdersPermission, "BusinessWorker")) await userManager.AddToRoleAsync(noOrdersPermission, "BusinessWorker");
 
         if (await db.Businesses.AnyAsync())
         {
@@ -56,6 +66,7 @@ public static class DevelopmentSeeder
             await EnsureMembership(db, BellaBusinessId, bellaWorker.Id, MembershipRole.Worker);
             await EnsureMembership(db, BellaBusinessId, configurationWorker.Id, MembershipRole.Worker, true);
             await EnsureQueueDemo(db, corteOwner.Id, queueWorker.Id, noPermission.Id);
+            await EnsureOrderingDemo(db, sazonOwner.Id, ordersWorker.Id, noOrdersPermission.Id);
             await db.SaveChangesAsync();
             return;
         }
@@ -91,6 +102,7 @@ public static class DevelopmentSeeder
         foreach (var service in demoServices) db.StaffServices.Add(new StaffService(bella.Id, worker.Id, service.Id));
         await db.SaveChangesAsync();
         await EnsureQueueDemo(db, corteOwner.Id, queueWorker.Id, noPermission.Id);
+        await EnsureOrderingDemo(db, sazonOwner.Id, ordersWorker.Id, noOrdersPermission.Id);
         await db.SaveChangesAsync();
     }
 
@@ -117,11 +129,11 @@ public static class DevelopmentSeeder
     }
 
     private static async Task EnsureMembership(AppDbContext db, Guid businessId, Guid userId, MembershipRole role,
-        bool canManageConfiguration = false, bool canManageQueues = false)
+        bool canManageConfiguration = false, bool canManageQueues = false, bool canManageOrders = false)
     {
         if (!await db.BusinessMemberships.AnyAsync(x => x.BusinessId == businessId && x.UserId == userId))
             db.BusinessMemberships.Add(new BusinessMembership(Guid.NewGuid(), businessId, userId, role,
-                canManageConfiguration, canManageQueues: canManageQueues));
+                canManageConfiguration, canManageQueues: canManageQueues, canManageOrders: canManageOrders));
     }
 
     private static async Task EnsureQueueDemo(AppDbContext db, Guid ownerId, Guid queueWorkerId, Guid noPermissionId)
@@ -158,5 +170,55 @@ public static class DevelopmentSeeder
         if (!await db.QueueSessions.AnyAsync(x => x.BusinessId == CorteBusinessId &&
             (x.Status == QueueSessionStatus.Open || x.Status == QueueSessionStatus.Paused)))
             db.Add(new QueueSession(Guid.NewGuid(), CorteBusinessId, definition.Id, DateTimeOffset.UtcNow));
+    }
+
+    private static async Task EnsureOrderingDemo(AppDbContext db, Guid ownerId, Guid ordersWorkerId, Guid noPermissionId)
+    {
+        var municipality = await db.Municipalities.SingleOrDefaultAsync(x => x.Slug == "carepa");
+        if (municipality is null)
+        {
+            municipality = new Municipality(Guid.Parse("acacacac-acac-acac-acac-acacacacacac"), "carepa", "Carepa");
+            db.Add(municipality);
+        }
+        var category = await db.Categories.SingleOrDefaultAsync(x => x.Slug == "restaurante");
+        if (category is null)
+        {
+            category = new Category(Guid.Parse("dededede-dede-dede-dede-dededededede"), "restaurante", "Restaurante");
+            db.Add(category);
+        }
+        if (!await db.Businesses.AnyAsync(x => x.Id == SazonBusinessId))
+            db.Add(new Business(SazonBusinessId, "restaurant-sazon-local", "Restaurante Sazón Local",
+                municipality.Id, category.Id, "Restaurante ficticio con pedidos para recoger.",
+                "Centro, Carepa", "300 000 0003"));
+        await db.SaveChangesAsync();
+        await EnsureMembership(db, SazonBusinessId, ownerId, MembershipRole.Owner);
+        await EnsureMembership(db, SazonBusinessId, ordersWorkerId, MembershipRole.Worker, canManageOrders: true);
+        await EnsureMembership(db, SazonBusinessId, noPermissionId, MembershipRole.Worker);
+        if (!await db.BusinessHours.AnyAsync(x => x.BusinessId == SazonBusinessId))
+            foreach (var day in Enum.GetValues<DayOfWeek>())
+                db.BusinessHours.Add(new BusinessHour(Guid.NewGuid(), SazonBusinessId, day,
+                    new TimeOnly(11, 0), new TimeOnly(21, 0)));
+        if (!await db.PickupOrderSettings.AnyAsync(x => x.BusinessId == SazonBusinessId))
+            db.PickupOrderSettings.Add(new PickupOrderSettings(Guid.Parse("56565656-5656-5656-5656-565656565656"),
+                SazonBusinessId, true, "Haz tu pedido y recógelo sin filas.", 30, 15, 5,
+                new TimeOnly(11, 0), new TimeOnly(20, 30)));
+        var categories = new[]
+        {
+            new ProductCategory(Guid.Parse("60000000-0000-0000-0000-000000000001"), SazonBusinessId, "Almuerzos", 1),
+            new ProductCategory(Guid.Parse("60000000-0000-0000-0000-000000000002"), SazonBusinessId, "Comidas rápidas", 2),
+            new ProductCategory(Guid.Parse("60000000-0000-0000-0000-000000000003"), SazonBusinessId, "Bebidas", 3)
+        };
+        foreach (var item in categories)
+            if (!await db.ProductCategories.AnyAsync(x => x.Id == item.Id)) db.ProductCategories.Add(item);
+        var products = new[]
+        {
+            new Product(Guid.Parse("70000000-0000-0000-0000-000000000001"), SazonBusinessId, categories[0].Id, "Corrientazo de pollo", "Sopa, seco y bebida.", 18000, 1),
+            new Product(Guid.Parse("70000000-0000-0000-0000-000000000002"), SazonBusinessId, categories[0].Id, "Corrientazo de carne", "Sopa, seco y bebida.", 20000, 2),
+            new Product(Guid.Parse("70000000-0000-0000-0000-000000000003"), SazonBusinessId, categories[1].Id, "Hamburguesa de la casa", "Carne, queso y vegetales.", 22000, 1),
+            new Product(Guid.Parse("70000000-0000-0000-0000-000000000004"), SazonBusinessId, categories[1].Id, "Salchipapa", "Porción personal.", 16000, 2),
+            new Product(Guid.Parse("70000000-0000-0000-0000-000000000005"), SazonBusinessId, categories[2].Id, "Limonada natural", "Vaso de 16 oz.", 6000, 1)
+        };
+        foreach (var item in products)
+            if (!await db.Products.AnyAsync(x => x.Id == item.Id)) db.Products.Add(item);
     }
 }

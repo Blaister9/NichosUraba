@@ -4,13 +4,13 @@ namespace UrabaConecta.Contracts;
 
 public sealed record OptionDto(string Slug, string Name);
 public sealed record BusinessCardDto(string Slug, string Name, OptionDto Category, OptionDto Municipality,
-    string Description, string Address, bool HasVirtualQueue = false);
+    string Description, string Address, bool HasVirtualQueue = false, bool HasPickupOrdering = false);
 public sealed record BusinessHourDto(DayOfWeek Day, string OpensAt, string ClosesAt);
 public sealed record ServiceDto(Guid Id, string Name, string Description, int DurationMinutes, decimal ReferencePrice,
     int DisplayOrder, bool IsActive, int FutureAppointmentCount = 0, long Version = 0);
 public sealed record BusinessProfileDto(string Slug, string Name, string Description, string Address, string PublicPhone,
     OptionDto Category, OptionDto Municipality, IReadOnlyList<BusinessHourDto> Hours, IReadOnlyList<ServiceDto> Services,
-    bool HasVirtualQueue = false);
+    bool HasVirtualQueue = false, bool HasPickupOrdering = false);
 public sealed record SlotDto(DateTimeOffset Start, DateTimeOffset End);
 public sealed record SlotListDto(string BusinessTimeZone, DateOnly Date, IReadOnlyList<SlotDto> Slots);
 
@@ -31,9 +31,9 @@ public sealed record AppointmentTrackingDto(string Status, string StatusLabel, s
 
 public sealed record MyBusinessDto(Guid Id, string Name, string Slug, string MembershipRole,
     bool CanManageConfiguration = false, bool CanManageAppointments = true, bool CanManageMembers = false,
-    bool CanManageQueues = false);
+    bool CanManageQueues = false, bool CanManageOrders = false, bool SupportsPickupOrdering = false);
 public sealed record MembershipPermissionsDto(bool CanManageAppointments, bool CanManageConfiguration,
-    bool CanManageMembers, bool CanManageQueues = false);
+    bool CanManageMembers, bool CanManageQueues = false, bool CanManageOrders = false);
 public sealed record BusinessMemberDto(Guid Id, string DisplayName, string Email, bool IsActive, bool IsOwner,
     MembershipPermissionsDto Permissions, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, long Version);
 public sealed record BusinessMemberListDto(IReadOnlyList<BusinessMemberDto> Items,
@@ -45,6 +45,7 @@ public class LinkExistingMemberRequest
     public bool CanManageConfiguration { get; set; }
     public bool CanManageMembers { get; set; }
     public bool CanManageQueues { get; set; }
+    public bool CanManageOrders { get; set; }
 }
 public sealed class CreateDevelopmentMemberRequest : LinkExistingMemberRequest
 {
@@ -57,6 +58,7 @@ public class UpdateMemberPermissionsRequest
     public bool CanManageConfiguration { get; set; }
     public bool CanManageMembers { get; set; }
     public bool CanManageQueues { get; set; }
+    public bool CanManageOrders { get; set; }
     public long Version { get; set; }
 }
 public sealed class MembershipVersionRequest
@@ -158,6 +160,77 @@ public sealed class SaveAvailabilityExceptionRequest
     public long Version { get; set; }
 }
 
+public sealed record ProductCategoryDto(Guid Id, string Name, int DisplayOrder, bool IsActive, long Version);
+public sealed record ProductDto(Guid Id, Guid CategoryId, string Name, string Description,
+    decimal ReferencePrice, int DisplayOrder, bool IsActive, long Version);
+public sealed record PickupMenuDto(string BusinessName, string BusinessSlug, string PublicMessage,
+    IReadOnlyList<ProductCategoryDto> Categories, IReadOnlyList<ProductDto> Products);
+public sealed record PickupSlotDto(DateTimeOffset Start, DateTimeOffset End, int RemainingCapacity);
+public sealed record PickupSlotListDto(string BusinessTimeZone, IReadOnlyList<PickupSlotDto> Slots);
+public sealed record PickupOrderSettingsDto(Guid Id, Guid BusinessId, bool IsEnabled, string PublicMessage,
+    int MinimumPreparationMinutes, int SlotIntervalMinutes, int MaximumActivePerSlot,
+    TimeOnly ReceivesFrom, TimeOnly ReceivesUntil, int NextOrderNumber, long Version);
+public sealed class SavePickupOrderSettingsRequest
+{
+    public bool IsEnabled { get; set; }
+    [StringLength(200)] public string? PublicMessage { get; set; }
+    [Range(0, 1440)] public int MinimumPreparationMinutes { get; set; }
+    [Range(5, 240)] public int SlotIntervalMinutes { get; set; }
+    [Range(1, 500)] public int MaximumActivePerSlot { get; set; }
+    public TimeOnly ReceivesFrom { get; set; }
+    public TimeOnly ReceivesUntil { get; set; }
+    public long Version { get; set; }
+}
+public sealed class SaveProductCategoryRequest
+{
+    [Required, StringLength(100, MinimumLength = 1)] public string Name { get; set; } = "";
+    [Range(0, 10000)] public int DisplayOrder { get; set; }
+    public bool IsActive { get; set; } = true;
+    public long Version { get; set; }
+}
+public sealed class SaveProductRequest
+{
+    [Required] public Guid CategoryId { get; set; }
+    [Required, StringLength(120, MinimumLength = 1)] public string Name { get; set; } = "";
+    [StringLength(500)] public string? Description { get; set; }
+    [Range(0, 100000000)] public decimal ReferencePrice { get; set; }
+    [Range(0, 10000)] public int DisplayOrder { get; set; }
+    public bool IsActive { get; set; } = true;
+    public long Version { get; set; }
+}
+public sealed class CreatePickupOrderLineRequest
+{
+    [Required] public Guid ProductId { get; set; }
+    [Range(1, 20)] public int Quantity { get; set; }
+    [StringLength(160)] public string? Notes { get; set; }
+}
+public sealed class CreatePickupOrderRequest
+{
+    [Required] public DateTimeOffset PickupStart { get; set; }
+    [Required, StringLength(100, MinimumLength = 2)] public string CustomerAlias { get; set; } = "";
+    [Required, RegularExpression(@"^\+?[0-9]{7,15}$")] public string Phone { get; set; } = "";
+    [StringLength(300)] public string? Notes { get; set; }
+    public List<CreatePickupOrderLineRequest> Lines { get; set; } = [];
+    [Required] public string ConsentNoticeVersion { get; set; } = "pilot-1";
+    [Range(typeof(bool), "true", "true")] public bool ConsentAccepted { get; set; }
+}
+public sealed record PickupOrderLineDto(Guid? ProductId, string ProductName, decimal UnitPrice,
+    int Quantity, decimal LineTotal, string? Notes);
+public sealed record PickupOrderCreatedDto(int OrderNumber, string TrackingCode, string Status,
+    decimal Total, DateTimeOffset PickupStart);
+public sealed record PickupOrderTrackingDto(int OrderNumber, string Status, string StatusLabel,
+    string BusinessName, DateTimeOffset PickupStart, decimal Total, string PhoneMasked,
+    IReadOnlyList<PickupOrderLineDto> Lines, bool CanCancel, DateTimeOffset UpdatedAtUtc, long Version);
+public sealed record PickupOrderAdminDto(Guid Id, int OrderNumber, string Status, string CustomerAlias,
+    string Phone, string? Notes, DateTimeOffset PickupStart, decimal Total,
+    IReadOnlyList<PickupOrderLineDto> Lines, string? CancellationReason,
+    DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, long Version);
+public sealed class PickupOrderCommandRequest
+{
+    public long Version { get; set; }
+    [StringLength(160)] public string? Reason { get; set; }
+}
+
 public sealed class ApiException(string code, string message, int statusCode = 400) : Exception(message)
 {
     public string Code { get; } = code;
@@ -235,4 +308,24 @@ public interface IUrabaConectaApi
     Task<QueueAdminDto> CallNextAsync(Guid businessId, long sessionVersion, CancellationToken cancellationToken = default);
     Task<QueueAdminDto> ChangeQueueTicketAsync(Guid businessId, Guid ticketId, string action,
         QueueTicketCommandRequest request, CancellationToken cancellationToken = default);
+    Task<PickupMenuDto?> GetPickupMenuAsync(string slug, CancellationToken cancellationToken = default);
+    Task<PickupSlotListDto> GetPickupSlotsAsync(string slug, DateOnly? date = null,
+        CancellationToken cancellationToken = default);
+    Task<PickupOrderCreatedDto> CreatePickupOrderAsync(string slug, CreatePickupOrderRequest request,
+        CancellationToken cancellationToken = default);
+    Task<PickupOrderTrackingDto?> GetPickupOrderAsync(string code, CancellationToken cancellationToken = default);
+    Task CancelPickupOrderAsync(string code, long version, CancellationToken cancellationToken = default);
+    Task<PickupOrderSettingsDto> GetPickupOrderSettingsAsync(Guid businessId, CancellationToken cancellationToken = default);
+    Task<PickupOrderSettingsDto> SavePickupOrderSettingsAsync(Guid businessId, SavePickupOrderSettingsRequest request,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<ProductCategoryDto>> GetProductCategoriesAsync(Guid businessId, CancellationToken cancellationToken = default);
+    Task<ProductCategoryDto> SaveProductCategoryAsync(Guid businessId, Guid? categoryId,
+        SaveProductCategoryRequest request, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<ProductDto>> GetProductsAsync(Guid businessId, CancellationToken cancellationToken = default);
+    Task<ProductDto> SaveProductAsync(Guid businessId, Guid? productId, SaveProductRequest request,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<PickupOrderAdminDto>> GetPickupOrdersAsync(Guid businessId, string? status = null,
+        DateOnly? date = null, CancellationToken cancellationToken = default);
+    Task<PickupOrderAdminDto> ChangePickupOrderAsync(Guid businessId, Guid orderId, string action,
+        PickupOrderCommandRequest request, CancellationToken cancellationToken = default);
 }

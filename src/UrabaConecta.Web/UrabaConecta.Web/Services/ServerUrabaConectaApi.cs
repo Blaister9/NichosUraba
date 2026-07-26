@@ -5,7 +5,7 @@ using UrabaConecta.Contracts;
 
 namespace UrabaConecta.Web.Services;
 
-public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCases queues,
+public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCases queues, IOrderingUseCases orders,
     AuthenticationStateProvider authentication) : IUrabaConectaApi
 {
     public Task<IReadOnlyList<BusinessCardDto>> GetBusinessesAsync(string? search = null, string? municipality = null,
@@ -125,6 +125,38 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
     public async Task<QueueAdminDto> ChangeQueueTicketAsync(Guid businessId, Guid ticketId, string action,
         QueueTicketCommandRequest request, CancellationToken cancellationToken = default)
         => await queues.ChangeTicketAsync(await UserId(), businessId, ticketId, action, request, cancellationToken);
+
+    public Task<PickupMenuDto?> GetPickupMenuAsync(string slug, CancellationToken cancellationToken = default)
+        => orders.GetMenuAsync(slug, cancellationToken);
+    public Task<PickupSlotListDto> GetPickupSlotsAsync(string slug, DateOnly? date = null,
+        CancellationToken cancellationToken = default) => orders.GetSlotsAsync(slug, date, cancellationToken);
+    public Task<PickupOrderCreatedDto> CreatePickupOrderAsync(string slug, CreatePickupOrderRequest request,
+        CancellationToken cancellationToken = default) => orders.CreateAsync(slug, request, cancellationToken);
+    public Task<PickupOrderTrackingDto?> GetPickupOrderAsync(string code, CancellationToken cancellationToken = default)
+        => orders.TrackAsync(code, cancellationToken);
+    public Task CancelPickupOrderAsync(string code, long version, CancellationToken cancellationToken = default)
+        => orders.CancelPublicAsync(code, version, cancellationToken);
+    public async Task<PickupOrderSettingsDto> GetPickupOrderSettingsAsync(Guid businessId,
+        CancellationToken cancellationToken = default) => await orders.GetSettingsAsync(await UserId(), businessId, cancellationToken);
+    public async Task<PickupOrderSettingsDto> SavePickupOrderSettingsAsync(Guid businessId,
+        SavePickupOrderSettingsRequest request, CancellationToken cancellationToken = default)
+        => await orders.SaveSettingsAsync(await UserId(), businessId, request, cancellationToken);
+    public async Task<IReadOnlyList<ProductCategoryDto>> GetProductCategoriesAsync(Guid businessId,
+        CancellationToken cancellationToken = default) => await orders.GetCategoriesAsync(await UserId(), businessId, cancellationToken);
+    public async Task<ProductCategoryDto> SaveProductCategoryAsync(Guid businessId, Guid? categoryId,
+        SaveProductCategoryRequest request, CancellationToken cancellationToken = default)
+        => await orders.SaveCategoryAsync(await UserId(), businessId, categoryId, request, cancellationToken);
+    public async Task<IReadOnlyList<ProductDto>> GetProductsAsync(Guid businessId,
+        CancellationToken cancellationToken = default) => await orders.GetProductsAsync(await UserId(), businessId, cancellationToken);
+    public async Task<ProductDto> SaveProductAsync(Guid businessId, Guid? productId, SaveProductRequest request,
+        CancellationToken cancellationToken = default)
+        => await orders.SaveProductAsync(await UserId(), businessId, productId, request, cancellationToken);
+    public async Task<IReadOnlyList<PickupOrderAdminDto>> GetPickupOrdersAsync(Guid businessId, string? status = null,
+        DateOnly? date = null, CancellationToken cancellationToken = default)
+        => await orders.ListOrdersAsync(await UserId(), businessId, status, date, cancellationToken);
+    public async Task<PickupOrderAdminDto> ChangePickupOrderAsync(Guid businessId, Guid orderId, string action,
+        PickupOrderCommandRequest request, CancellationToken cancellationToken = default)
+        => await orders.ChangeStatusAsync(await UserId(), businessId, orderId, action, request, cancellationToken);
 
     private async Task<Guid> UserId()
     {
