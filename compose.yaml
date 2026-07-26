@@ -1,4 +1,25 @@
 services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Demo}
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-urabaconecta};Username=${POSTGRES_USER:-urabaconecta};Password=${POSTGRES_PASSWORD}
+      URABACONECTA_TRACKING_HMAC_KEY: ${URABACONECTA_TRACKING_HMAC_KEY}
+      DataProtection__KeysPath: /app/keys
+    ports:
+      - "${APP_PORT:-8088}:8080"
+    volumes:
+      - urabaconecta_keys:/app/keys
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
   postgres:
     image: postgres:17-alpine
     environment:
@@ -16,3 +37,4 @@ services:
       retries: 10
 volumes:
   urabaconecta_pgdata:
+  urabaconecta_keys:

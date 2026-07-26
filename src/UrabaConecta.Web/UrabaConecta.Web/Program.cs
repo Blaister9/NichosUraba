@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using UrabaConecta.Application;
 using UrabaConecta.Contracts;
@@ -49,7 +50,10 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
 
 builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
-builder.Services.AddDataProtection();
+var dataProtection = builder.Services.AddDataProtection().SetApplicationName("UrabaConecta");
+var keysPath = builder.Configuration["DataProtection:KeysPath"];
+if (!string.IsNullOrWhiteSpace(keysPath))
+    dataProtection.PersistKeysToFileSystem(new DirectoryInfo(keysPath));
 builder.Services.AddScoped<IUrabaStore, UrabaStore>();
 builder.Services.AddScoped<IMembershipAdministrationStore, MembershipAdministrationStore>();
 builder.Services.AddScoped<IQueueStore, QueueStore>();
@@ -70,9 +74,20 @@ builder.Services.AddHealthChecks().AddDbContextCheck<AppDbContext>("postgresql",
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    var publicPermitLimit = builder.Configuration.GetValue("RateLimits:PublicWritesPerMinute", 12);
     options.AddPolicy("public-write", context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-        _ => new FixedWindowRateLimiterOptions { PermitLimit = 12, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = publicPermitLimit, Window = TimeSpan.FromMinutes(1), QueueLimit = 0
+        }));
+    var publicReadPermitLimit = builder.Configuration.GetValue("RateLimits:SensitiveReadsPerMinute", 1200);
+    options.AddPolicy("public-sensitive-read", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = publicReadPermitLimit, Window = TimeSpan.FromMinutes(1), QueueLimit = 0
+        }));
 });
 
 var app = builder.Build();
@@ -110,7 +125,7 @@ publicApi.MapPost("/businesses/{slug}/appointments",
 publicApi.MapGet("/appointments/{code}",
     async (string code, IUrabaUseCases useCases, CancellationToken ct) =>
         await useCases.GetTrackingAsync(code, ct) is { } result ? Results.Ok(result) : Results.NotFound())
-    .RequireRateLimiting("public-write");
+    .RequireRateLimiting("public-sensitive-read");
 publicApi.MapPost("/appointments/{code}/cancel",
     async (string code, IUrabaUseCases useCases, CancellationToken ct) =>
     { await useCases.CancelAsync(code, ct); return Results.NoContent(); }).RequireRateLimiting("public-write");
@@ -123,7 +138,7 @@ publicApi.MapPost("/businesses/{slug}/queue/tickets",
 publicApi.MapGet("/queue/tickets/{code}",
     async (string code, IQueueUseCases queues, CancellationToken ct) =>
         await queues.TrackAsync(code, ct) is { } result ? Results.Ok(result) : Results.NotFound())
-    .RequireRateLimiting("public-write");
+    .RequireRateLimiting("public-sensitive-read");
 publicApi.MapPost("/queue/tickets/{code}/cancel",
     async (string code, QueueSessionCommandRequest request, IQueueUseCases queues, CancellationToken ct) =>
     { await queues.CancelPublicAsync(code, request.Version, ct); return Results.NoContent(); })
@@ -137,7 +152,7 @@ publicApi.MapPost("/businesses/{slug}/orders",
         Results.Created("", await orders.CreateAsync(slug, request, ct))).RequireRateLimiting("public-write");
 publicApi.MapGet("/orders/{code}", async (string code, IOrderingUseCases orders, CancellationToken ct) =>
     await orders.TrackAsync(code, ct) is { } result ? Results.Ok(result) : Results.NotFound())
-    .RequireRateLimiting("public-write");
+    .RequireRateLimiting("public-sensitive-read");
 publicApi.MapPost("/orders/{code}/cancel",
     async (string code, PickupOrderCommandRequest request, IOrderingUseCases orders, CancellationToken ct) =>
     { await orders.CancelPublicAsync(code, request.Version, ct); return Results.NoContent(); })

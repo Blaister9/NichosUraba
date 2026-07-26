@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using UrabaConecta.Application;
 using UrabaConecta.Domain;
 using UrabaConecta.Infrastructure.Identity;
 
@@ -27,9 +28,11 @@ public static class DevelopmentSeeder
 
     public static async Task SeedDevelopmentAsync(this IServiceProvider services, IHostEnvironment environment)
     {
-        if (!environment.IsDevelopment()) return;
+        if (!environment.IsDevelopment() && !environment.IsEnvironment("Demo")) return;
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var codes = scope.ServiceProvider.GetRequiredService<IPublicCodeService>();
+        var protector = scope.ServiceProvider.GetRequiredService<UrabaConecta.Application.IPersonalDataProtector>();
         await db.Database.MigrateAsync();
         var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
         foreach (var role in new[] { "PlatformAdmin", "BusinessOwner", "BusinessWorker" })
@@ -68,6 +71,8 @@ public static class DevelopmentSeeder
             await EnsureQueueDemo(db, corteOwner.Id, queueWorker.Id, noPermission.Id);
             await EnsureOrderingDemo(db, sazonOwner.Id, ordersWorker.Id, noOrdersPermission.Id);
             await db.SaveChangesAsync();
+            await EnsureHistoricalDemo(db, codes, protector);
+            await db.SaveChangesAsync();
             return;
         }
         var apartado = new Municipality(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), "apartado", "Apartadó");
@@ -103,6 +108,8 @@ public static class DevelopmentSeeder
         await db.SaveChangesAsync();
         await EnsureQueueDemo(db, corteOwner.Id, queueWorker.Id, noPermission.Id);
         await EnsureOrderingDemo(db, sazonOwner.Id, ordersWorker.Id, noOrdersPermission.Id);
+        await db.SaveChangesAsync();
+        await EnsureHistoricalDemo(db, codes, protector);
         await db.SaveChangesAsync();
     }
 
@@ -220,5 +227,61 @@ public static class DevelopmentSeeder
         };
         foreach (var item in products)
             if (!await db.Products.AnyAsync(x => x.Id == item.Id)) db.Products.Add(item);
+    }
+
+    private static async Task EnsureHistoricalDemo(AppDbContext db, IPublicCodeService codes,
+        UrabaConecta.Application.IPersonalDataProtector protector)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var appointmentId = Guid.Parse("81000000-0000-0000-0000-000000000001");
+        if (!await db.Appointments.AnyAsync(x => x.Id == appointmentId))
+        {
+            var consent = new ConsentReceipt(Guid.Parse("82000000-0000-0000-0000-000000000001"),
+                BellaBusinessId, "pilot-1", "Cita demostrativa", now.AddDays(-2));
+            consent.LinkAppointment(appointmentId);
+            var code = codes.Generate();
+            var appointment = new Appointment(appointmentId, BellaBusinessId,
+                Guid.Parse("10000000-0000-0000-0000-000000000001"),
+                Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"), now.AddDays(2), 60,
+                "Corte femenino", 35000, protector.Protect("Cliente demo"),
+                protector.Protect("3001234567"), "4567", protector.Protect("Registro histórico de demo"),
+                code.Hash, code.Version, consent.Id, now.AddDays(-2));
+            appointment.ChangeStatus(AppointmentStatus.Confirmed, now.AddDays(-1));
+            appointment.ChangeStatus(AppointmentStatus.Completed, now);
+            db.AddRange(consent, appointment);
+        }
+
+        var ticketId = Guid.Parse("83000000-0000-0000-0000-000000000001");
+        if (!await db.QueueTickets.AnyAsync(x => x.Id == ticketId))
+        {
+            var session = await db.QueueSessions.Where(x => x.BusinessId == CorteBusinessId)
+                .OrderByDescending(x => x.OpenedAtUtc).FirstAsync();
+            var ticket = new QueueTicket(ticketId, CorteBusinessId, session.Id, 900,
+                codes.Hash("demo-historical-ticket"), protector.Protect("Turno demo"),
+                QueueTicketSource.WalkIn, now.AddHours(-2));
+            ticket.Call(now.AddMinutes(-90), 0);
+            ticket.Start(now.AddMinutes(-80), 1);
+            ticket.Complete(now.AddMinutes(-60), 2);
+            db.Add(ticket);
+        }
+
+        var orderId = Guid.Parse("84000000-0000-0000-0000-000000000001");
+        if (!await db.PickupOrders.AnyAsync(x => x.Id == orderId))
+        {
+            var consent = new ConsentReceipt(Guid.Parse("85000000-0000-0000-0000-000000000001"),
+                SazonBusinessId, "pilot-1", "Pedido demostrativo", now.AddDays(-1));
+            consent.LinkPickupOrder(orderId);
+            var line = new PickupOrderLine(Guid.Parse("86000000-0000-0000-0000-000000000001"),
+                SazonBusinessId, orderId, Guid.Parse("70000000-0000-0000-0000-000000000001"),
+                "Hamburguesa tradicional", 18000, 1);
+            var order = new PickupOrder(orderId, SazonBusinessId, 9001, now.AddHours(2), now.AddHours(2.25),
+                protector.Protect("Pedido demo"), protector.Protect("3001234567"), "4567", null,
+                codes.Hash("demo-historical-order"), "pilot-1", now.AddDays(-1), now.AddDays(-1), [line]);
+            order.Transition(PickupOrderStatus.Accepted, now.AddHours(-3), 0);
+            order.Transition(PickupOrderStatus.Preparing, now.AddHours(-2), 1);
+            order.Transition(PickupOrderStatus.ReadyForPickup, now.AddHours(-1), 2);
+            order.Transition(PickupOrderStatus.Delivered, now, 3);
+            db.AddRange(consent, order);
+        }
     }
 }

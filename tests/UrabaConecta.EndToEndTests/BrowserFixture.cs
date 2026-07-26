@@ -18,7 +18,10 @@ public sealed class BrowserFixture : IAsyncLifetime
     {
         await _postgres.StartAsync();
         var root = FindRepositoryRoot();
-        var webDll = Path.Combine(root, "src", "UrabaConecta.Web", "UrabaConecta.Web", "bin", "Debug",
+        var configuration = AppContext.BaseDirectory.Contains(
+            $"{Path.DirectorySeparatorChar}Release{Path.DirectorySeparatorChar}",
+            StringComparison.OrdinalIgnoreCase) ? "Release" : "Debug";
+        var webDll = Path.Combine(root, "src", "UrabaConecta.Web", "UrabaConecta.Web", "bin", configuration,
             "net10.0", "UrabaConecta.Web.dll");
         if (!File.Exists(webDll)) throw new InvalidOperationException($"Compile primero la solución. No existe {webDll}");
         var port = FreePort();
@@ -33,6 +36,7 @@ public sealed class BrowserFixture : IAsyncLifetime
         start.Environment["ASPNETCORE_URLS"] = BaseUrl;
         start.Environment["ConnectionStrings__DefaultConnection"] = _postgres.GetConnectionString();
         start.Environment["URABACONECTA_TRACKING_HMAC_KEY"] = "e2e-test-hmac-key-with-at-least-32-bytes";
+        start.Environment["RateLimits__PublicWritesPerMinute"] = "200";
         _app = Process.Start(start) ?? throw new InvalidOperationException("No fue posible iniciar la aplicación.");
         _app.OutputDataReceived += (_, _) => { }; _app.ErrorDataReceived += (_, _) => { };
         _app.BeginOutputReadLine(); _app.BeginErrorReadLine();

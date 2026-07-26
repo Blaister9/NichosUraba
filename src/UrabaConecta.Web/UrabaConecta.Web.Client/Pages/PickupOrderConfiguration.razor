@@ -30,7 +30,28 @@
 </section>
 <section class="config-form">
     <h2>Productos</h2>
-    @foreach (var product in products) { <p><strong>@product.Name</strong> · @product.ReferencePrice.ToString("C0", Colombia) · @(product.IsActive ? "Activo" : "Inactivo")</p> }
+    <div class="config-list">
+    @foreach (var product in products)
+    {
+        var editor = productEditors[product.Id];
+        <article class="config-row product-editor" data-product-id="@product.Id">
+            <div>
+                <label>Nombre <input @bind="editor.Name" /></label>
+                <label>Descripción <input @bind="editor.Description" /></label>
+                <div class="form-grid">
+                    <label>Precio <input type="number" min="0" step="100" @bind="editor.Price" /></label>
+                    <label>Orden <input type="number" min="0" @bind="editor.Order" /></label>
+                </div>
+                <label>Categoría <select @bind="editor.CategoryId">
+                    @foreach (var category in categories) { <option value="@category.Id">@category.Name</option> }
+                </select></label>
+                <label class="check-option"><input type="checkbox" @bind="editor.Active" /> Visible en el menú</label>
+            </div>
+            <div class="actions"><button type="button" class="secondary" disabled="@(!interactiveReady || busy)"
+                @onclick="() => SaveExistingProduct(product)">Guardar producto</button></div>
+        </article>
+    }
+    </div>
     <EditForm Model="productForm" OnValidSubmit="AddProduct" FormName="add-product">
         <DataAnnotationsValidator /><label>Categoría <InputSelect @bind-Value="productForm.CategoryId">
             <option value="@Guid.Empty">Selecciona</option>@foreach (var category in categories.Where(x => x.IsActive)) { <option value="@category.Id">@category.Name</option> }
@@ -46,7 +67,9 @@
     private PickupOrderSettingsDto? settings; private SavePickupOrderSettingsRequest settingsForm = new();
     private IReadOnlyList<ProductCategoryDto> categories = []; private IReadOnlyList<ProductDto> products = [];
     private SaveProductCategoryRequest categoryForm = new(); private SaveProductRequest productForm = new();
-    private string fromText = "11:00", untilText = "20:30"; private string? error;
+    private readonly Dictionary<Guid, ProductEditor> productEditors = [];
+    private string fromText = "11:00", untilText = "20:30"; private string? error; private bool busy;
+    private bool interactiveReady;
     private static readonly System.Globalization.CultureInfo Colombia = new("es-CO");
     protected override async Task OnParametersSetAsync()
     {
@@ -59,7 +82,14 @@
                 ReceivesUntil = settings.ReceivesUntil, Version = settings.Version };
             fromText = settings.ReceivesFrom.ToString("HH:mm"); untilText = settings.ReceivesUntil.ToString("HH:mm");
             categories = await Api.GetProductCategoriesAsync(BusinessId); products = await Api.GetProductsAsync(BusinessId);
+            RefreshEditors();
         } catch (ApiException ex) { error = ex.Message; }
+    }
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+        interactiveReady = true;
+        StateHasChanged();
     }
     private async Task SaveSettings()
     {
@@ -75,7 +105,41 @@
     }
     private async Task AddProduct()
     {
-        try { await Api.SaveProductAsync(BusinessId, null, productForm); products = await Api.GetProductsAsync(BusinessId); productForm = new(); }
+        try { await Api.SaveProductAsync(BusinessId, null, productForm); products = await Api.GetProductsAsync(BusinessId); RefreshEditors(); productForm = new(); }
         catch (ApiException ex) { error = ex.Message; }
+    }
+    private async Task SaveExistingProduct(ProductDto product)
+    {
+        busy = true; error = null;
+        var editor = productEditors[product.Id];
+        try
+        {
+            await Api.SaveProductAsync(BusinessId, product.Id, new SaveProductRequest
+            {
+                CategoryId = editor.CategoryId, Name = editor.Name, Description = editor.Description,
+                ReferencePrice = editor.Price, DisplayOrder = editor.Order, IsActive = editor.Active,
+                Version = product.Version
+            });
+            products = await Api.GetProductsAsync(BusinessId); RefreshEditors();
+        }
+        catch (ApiException ex) { error = ex.Message; }
+        finally { busy = false; }
+    }
+    private void RefreshEditors()
+    {
+        productEditors.Clear();
+        foreach (var product in products)
+            productEditors[product.Id] = new(product.CategoryId, product.Name, product.Description,
+                product.ReferencePrice, product.DisplayOrder, product.IsActive);
+    }
+    private sealed class ProductEditor(Guid categoryId, string name, string description,
+        decimal price, int order, bool active)
+    {
+        public Guid CategoryId { get; set; } = categoryId;
+        public string Name { get; set; } = name;
+        public string Description { get; set; } = description;
+        public decimal Price { get; set; } = price;
+        public int Order { get; set; } = order;
+        public bool Active { get; set; } = active;
     }
 }

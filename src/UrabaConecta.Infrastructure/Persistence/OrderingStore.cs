@@ -66,7 +66,7 @@ public sealed class OrderingStore(AppDbContext db) : IOrderingStore
             var until = from.AddDays(1);
             query = query.Where(x => x.PickupStartUtc >= from && x.PickupStartUtc < until);
         }
-        return await query.OrderByDescending(x => x.CreatedAtUtc).ToListAsync(ct);
+        return await query.OrderByDescending(x => x.CreatedAtUtc).Take(200).ToListAsync(ct);
     }
     public Task<bool> CanManageOrdersAsync(Guid userId, Guid businessId, CancellationToken ct)
         => db.BusinessMemberships.AnyAsync(x => x.UserId == userId && x.BusinessId == businessId &&

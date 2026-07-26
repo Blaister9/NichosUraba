@@ -97,7 +97,8 @@ else if (data is not null)
         finally { busy = false; }
     }
     private static string SessionLabel(string s) => s switch { "Open" => "Abierta", "Paused" => "Pausada", _ => "Cerrada" };
-    private static string StatusLabel(string s) => s switch { "Waiting" => "En espera", "Called" => "Llamado",
-        "InService" => "En atención", "Skipped" => "No se presentó", _ => s };
+    private static string StatusLabel(string s) => s switch { "Waiting" => "Esperando", "Called" => "Te estamos llamando",
+        "InService" => "En atención", "Skipped" => "Omitido", "Completed" => "Completado",
+        "Cancelled" => "Cancelado", _ => s };
     public async ValueTask DisposeAsync() { if (hub is not null) await hub.DisposeAsync(); }
 }

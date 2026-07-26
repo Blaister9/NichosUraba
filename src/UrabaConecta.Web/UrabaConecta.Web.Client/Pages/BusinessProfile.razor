@@ -26,6 +26,8 @@ else
             <a class="button-link" href="/negocios/@Slug/pedidos">Ver menú</a>
         </section>
     }
+    @if (business.Services.Count > 0)
+    {
     <section><h2>Servicios</h2><div class="card-grid">
         @foreach (var service in business.Services)
         {
@@ -34,6 +36,7 @@ else
                 <a class="button-link" href="/negocios/@Slug/citas?serviceId=@service.Id">Solicitar cita</a></article>
         }
     </div></section>
+    }
     <section class="hours"><h2>Horario demostrativo</h2>
         @foreach (var hour in business.Hours) { <p><span>@Day(hour.Day)</span><strong>@hour.OpensAt – @hour.ClosesAt</strong></p> }
     </section>

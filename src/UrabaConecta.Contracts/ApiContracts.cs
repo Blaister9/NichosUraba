@@ -4,7 +4,8 @@ namespace UrabaConecta.Contracts;
 
 public sealed record OptionDto(string Slug, string Name);
 public sealed record BusinessCardDto(string Slug, string Name, OptionDto Category, OptionDto Municipality,
-    string Description, string Address, bool HasVirtualQueue = false, bool HasPickupOrdering = false);
+    string Description, string Address, bool HasVirtualQueue = false, bool HasPickupOrdering = false,
+    bool HasScheduling = false);
 public sealed record BusinessHourDto(DayOfWeek Day, string OpensAt, string ClosesAt);
 public sealed record ServiceDto(Guid Id, string Name, string Description, int DurationMinutes, decimal ReferencePrice,
     int DisplayOrder, bool IsActive, int FutureAppointmentCount = 0, long Version = 0);

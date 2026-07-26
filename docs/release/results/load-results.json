@@ -1,0 +1,42 @@
+﻿[
+    {
+        "scenario":  "directorio",
+        "users":  20,
+        "duration_seconds":  60,
+        "requests":  1320,
+        "errors":  0,
+        "average_ms":  5.23,
+        "p95_ms":  7.63,
+        "requests_per_second":  22
+    },
+    {
+        "scenario":  "perfil",
+        "users":  20,
+        "duration_seconds":  60,
+        "requests":  1320,
+        "errors":  0,
+        "average_ms":  6.43,
+        "p95_ms":  7.66,
+        "requests_per_second":  22
+    },
+    {
+        "scenario":  "menu",
+        "users":  10,
+        "duration_seconds":  60,
+        "requests":  660,
+        "errors":  0,
+        "average_ms":  5.18,
+        "p95_ms":  6.01,
+        "requests_per_second":  11
+    },
+    {
+        "scenario":  "seguimiento",
+        "users":  10,
+        "duration_seconds":  60,
+        "requests":  660,
+        "errors":  0,
+        "average_ms":  5.04,
+        "p95_ms":  5.71,
+        "requests_per_second":  11
+    }
+]

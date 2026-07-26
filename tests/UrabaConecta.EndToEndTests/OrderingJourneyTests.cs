@@ -41,15 +41,16 @@ public sealed class OrderingJourneyTests(BrowserFixture fixture) : IClassFixture
         var operations = await operatorContext.NewPageAsync();
         await Login(operations, DevelopmentSeeder.SazonOrdersWorkerEmail);
         await operations.GotoAsync($"{fixture.BaseUrl}/panel/{DevelopmentSeeder.SazonBusinessId}/pedidos");
-        await Expect(operations.GetByText("Pedido E2E")).ToBeVisibleAsync();
-        await operations.GetByRole(AriaRole.Button, new() { Name = "Aceptar" }).ClickAsync();
-        await Expect(operations.GetByText("Aceptado")).ToBeVisibleAsync();
+        var orderCard = operations.Locator("[data-testid=admin-order]").Filter(new() { HasTextString = "Pedido E2E" });
+        await Expect(orderCard).ToBeVisibleAsync();
+        await orderCard.GetByRole(AriaRole.Button, new() { Name = "Aceptar" }).ClickAsync();
+        await Expect(orderCard.GetByText("Aceptado")).ToBeVisibleAsync();
 
         // 6. Flujo operativo completo.
-        await operations.GetByRole(AriaRole.Button, new() { Name = "Preparar" }).ClickAsync();
-        await operations.GetByRole(AriaRole.Button, new() { Name = "Listo" }).ClickAsync();
-        await operations.GetByRole(AriaRole.Button, new() { Name = "Entregado" }).ClickAsync();
-        await Expect(operations.GetByText("Entregado")).ToBeVisibleAsync();
+        await orderCard.GetByRole(AriaRole.Button, new() { Name = "Preparar" }).ClickAsync();
+        await orderCard.GetByRole(AriaRole.Button, new() { Name = "Listo" }).ClickAsync();
+        await orderCard.GetByRole(AriaRole.Button, new() { Name = "Entregado" }).ClickAsync();
+        await Expect(orderCard.GetByText("Entregado")).ToBeVisibleAsync();
 
         // 7. Configuración y catálogo disponibles solo al rol correspondiente.
         await using var ownerContext = await MobileContext();
@@ -57,7 +58,7 @@ public sealed class OrderingJourneyTests(BrowserFixture fixture) : IClassFixture
         await Login(owner, DevelopmentSeeder.SazonOwnerEmail);
         await owner.GotoAsync($"{fixture.BaseUrl}/panel/{DevelopmentSeeder.SazonBusinessId}/configuracion/pedidos");
         await Expect(owner.GetByRole(AriaRole.Heading, new() { Name = "Pedidos y catálogo" })).ToBeVisibleAsync();
-        await Expect(owner.GetByText("Hamburguesa especial")).ToBeVisibleAsync();
+        await Expect(owner.Locator("input[value='Hamburguesa especial']")).ToBeVisibleAsync();
 
         // 8. Aislamiento y composición móvil sin desbordamiento.
         await using var deniedContext = await MobileContext();

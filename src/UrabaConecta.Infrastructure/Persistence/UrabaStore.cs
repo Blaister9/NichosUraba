@@ -26,7 +26,8 @@ public sealed class UrabaStore(AppDbContext db) : IUrabaStore
         return await query.OrderBy(x => x.b.Name).Select(x => new BusinessCardDto(x.b.Slug, x.b.Name,
             new(x.c.Slug, x.c.Name), new(x.m.Slug, x.m.Name), x.b.Description, x.b.Address,
             db.QueueDefinitions.Any(q => q.BusinessId == x.b.Id && q.IsActive && q.IsEnabled),
-            db.PickupOrderSettings.Any(s => s.BusinessId == x.b.Id && s.IsEnabled)))
+            db.PickupOrderSettings.Any(s => s.BusinessId == x.b.Id && s.IsEnabled),
+            db.Services.Any(s => s.BusinessId == x.b.Id && s.IsActive)))
             .ToListAsync(cancellationToken);
     }
 
@@ -144,7 +145,7 @@ public sealed class UrabaStore(AppDbContext db) : IUrabaStore
             var end = start.AddDays(1);
             query = query.Where(x => x.StartAtUtc >= start && x.StartAtUtc < end);
         }
-        var appointments = await query.OrderBy(x => x.StartAtUtc).ToListAsync(cancellationToken);
+        var appointments = await query.OrderByDescending(x => x.StartAtUtc).Take(200).ToListAsync(cancellationToken);
         var records = new List<AppointmentRecord>();
         foreach (var appointment in appointments) records.Add(await BuildRecord(appointment, cancellationToken));
         return records;

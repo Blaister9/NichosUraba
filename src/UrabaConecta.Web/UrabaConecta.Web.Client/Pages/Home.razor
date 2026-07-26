@@ -6,15 +6,20 @@
 <section class="hero">
     <p class="eyebrow">Directorio local demostrativo</p>
     <h1>Encuentre servicios cerca de usted</h1>
-    <p>Consulte información pública, solicite una cita o tome un turno sin crear cuenta.</p>
+    <p>Agende una cita, tome un turno o haga un pedido para recoger sin crear cuenta.</p>
+</section>
+<section class="capability-grid" aria-label="Formas de atención disponibles">
+    <div><strong>Agendar</strong><span>Reserve una hora disponible.</span></div>
+    <div><strong>Tomar turno</strong><span>Entre a una fila virtual.</span></div>
+    <div><strong>Pedir para recoger</strong><span>Elija productos y una franja.</span></div>
 </section>
 <section class="search-panel" aria-label="Filtros del directorio">
     <label>Buscar por nombre<InputText @bind-Value="search" placeholder="Ej. Bella" /></label>
     <label>Municipio<InputSelect @bind-Value="municipality">
-        <option value="">Todos</option><option value="apartado">Apartadó</option><option value="turbo">Turbo</option><option value="chigorodo">Chigorodó</option>
+        <option value="">Todos</option><option value="apartado">Apartadó</option><option value="carepa">Carepa</option><option value="turbo">Turbo</option><option value="chigorodo">Chigorodó</option>
     </InputSelect></label>
     <label>Categoría<InputSelect @bind-Value="category">
-        <option value="">Todas</option><option value="belleza-cuidado-personal">Belleza y cuidado personal</option><option value="barberia">Barbería</option>
+        <option value="">Todas</option><option value="belleza-cuidado-personal">Belleza y cuidado personal</option><option value="barberia">Barbería</option><option value="restaurante">Restaurante</option>
     </InputSelect></label>
     <button class="primary" @onclick="Load">Buscar</button>
 </section>
@@ -32,16 +37,16 @@ else
             <article class="business-card">
                 <span class="tag">@business.Category.Name</span><h2>@business.Name</h2>
                 <p>@business.Description</p><p><strong>@business.Municipality.Name</strong> · @business.Address</p>
-                @if (business.HasVirtualQueue) { <span class="tag">Fila virtual disponible</span> }
-                <a class="button-link" href="/negocios/@business.Slug">Ver establecimiento</a>
+                @if (business.HasScheduling) { <span class="operation-badge">Citas disponibles</span> }
+                @if (business.HasVirtualQueue) { <span class="operation-badge">Turnos virtuales activos</span> }
+                @if (business.HasPickupOrdering) { <span class="operation-badge">Pedidos activos</span> }
+                <a class="button-link" href="@ActionUrl(business)">@ActionLabel(business)</a>
             </article>
         }
     </section>
 }
 @code {
-    private string search = "";
-    private string municipality = "";
-    private string category = "";
+    private string search = "", municipality = "", category = "";
     private string? error;
     private bool loading = true;
     private IReadOnlyList<BusinessCardDto> businesses = [];
@@ -53,4 +58,11 @@ else
         catch (ApiException ex) { error = ex.Message; }
         finally { loading = false; }
     }
+    private static string ActionUrl(BusinessCardDto business) => business.HasPickupOrdering
+        ? $"/negocios/{business.Slug}/pedidos" : business.HasVirtualQueue
+        ? $"/negocios/{business.Slug}/turnos" : business.HasScheduling
+        ? $"/negocios/{business.Slug}/citas" : $"/negocios/{business.Slug}";
+    private static string ActionLabel(BusinessCardDto business) => business.HasPickupOrdering
+        ? "Ver menú" : business.HasVirtualQueue ? "Solicitar turno"
+        : business.HasScheduling ? "Ver citas disponibles" : "Ver establecimiento";
 }
