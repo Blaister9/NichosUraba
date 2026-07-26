@@ -119,12 +119,61 @@ public sealed class HttpUrabaConectaApi(HttpClient http) : IUrabaConectaApi
         CancellationToken cancellationToken = default)
         => Get<IReadOnlyList<MembershipAuditDto>>(
             $"api/v1/businesses/{businessId}/memberships/{membershipId}/audit", cancellationToken);
+    public async Task<QueuePublicStatusDto?> GetPublicQueueAsync(string slug, CancellationToken cancellationToken = default)
+    {
+        var response = await http.GetAsync($"api/v1/public/businesses/{E(slug)}/queue", cancellationToken);
+        return response.StatusCode == HttpStatusCode.NotFound ? null : await Read<QueuePublicStatusDto>(response, cancellationToken);
+    }
+    public async Task<QueueTicketCreatedDto> JoinQueueAsync(string slug, CreateQueueTicketRequest request,
+        CancellationToken cancellationToken = default)
+        => await Read<QueueTicketCreatedDto>(await http.PostAsJsonAsync(
+            $"api/v1/public/businesses/{E(slug)}/queue/tickets", request, Json, cancellationToken), cancellationToken);
+    public async Task<QueueTicketTrackingDto?> GetQueueTicketAsync(string code, CancellationToken cancellationToken = default)
+    {
+        var response = await http.GetAsync($"api/v1/public/queue/tickets/{E(code)}", cancellationToken);
+        return response.StatusCode == HttpStatusCode.NotFound ? null : await Read<QueueTicketTrackingDto>(response, cancellationToken);
+    }
+    public async Task CancelQueueTicketAsync(string code, long version, CancellationToken cancellationToken = default)
+        => await Ensure(await http.PostAsJsonAsync($"api/v1/public/queue/tickets/{E(code)}/cancel",
+            new QueueSessionCommandRequest { Version = version }, Json, cancellationToken), cancellationToken);
+    public Task<QueueAdminDto> GetQueueAdminAsync(Guid businessId, CancellationToken cancellationToken = default)
+        => Get<QueueAdminDto>($"api/v1/businesses/{businessId}/queue", cancellationToken);
+    public async Task<QueueDefinitionDto> SaveQueueDefinitionAsync(Guid businessId, SaveQueueDefinitionRequest request,
+        CancellationToken cancellationToken = default)
+        => await Read<QueueDefinitionDto>(await http.PutAsJsonAsync(
+            $"api/v1/businesses/{businessId}/queue-definition", request, Json, cancellationToken), cancellationToken);
+    public async Task<QueueAdminDto> OpenQueueAsync(Guid businessId, CancellationToken cancellationToken = default)
+        => await Read<QueueAdminDto>(await http.PostAsync($"api/v1/businesses/{businessId}/queue/open", null, cancellationToken), cancellationToken);
+    public Task<QueueAdminDto> PauseQueueAsync(Guid businessId, long version, CancellationToken cancellationToken = default)
+        => QueueSessionCommand(businessId, "pause", version, cancellationToken);
+    public Task<QueueAdminDto> ResumeQueueAsync(Guid businessId, long version, CancellationToken cancellationToken = default)
+        => QueueSessionCommand(businessId, "resume", version, cancellationToken);
+    public Task<QueueAdminDto> CloseQueueAsync(Guid businessId, long version, CancellationToken cancellationToken = default)
+        => QueueSessionCommand(businessId, "close", version, cancellationToken);
+    public async Task<QueueTicketCreatedDto> AddWalkInAsync(Guid businessId, CreateQueueTicketRequest request,
+        CancellationToken cancellationToken = default)
+        => await Read<QueueTicketCreatedDto>(await http.PostAsJsonAsync(
+            $"api/v1/businesses/{businessId}/queue/tickets/walk-in", request, Json, cancellationToken), cancellationToken);
+    public async Task<QueueAdminDto> CallNextAsync(Guid businessId, long sessionVersion,
+        CancellationToken cancellationToken = default)
+        => await Read<QueueAdminDto>(await http.PostAsJsonAsync(
+            $"api/v1/businesses/{businessId}/queue/call-next",
+            new QueueSessionCommandRequest { Version = sessionVersion }, Json, cancellationToken), cancellationToken);
+    public async Task<QueueAdminDto> ChangeQueueTicketAsync(Guid businessId, Guid ticketId, string action,
+        QueueTicketCommandRequest request, CancellationToken cancellationToken = default)
+        => await Read<QueueAdminDto>(await http.PostAsJsonAsync(
+            $"api/v1/businesses/{businessId}/queue/tickets/{ticketId}/{E(action)}",
+            request, Json, cancellationToken), cancellationToken);
 
     private async Task<BusinessMemberDto> PostVersion(Guid businessId, Guid membershipId, string action, long version,
         CancellationToken cancellationToken)
         => await Read<BusinessMemberDto>(await http.PostAsJsonAsync(
             $"api/v1/businesses/{businessId}/memberships/{membershipId}/{action}",
             new MembershipVersionRequest { Version = version }, Json, cancellationToken), cancellationToken);
+    private async Task<QueueAdminDto> QueueSessionCommand(Guid businessId, string action, long version,
+        CancellationToken cancellationToken)
+        => await Read<QueueAdminDto>(await http.PostAsJsonAsync($"api/v1/businesses/{businessId}/queue/{action}",
+            new QueueSessionCommandRequest { Version = version }, Json, cancellationToken), cancellationToken);
 
     private async Task<T> Get<T>(string url, CancellationToken ct) => await Read<T>(await http.GetAsync(url, ct), ct);
     private static async Task<T> Read<T>(HttpResponseMessage response, CancellationToken ct)

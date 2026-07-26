@@ -5,7 +5,8 @@ using UrabaConecta.Contracts;
 
 namespace UrabaConecta.Web.Services;
 
-public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, AuthenticationStateProvider authentication) : IUrabaConectaApi
+public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCases queues,
+    AuthenticationStateProvider authentication) : IUrabaConectaApi
 {
     public Task<IReadOnlyList<BusinessCardDto>> GetBusinessesAsync(string? search = null, string? municipality = null,
         string? category = null, CancellationToken cancellationToken = default)
@@ -93,6 +94,37 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, Authenticatio
     public async Task<IReadOnlyList<MembershipAuditDto>> ListMembershipAuditAsync(Guid businessId,
         Guid membershipId, CancellationToken cancellationToken = default)
         => await useCases.ListMembershipAuditAsync(await UserId(), businessId, membershipId, cancellationToken);
+
+    public Task<QueuePublicStatusDto?> GetPublicQueueAsync(string slug, CancellationToken cancellationToken = default)
+        => queues.GetPublicAsync(slug, cancellationToken);
+    public Task<QueueTicketCreatedDto> JoinQueueAsync(string slug, CreateQueueTicketRequest request,
+        CancellationToken cancellationToken = default) => queues.JoinAsync(slug, request, cancellationToken);
+    public Task<QueueTicketTrackingDto?> GetQueueTicketAsync(string code, CancellationToken cancellationToken = default)
+        => queues.TrackAsync(code, cancellationToken);
+    public Task CancelQueueTicketAsync(string code, long version, CancellationToken cancellationToken = default)
+        => queues.CancelPublicAsync(code, version, cancellationToken);
+    public async Task<QueueAdminDto> GetQueueAdminAsync(Guid businessId, CancellationToken cancellationToken = default)
+        => await queues.GetAdminAsync(await UserId(), businessId, cancellationToken);
+    public async Task<QueueDefinitionDto> SaveQueueDefinitionAsync(Guid businessId, SaveQueueDefinitionRequest request,
+        CancellationToken cancellationToken = default)
+        => await queues.SaveDefinitionAsync(await UserId(), businessId, request, cancellationToken);
+    public async Task<QueueAdminDto> OpenQueueAsync(Guid businessId, CancellationToken cancellationToken = default)
+        => await queues.OpenAsync(await UserId(), businessId, cancellationToken);
+    public async Task<QueueAdminDto> PauseQueueAsync(Guid businessId, long version, CancellationToken cancellationToken = default)
+        => await queues.PauseAsync(await UserId(), businessId, version, cancellationToken);
+    public async Task<QueueAdminDto> ResumeQueueAsync(Guid businessId, long version, CancellationToken cancellationToken = default)
+        => await queues.ResumeAsync(await UserId(), businessId, version, cancellationToken);
+    public async Task<QueueAdminDto> CloseQueueAsync(Guid businessId, long version, CancellationToken cancellationToken = default)
+        => await queues.CloseAsync(await UserId(), businessId, version, cancellationToken);
+    public async Task<QueueTicketCreatedDto> AddWalkInAsync(Guid businessId, CreateQueueTicketRequest request,
+        CancellationToken cancellationToken = default)
+        => await queues.WalkInAsync(await UserId(), businessId, request, cancellationToken);
+    public async Task<QueueAdminDto> CallNextAsync(Guid businessId, long sessionVersion,
+        CancellationToken cancellationToken = default)
+        => await queues.CallNextAsync(await UserId(), businessId, sessionVersion, cancellationToken);
+    public async Task<QueueAdminDto> ChangeQueueTicketAsync(Guid businessId, Guid ticketId, string action,
+        QueueTicketCommandRequest request, CancellationToken cancellationToken = default)
+        => await queues.ChangeTicketAsync(await UserId(), businessId, ticketId, action, request, cancellationToken);
 
     private async Task<Guid> UserId()
     {

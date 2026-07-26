@@ -13,6 +13,8 @@ using UrabaConecta.Web.Components.Account;
 using UrabaConecta.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
+builder.Logging.AddFilter("Microsoft.AspNetCore.SignalR", LogLevel.Warning);
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Falta ConnectionStrings:DefaultConnection.");
 
@@ -50,12 +52,16 @@ builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connect
 builder.Services.AddDataProtection();
 builder.Services.AddScoped<IUrabaStore, UrabaStore>();
 builder.Services.AddScoped<IMembershipAdministrationStore, MembershipAdministrationStore>();
+builder.Services.AddScoped<IQueueStore, QueueStore>();
 builder.Services.AddScoped<IIdentityAccountManager, IdentityAccountManager>();
 builder.Services.AddScoped<IPublicCodeService, PublicCodeService>();
 builder.Services.AddScoped<UrabaConecta.Application.IPersonalDataProtector, PersonalDataProtector>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IUrabaUseCases, UrabaUseCases>();
+builder.Services.AddScoped<IQueueUseCases, QueueUseCases>();
+builder.Services.AddScoped<IQueueChangeNotifier, SignalRQueueChangeNotifier>();
 builder.Services.AddScoped<IUrabaConectaApi, ServerUrabaConectaApi>();
+builder.Services.AddSignalR();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddProblemDetails();
 builder.Services.AddHealthChecks().AddDbContextCheck<AppDbContext>("postgresql", tags: ["ready"]);
@@ -106,6 +112,20 @@ publicApi.MapGet("/appointments/{code}",
 publicApi.MapPost("/appointments/{code}/cancel",
     async (string code, IUrabaUseCases useCases, CancellationToken ct) =>
     { await useCases.CancelAsync(code, ct); return Results.NoContent(); }).RequireRateLimiting("public-write");
+publicApi.MapGet("/businesses/{slug}/queue",
+    async (string slug, IQueueUseCases queues, CancellationToken ct) =>
+        await queues.GetPublicAsync(slug, ct) is { } result ? Results.Ok(result) : Results.NotFound());
+publicApi.MapPost("/businesses/{slug}/queue/tickets",
+    async (string slug, CreateQueueTicketRequest request, IQueueUseCases queues, CancellationToken ct) =>
+        Results.Created("", await queues.JoinAsync(slug, request, ct))).RequireRateLimiting("public-write");
+publicApi.MapGet("/queue/tickets/{code}",
+    async (string code, IQueueUseCases queues, CancellationToken ct) =>
+        await queues.TrackAsync(code, ct) is { } result ? Results.Ok(result) : Results.NotFound())
+    .RequireRateLimiting("public-write");
+publicApi.MapPost("/queue/tickets/{code}/cancel",
+    async (string code, QueueSessionCommandRequest request, IQueueUseCases queues, CancellationToken ct) =>
+    { await queues.CancelPublicAsync(code, request.Version, ct); return Results.NoContent(); })
+    .RequireRateLimiting("public-write");
 
 var privateApi = app.MapGroup("/api/v1/businesses").RequireAuthorization("BusinessMember");
 privateApi.MapGet("/mine", (ClaimsPrincipal user, IUrabaUseCases useCases, CancellationToken ct)
@@ -223,7 +243,41 @@ privateApi.MapGet("/{businessId:guid}/memberships/{membershipId:guid}/audit",
     (Guid businessId, Guid membershipId, ClaimsPrincipal user, IUrabaUseCases useCases, CancellationToken ct)
         => useCases.ListMembershipAuditAsync(UserId(user), businessId, membershipId, ct))
     .RequireAuthorization("Workers.Manage");
+privateApi.MapGet("/{businessId:guid}/queue",
+    (Guid businessId, ClaimsPrincipal user, IQueueUseCases queues, CancellationToken ct)
+        => queues.GetAdminAsync(UserId(user), businessId, ct));
+privateApi.MapPut("/{businessId:guid}/queue-definition",
+    (Guid businessId, SaveQueueDefinitionRequest request, ClaimsPrincipal user, IQueueUseCases queues, CancellationToken ct)
+        => queues.SaveDefinitionAsync(UserId(user), businessId, request, ct));
+privateApi.MapPost("/{businessId:guid}/queue/open",
+    (Guid businessId, ClaimsPrincipal user, IQueueUseCases queues, CancellationToken ct)
+        => queues.OpenAsync(UserId(user), businessId, ct));
+privateApi.MapPost("/{businessId:guid}/queue/pause",
+    (Guid businessId, QueueSessionCommandRequest request, ClaimsPrincipal user,
+        IQueueUseCases queues, CancellationToken ct) =>
+        queues.PauseAsync(UserId(user), businessId, request.Version, ct));
+privateApi.MapPost("/{businessId:guid}/queue/resume",
+    (Guid businessId, QueueSessionCommandRequest request, ClaimsPrincipal user,
+        IQueueUseCases queues, CancellationToken ct) =>
+        queues.ResumeAsync(UserId(user), businessId, request.Version, ct));
+privateApi.MapPost("/{businessId:guid}/queue/close",
+    (Guid businessId, QueueSessionCommandRequest request, ClaimsPrincipal user,
+        IQueueUseCases queues, CancellationToken ct) =>
+        queues.CloseAsync(UserId(user), businessId, request.Version, ct));
+privateApi.MapPost("/{businessId:guid}/queue/tickets/walk-in",
+    async (Guid businessId, CreateQueueTicketRequest request, ClaimsPrincipal user,
+        IQueueUseCases queues, CancellationToken ct) =>
+        Results.Created("", await queues.WalkInAsync(UserId(user), businessId, request, ct)));
+privateApi.MapPost("/{businessId:guid}/queue/call-next",
+    (Guid businessId, QueueSessionCommandRequest request, ClaimsPrincipal user,
+        IQueueUseCases queues, CancellationToken ct) =>
+        queues.CallNextAsync(UserId(user), businessId, request.Version, ct));
+privateApi.MapPost("/{businessId:guid}/queue/tickets/{ticketId:guid}/{action}",
+    (Guid businessId, Guid ticketId, string action, QueueTicketCommandRequest request,
+        ClaimsPrincipal user, IQueueUseCases queues, CancellationToken ct) =>
+        queues.ChangeTicketAsync(UserId(user), businessId, ticketId, action, request, ct));
 
+app.MapHub<QueueHub>("/hubs/queue");
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()
     .AddInteractiveWebAssemblyRenderMode()

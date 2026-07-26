@@ -13,9 +13,13 @@ public static class DevelopmentSeeder
     public const string OtherOwnerEmail = "propietario@otro.demo";
     public const string BellaWorkerEmail = "trabajadora@bella.demo";
     public const string BellaConfigurationWorkerEmail = "configuradora@bella.demo";
+    public const string CorteOwnerEmail = "propietario@corte.demo";
+    public const string CorteQueueWorkerEmail = "turnos@corte.demo";
+    public const string CorteNoPermissionEmail = "sinasignacion@corte.demo";
     public const string DemoPassword = "UrabaDemo!2026";
     public static readonly Guid BellaBusinessId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     public static readonly Guid OtherBusinessId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+    public static readonly Guid CorteBusinessId = Guid.Parse("33333333-3333-3333-3333-333333333333");
 
     public static async Task SeedDevelopmentAsync(this IServiceProvider services, IHostEnvironment environment)
     {
@@ -33,11 +37,17 @@ public static class DevelopmentSeeder
         var otherOwner = await EnsureUser(userManager, OtherOwnerEmail, "Propietario negocio aislado");
         var bellaWorker = await EnsureUser(userManager, BellaWorkerEmail, "Trabajadora Bella");
         var configurationWorker = await EnsureUser(userManager, BellaConfigurationWorkerEmail, "Configuradora Bella");
+        var corteOwner = await EnsureUser(userManager, CorteOwnerEmail, "Propietario El Corte");
+        var queueWorker = await EnsureUser(userManager, CorteQueueWorkerEmail, "Operador de turnos");
+        var noPermission = await EnsureUser(userManager, CorteNoPermissionEmail, "Trabajador sin permiso");
         if (!await userManager.IsInRoleAsync(bellaOwner, "BusinessOwner")) await userManager.AddToRoleAsync(bellaOwner, "BusinessOwner");
         if (!await userManager.IsInRoleAsync(otherOwner, "BusinessOwner")) await userManager.AddToRoleAsync(otherOwner, "BusinessOwner");
         if (!await userManager.IsInRoleAsync(bellaWorker, "BusinessWorker")) await userManager.AddToRoleAsync(bellaWorker, "BusinessWorker");
         if (!await userManager.IsInRoleAsync(configurationWorker, "BusinessWorker"))
             await userManager.AddToRoleAsync(configurationWorker, "BusinessWorker");
+        if (!await userManager.IsInRoleAsync(corteOwner, "BusinessOwner")) await userManager.AddToRoleAsync(corteOwner, "BusinessOwner");
+        if (!await userManager.IsInRoleAsync(queueWorker, "BusinessWorker")) await userManager.AddToRoleAsync(queueWorker, "BusinessWorker");
+        if (!await userManager.IsInRoleAsync(noPermission, "BusinessWorker")) await userManager.AddToRoleAsync(noPermission, "BusinessWorker");
 
         if (await db.Businesses.AnyAsync())
         {
@@ -45,6 +55,7 @@ public static class DevelopmentSeeder
             await EnsureMembership(db, OtherBusinessId, otherOwner.Id, MembershipRole.Owner);
             await EnsureMembership(db, BellaBusinessId, bellaWorker.Id, MembershipRole.Worker);
             await EnsureMembership(db, BellaBusinessId, configurationWorker.Id, MembershipRole.Worker, true);
+            await EnsureQueueDemo(db, corteOwner.Id, queueWorker.Id, noPermission.Id);
             await db.SaveChangesAsync();
             return;
         }
@@ -79,6 +90,8 @@ public static class DevelopmentSeeder
         db.Services.AddRange(demoServices);
         foreach (var service in demoServices) db.StaffServices.Add(new StaffService(bella.Id, worker.Id, service.Id));
         await db.SaveChangesAsync();
+        await EnsureQueueDemo(db, corteOwner.Id, queueWorker.Id, noPermission.Id);
+        await db.SaveChangesAsync();
     }
 
     private static async Task<ApplicationUser> EnsureUser(UserManager<ApplicationUser> manager, string email,
@@ -104,10 +117,46 @@ public static class DevelopmentSeeder
     }
 
     private static async Task EnsureMembership(AppDbContext db, Guid businessId, Guid userId, MembershipRole role,
-        bool canManageConfiguration = false)
+        bool canManageConfiguration = false, bool canManageQueues = false)
     {
         if (!await db.BusinessMemberships.AnyAsync(x => x.BusinessId == businessId && x.UserId == userId))
             db.BusinessMemberships.Add(new BusinessMembership(Guid.NewGuid(), businessId, userId, role,
-                canManageConfiguration));
+                canManageConfiguration, canManageQueues: canManageQueues));
+    }
+
+    private static async Task EnsureQueueDemo(AppDbContext db, Guid ownerId, Guid queueWorkerId, Guid noPermissionId)
+    {
+        var municipality = await db.Municipalities.SingleOrDefaultAsync(x => x.Slug == "chigorodo");
+        if (municipality is null)
+        {
+            municipality = new Municipality(Guid.Parse("abababab-abab-abab-abab-abababababab"), "chigorodo", "Chigorodó");
+            db.Add(municipality);
+        }
+        var category = await db.Categories.SingleOrDefaultAsync(x => x.Slug == "barberia");
+        if (category is null)
+        {
+            category = new Category(Guid.Parse("cdcdcdcd-cdcd-cdcd-cdcd-cdcdcdcdcdcd"), "barberia", "Barbería");
+            db.Add(category);
+        }
+        if (!await db.Businesses.AnyAsync(x => x.Id == CorteBusinessId))
+            db.Add(new Business(CorteBusinessId, "barberia-el-corte", "Barbería El Corte", municipality.Id,
+                category.Id, "Barbería ficticia con fila virtual para atención por orden de llegada.",
+                "Centro, Chigorodó", "300 000 0002"));
+        await db.SaveChangesAsync();
+        await EnsureMembership(db, CorteBusinessId, ownerId, MembershipRole.Owner);
+        await EnsureMembership(db, CorteBusinessId, queueWorkerId, MembershipRole.Worker, canManageQueues: true);
+        await EnsureMembership(db, CorteBusinessId, noPermissionId, MembershipRole.Worker);
+        var definition = await db.QueueDefinitions.SingleOrDefaultAsync(x => x.BusinessId == CorteBusinessId && x.IsActive);
+        if (definition is null)
+        {
+            definition = new QueueDefinition(Guid.Parse("44444444-4444-4444-4444-444444444444"),
+                CorteBusinessId, "Atención general", 25, 20,
+                "Toma tu turno y revisa aquí cuándo se acerca tu atención.", true);
+            db.Add(definition);
+            await db.SaveChangesAsync();
+        }
+        if (!await db.QueueSessions.AnyAsync(x => x.BusinessId == CorteBusinessId &&
+            (x.Status == QueueSessionStatus.Open || x.Status == QueueSessionStatus.Paused)))
+            db.Add(new QueueSession(Guid.NewGuid(), CorteBusinessId, definition.Id, DateTimeOffset.UtcNow));
     }
 }

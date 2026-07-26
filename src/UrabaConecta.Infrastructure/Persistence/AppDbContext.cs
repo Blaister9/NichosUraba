@@ -21,6 +21,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<AvailabilityException> AvailabilityExceptions => Set<AvailabilityException>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<ConsentReceipt> ConsentReceipts => Set<ConsentReceipt>();
+    public DbSet<QueueDefinition> QueueDefinitions => Set<QueueDefinition>();
+    public DbSet<QueueSession> QueueSessions => Set<QueueSession>();
+    public DbSet<QueueTicket> QueueTickets => Set<QueueTicket>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -150,6 +153,49 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
                 .HasPrincipalKey(e => new { e.BusinessId, e.Id }).OnDelete(DeleteBehavior.Restrict);
             x.HasOne<ConsentReceipt>().WithOne().HasForeignKey<Appointment>(e => e.ConsentReceiptId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<QueueDefinition>(x =>
+        {
+            x.ToTable("queue_definitions", t =>
+            {
+                t.HasCheckConstraint("ck_queue_definition_duration", "\"AverageDurationMinutes\" BETWEEN 1 AND 480");
+                t.HasCheckConstraint("ck_queue_definition_capacity", "\"MaximumWaiting\" BETWEEN 1 AND 500");
+            });
+            x.HasKey(e => e.Id);
+            x.HasIndex(e => new { e.BusinessId, e.Id }).IsUnique();
+            x.HasIndex(e => e.BusinessId).IsUnique().HasFilter("\"IsActive\" = TRUE");
+            x.Property(e => e.Name).HasMaxLength(80);
+            x.Property(e => e.PublicMessage).HasMaxLength(160);
+            x.Property(e => e.Version).IsConcurrencyToken();
+            x.HasOne<Business>().WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<QueueSession>(x =>
+        {
+            x.ToTable("queue_sessions");
+            x.HasKey(e => e.Id);
+            x.HasIndex(e => new { e.BusinessId, e.Id }).IsUnique();
+            x.HasIndex(e => e.QueueDefinitionId).IsUnique()
+                .HasFilter("\"Status\" IN ('Open', 'Paused')");
+            x.Property(e => e.Status).HasConversion<string>().HasMaxLength(16);
+            x.Property(e => e.Version).IsConcurrencyToken();
+            x.HasOne<QueueDefinition>().WithMany().HasForeignKey(e => new { e.BusinessId, e.QueueDefinitionId })
+                .HasPrincipalKey(e => new { e.BusinessId, e.Id }).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<QueueTicket>(x =>
+        {
+            x.ToTable("queue_tickets");
+            x.HasKey(e => e.Id);
+            x.HasIndex(e => new { e.QueueSessionId, e.Number }).IsUnique();
+            x.HasIndex(e => e.PublicCodeHash).IsUnique();
+            x.HasIndex(e => new { e.BusinessId, e.Status });
+            x.HasIndex(e => new { e.QueueSessionId, e.Status, e.Number });
+            x.Property(e => e.Status).HasConversion<string>().HasMaxLength(16);
+            x.Property(e => e.Source).HasConversion<string>().HasMaxLength(16);
+            x.Property(e => e.PublicCodeHash).HasMaxLength(64);
+            x.Property(e => e.ProtectedAlias).HasMaxLength(1000);
+            x.Property(e => e.Version).IsConcurrencyToken();
+            x.HasOne<QueueSession>().WithMany().HasForeignKey(e => new { e.BusinessId, e.QueueSessionId })
+                .HasPrincipalKey(e => new { e.BusinessId, e.Id }).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

@@ -96,6 +96,52 @@ public interface IPersonalDataProtector
     string Unprotect(string value);
 }
 
+public interface IQueueStore
+{
+    Task<IApplicationTransaction> BeginTransactionAsync(CancellationToken cancellationToken);
+    Task<QueueDefinition?> GetPublicDefinitionAsync(string slug, CancellationToken cancellationToken);
+    Task<(QueueDefinition Definition, Business Business)?> GetPublicContextAsync(string slug, CancellationToken cancellationToken);
+    Task<(QueueTicket Ticket, QueueDefinition Definition, Business Business)?> FindTicketAsync(string codeHash, CancellationToken cancellationToken);
+    Task<QueueDefinition?> GetDefinitionAsync(Guid businessId, CancellationToken cancellationToken);
+    Task<QueueSession?> GetCurrentSessionAsync(Guid businessId, CancellationToken cancellationToken);
+    Task<QueueSession?> LockCurrentSessionAsync(Guid businessId, CancellationToken cancellationToken);
+    Task<QueueTicket?> GetTicketAsync(Guid businessId, Guid ticketId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<QueueTicket>> GetSessionTicketsAsync(Guid businessId, Guid sessionId, CancellationToken cancellationToken);
+    Task<int> CountWaitingAsync(Guid businessId, Guid sessionId, CancellationToken cancellationToken);
+    Task<int> CountActiveAsync(Guid businessId, Guid sessionId, CancellationToken cancellationToken);
+    Task<QueueTicket?> GetNextWaitingAsync(Guid businessId, Guid sessionId, CancellationToken cancellationToken);
+    Task<bool> CanManageQueuesAsync(Guid userId, Guid businessId, CancellationToken cancellationToken);
+    Task<(string BusinessName, string BusinessSlug)?> GetBusinessNameAsync(Guid businessId, CancellationToken cancellationToken);
+    void AddDefinition(QueueDefinition definition);
+    void AddSession(QueueSession session);
+    void AddTicket(QueueTicket ticket);
+    Task SaveChangesAsync(CancellationToken cancellationToken);
+}
+
+public interface IQueueChangeNotifier
+{
+    Task PublicChangedAsync(Guid definitionId, CancellationToken cancellationToken);
+    Task TicketChangedAsync(Guid ticketId, CancellationToken cancellationToken);
+    Task OperationsChangedAsync(Guid businessId, CancellationToken cancellationToken);
+}
+
+public interface IQueueUseCases
+{
+    Task<QueuePublicStatusDto?> GetPublicAsync(string slug, CancellationToken cancellationToken = default);
+    Task<QueueTicketCreatedDto> JoinAsync(string slug, CreateQueueTicketRequest request, CancellationToken cancellationToken = default);
+    Task<QueueTicketTrackingDto?> TrackAsync(string code, CancellationToken cancellationToken = default);
+    Task CancelPublicAsync(string code, long version, CancellationToken cancellationToken = default);
+    Task<QueueAdminDto> GetAdminAsync(Guid userId, Guid businessId, CancellationToken cancellationToken = default);
+    Task<QueueDefinitionDto> SaveDefinitionAsync(Guid userId, Guid businessId, SaveQueueDefinitionRequest request, CancellationToken cancellationToken = default);
+    Task<QueueAdminDto> OpenAsync(Guid userId, Guid businessId, CancellationToken cancellationToken = default);
+    Task<QueueAdminDto> PauseAsync(Guid userId, Guid businessId, long version, CancellationToken cancellationToken = default);
+    Task<QueueAdminDto> ResumeAsync(Guid userId, Guid businessId, long version, CancellationToken cancellationToken = default);
+    Task<QueueAdminDto> CloseAsync(Guid userId, Guid businessId, long version, CancellationToken cancellationToken = default);
+    Task<QueueTicketCreatedDto> WalkInAsync(Guid userId, Guid businessId, CreateQueueTicketRequest request, CancellationToken cancellationToken = default);
+    Task<QueueAdminDto> CallNextAsync(Guid userId, Guid businessId, long sessionVersion, CancellationToken cancellationToken = default);
+    Task<QueueAdminDto> ChangeTicketAsync(Guid userId, Guid businessId, Guid ticketId, string action, QueueTicketCommandRequest request, CancellationToken cancellationToken = default);
+}
+
 public interface IUrabaUseCases
 {
     Task<IReadOnlyList<BusinessCardDto>> GetBusinessesAsync(string? search, string? municipality, string? category,

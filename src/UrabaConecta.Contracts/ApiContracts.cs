@@ -4,12 +4,13 @@ namespace UrabaConecta.Contracts;
 
 public sealed record OptionDto(string Slug, string Name);
 public sealed record BusinessCardDto(string Slug, string Name, OptionDto Category, OptionDto Municipality,
-    string Description, string Address);
+    string Description, string Address, bool HasVirtualQueue = false);
 public sealed record BusinessHourDto(DayOfWeek Day, string OpensAt, string ClosesAt);
 public sealed record ServiceDto(Guid Id, string Name, string Description, int DurationMinutes, decimal ReferencePrice,
     int DisplayOrder, bool IsActive, int FutureAppointmentCount = 0, long Version = 0);
 public sealed record BusinessProfileDto(string Slug, string Name, string Description, string Address, string PublicPhone,
-    OptionDto Category, OptionDto Municipality, IReadOnlyList<BusinessHourDto> Hours, IReadOnlyList<ServiceDto> Services);
+    OptionDto Category, OptionDto Municipality, IReadOnlyList<BusinessHourDto> Hours, IReadOnlyList<ServiceDto> Services,
+    bool HasVirtualQueue = false);
 public sealed record SlotDto(DateTimeOffset Start, DateTimeOffset End);
 public sealed record SlotListDto(string BusinessTimeZone, DateOnly Date, IReadOnlyList<SlotDto> Slots);
 
@@ -29,9 +30,10 @@ public sealed record AppointmentTrackingDto(string Status, string StatusLabel, s
     DateTimeOffset Start, string PhoneMasked, bool CanCancel, DateTimeOffset UpdatedAt);
 
 public sealed record MyBusinessDto(Guid Id, string Name, string Slug, string MembershipRole,
-    bool CanManageConfiguration = false, bool CanManageAppointments = true, bool CanManageMembers = false);
+    bool CanManageConfiguration = false, bool CanManageAppointments = true, bool CanManageMembers = false,
+    bool CanManageQueues = false);
 public sealed record MembershipPermissionsDto(bool CanManageAppointments, bool CanManageConfiguration,
-    bool CanManageMembers);
+    bool CanManageMembers, bool CanManageQueues = false);
 public sealed record BusinessMemberDto(Guid Id, string DisplayName, string Email, bool IsActive, bool IsOwner,
     MembershipPermissionsDto Permissions, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, long Version);
 public sealed record BusinessMemberListDto(IReadOnlyList<BusinessMemberDto> Items,
@@ -42,6 +44,7 @@ public class LinkExistingMemberRequest
     public bool CanManageAppointments { get; set; }
     public bool CanManageConfiguration { get; set; }
     public bool CanManageMembers { get; set; }
+    public bool CanManageQueues { get; set; }
 }
 public sealed class CreateDevelopmentMemberRequest : LinkExistingMemberRequest
 {
@@ -53,6 +56,7 @@ public class UpdateMemberPermissionsRequest
     public bool CanManageAppointments { get; set; }
     public bool CanManageConfiguration { get; set; }
     public bool CanManageMembers { get; set; }
+    public bool CanManageQueues { get; set; }
     public long Version { get; set; }
 }
 public sealed class MembershipVersionRequest
@@ -62,6 +66,39 @@ public sealed class MembershipVersionRequest
 public sealed class RevokeOwnershipRequest : UpdateMemberPermissionsRequest;
 public sealed record MembershipAuditDto(Guid Id, string Action, Guid ActorUserId,
     DateTimeOffset OccurredAtUtc, string PreviousState, string NewState);
+
+public sealed record QueueDefinitionDto(Guid Id, Guid BusinessId, string BusinessName, string BusinessSlug,
+    string Name, int AverageDurationMinutes, int MaximumWaiting, string PublicMessage,
+    bool IsEnabled, long Version);
+public sealed record QueuePublicStatusDto(string BusinessName, string BusinessSlug, string QueueName,
+    string PublicMessage, bool IsEnabled, string SessionStatus, int? CurrentNumber,
+    int WaitingCount, int ApproximateWaitMinutes, bool CanJoin, long Version);
+public sealed record QueueTicketCreatedDto(int Number, string TrackingCode, string Status,
+    int PeopleAhead, int ApproximateWaitMinutes);
+public sealed record QueueTicketTrackingDto(int Number, string Status, string StatusLabel,
+    string BusinessName, string QueueName, int PeopleAhead, int ApproximateWaitMinutes,
+    bool CanCancel, DateTimeOffset UpdatedAtUtc, long Version);
+public sealed record QueueTicketAdminDto(Guid Id, int Number, string? Alias, string Source, string Status,
+    int CallCount, int RestoreCount, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, long Version);
+public sealed record QueueAdminDto(QueueDefinitionDto Definition, string SessionStatus, Guid? SessionId,
+    long? SessionVersion, int? CurrentNumber, int WaitingCount, int NextNumber,
+    IReadOnlyList<QueueTicketAdminDto> Tickets);
+public sealed class SaveQueueDefinitionRequest
+{
+    [Required, StringLength(80, MinimumLength = 1)] public string Name { get; set; } = "";
+    [Range(1, 480)] public int AverageDurationMinutes { get; set; }
+    [Range(1, 500)] public int MaximumWaiting { get; set; }
+    [StringLength(160)] public string? PublicMessage { get; set; }
+    public bool IsEnabled { get; set; }
+    public long Version { get; set; }
+}
+public sealed class QueueSessionCommandRequest { public long Version { get; set; } }
+public sealed class CreateQueueTicketRequest { [StringLength(40)] public string? Alias { get; set; } }
+public sealed class QueueTicketCommandRequest
+{
+    public long TicketVersion { get; set; }
+    public long SessionVersion { get; set; }
+}
 public sealed record AppointmentAdminDto(Guid Id, Guid BusinessId, string ServiceName, DateTimeOffset Start,
     DateTimeOffset End, string CustomerAlias, string Phone, string Notes, string Status,
     DateTimeOffset CreatedAt, string ConsentNoticeVersion, DateTimeOffset ConsentAcceptedAt, uint Version);
@@ -181,4 +218,21 @@ public interface IUrabaConectaApi
         RevokeOwnershipRequest request, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<MembershipAuditDto>> ListMembershipAuditAsync(Guid businessId, Guid membershipId,
         CancellationToken cancellationToken = default);
+    Task<QueuePublicStatusDto?> GetPublicQueueAsync(string slug, CancellationToken cancellationToken = default);
+    Task<QueueTicketCreatedDto> JoinQueueAsync(string slug, CreateQueueTicketRequest request,
+        CancellationToken cancellationToken = default);
+    Task<QueueTicketTrackingDto?> GetQueueTicketAsync(string code, CancellationToken cancellationToken = default);
+    Task CancelQueueTicketAsync(string code, long version, CancellationToken cancellationToken = default);
+    Task<QueueAdminDto> GetQueueAdminAsync(Guid businessId, CancellationToken cancellationToken = default);
+    Task<QueueDefinitionDto> SaveQueueDefinitionAsync(Guid businessId, SaveQueueDefinitionRequest request,
+        CancellationToken cancellationToken = default);
+    Task<QueueAdminDto> OpenQueueAsync(Guid businessId, CancellationToken cancellationToken = default);
+    Task<QueueAdminDto> PauseQueueAsync(Guid businessId, long version, CancellationToken cancellationToken = default);
+    Task<QueueAdminDto> ResumeQueueAsync(Guid businessId, long version, CancellationToken cancellationToken = default);
+    Task<QueueAdminDto> CloseQueueAsync(Guid businessId, long version, CancellationToken cancellationToken = default);
+    Task<QueueTicketCreatedDto> AddWalkInAsync(Guid businessId, CreateQueueTicketRequest request,
+        CancellationToken cancellationToken = default);
+    Task<QueueAdminDto> CallNextAsync(Guid businessId, long sessionVersion, CancellationToken cancellationToken = default);
+    Task<QueueAdminDto> ChangeQueueTicketAsync(Guid businessId, Guid ticketId, string action,
+        QueueTicketCommandRequest request, CancellationToken cancellationToken = default);
 }

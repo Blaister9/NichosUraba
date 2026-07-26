@@ -79,7 +79,8 @@ public sealed class MembershipAdministrationStore(AppDbContext db) : IMembership
                new MembershipPermissionsDto(
                    membership.Role == MembershipRole.Owner || membership.CanManageAppointments,
                    membership.Role == MembershipRole.Owner || membership.CanManageConfiguration,
-                   membership.Role == MembershipRole.Owner || membership.CanManageMembers),
+                   membership.Role == MembershipRole.Owner || membership.CanManageMembers,
+                   membership.Role == MembershipRole.Owner || membership.CanManageQueues),
                membership.CreatedAtUtc, membership.UpdatedAtUtc, membership.Version);
 
     private sealed class EfApplicationTransaction(IDbContextTransaction transaction) : IApplicationTransaction
