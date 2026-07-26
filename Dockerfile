@@ -7,12 +7,13 @@ RUN dotnet publish src/UrabaConecta.Web/UrabaConecta.Web/UrabaConecta.Web.csproj
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends curl \
+RUN apt-get update && apt-get install -y --no-install-recommends curl gosu \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app/publish .
-RUN mkdir -p /app/keys && chown -R app:app /app/keys
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN mkdir -p /app/keys \
+    && chmod 0755 /usr/local/bin/docker-entrypoint.sh
 ENV ASPNETCORE_HTTP_PORTS=8080
 EXPOSE 8080
-USER app
-ENTRYPOINT ["dotnet", "UrabaConecta.Web.dll"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
