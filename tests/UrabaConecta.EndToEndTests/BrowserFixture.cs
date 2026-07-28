@@ -9,6 +9,7 @@ public sealed class BrowserFixture : IAsyncLifetime
 {
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:17-alpine")
         .WithDatabase("urabaconecta_e2e").WithUsername("e2e").WithPassword("e2e-only-password").Build();
+    private readonly System.Collections.Concurrent.ConcurrentQueue<string> _log = new();
     private Process? _app;
     private IPlaywright? _playwright;
     public IBrowser Browser { get; private set; } = default!;
@@ -38,11 +39,22 @@ public sealed class BrowserFixture : IAsyncLifetime
         start.Environment["URABACONECTA_TRACKING_HMAC_KEY"] = "e2e-test-hmac-key-with-at-least-32-bytes";
         start.Environment["RateLimits__PublicWritesPerMinute"] = "200";
         _app = Process.Start(start) ?? throw new InvalidOperationException("No fue posible iniciar la aplicación.");
-        _app.OutputDataReceived += (_, _) => { }; _app.ErrorDataReceived += (_, _) => { };
+        _app.OutputDataReceived += (_, e) => Capture(e.Data);
+        _app.ErrorDataReceived += (_, e) => Capture(e.Data);
         _app.BeginOutputReadLine(); _app.BeginErrorReadLine();
         await WaitUntilReady();
         _playwright = await Playwright.CreateAsync();
         Browser = await _playwright.Chromium.LaunchAsync(new() { Headless = true });
+    }
+
+    /// <summary>Últimas líneas del registro de la aplicación, para diagnosticar un fallo del servidor.</summary>
+    public string RecentLog => string.Join(Environment.NewLine, _log);
+
+    private void Capture(string? line)
+    {
+        if (line is null) return;
+        _log.Enqueue(line);
+        while (_log.Count > 400) _log.TryDequeue(out _);
     }
 
     public async Task DisposeAsync()

@@ -37,11 +37,25 @@ builder.Services.AddAuthentication(options =>
     options.DefaultScheme = IdentityConstants.ApplicationScheme;
     options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
 }).AddIdentityCookies();
-if (!builder.Environment.IsDevelopment())
+builder.Services.ConfigureApplicationCookie(options =>
 {
-    builder.Services.ConfigureApplicationCookie(options =>
-        options.Cookie.SecurePolicy = CookieSecurePolicy.Always);
-}
+    if (!builder.Environment.IsDevelopment()) options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    // Las rutas de API responden con códigos de estado; sólo el sitio redirige al inicio de sesión.
+    var redirectToLogin = options.Events.OnRedirectToLogin;
+    var redirectToAccessDenied = options.Events.OnRedirectToAccessDenied;
+    options.Events.OnRedirectToLogin = context =>
+    {
+        if (!context.Request.Path.StartsWithSegments("/api")) return redirectToLogin(context);
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        return Task.CompletedTask;
+    };
+    options.Events.OnRedirectToAccessDenied = context =>
+    {
+        if (!context.Request.Path.StartsWithSegments("/api")) return redirectToAccessDenied(context);
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        return Task.CompletedTask;
+    };
+});
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy("BusinessMember", policy => policy.RequireAuthenticatedUser())
     .AddPolicy("BusinessOwner", policy => policy.RequireRole("BusinessOwner"))

@@ -306,7 +306,9 @@ public sealed class PlatformAdministrationUseCases(
         {
             foreach (var day in new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday,
                          DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday })
-                store.AddHour(new BusinessHour(Guid.NewGuid(), businessId, day, new TimeOnly(8), new TimeOnly(18)));
+                // TimeOnly(8) invoca el constructor de ticks, no el de horas: el día quedaba vacío.
+                store.AddHour(new BusinessHour(Guid.NewGuid(), businessId, day,
+                    new TimeOnly(8, 0), new TimeOnly(18, 0)));
             if (!string.IsNullOrWhiteSpace(request.InitialServiceName))
             {
                 var service = new Service(Guid.NewGuid(), businessId, request.InitialServiceName,
@@ -323,7 +325,7 @@ public sealed class PlatformAdministrationUseCases(
         {
             store.AddPickupSettings(new PickupOrderSettings(Guid.NewGuid(), businessId, true,
                 "Haz tu pedido y recógelo en el establecimiento.", request.PickupPreparationMinutes,
-                request.PickupSlotMinutes, request.PickupCapacity, new TimeOnly(8), new TimeOnly(18)));
+                request.PickupSlotMinutes, request.PickupCapacity, new TimeOnly(8, 0), new TimeOnly(18, 0)));
             if (!string.IsNullOrWhiteSpace(request.InitialProductCategory) &&
                 !string.IsNullOrWhiteSpace(request.InitialProductName))
             {
