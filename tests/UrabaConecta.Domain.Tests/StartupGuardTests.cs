@@ -81,6 +81,15 @@ public sealed class StartupGuardTests
     }
 
     [Fact]
+    public void Production_refuses_to_start_with_the_demo_access_secret()
+    {
+        var problems = StartupGuard.Validate(
+            ProductionConfiguration(("DemoAccess:SharedPassword", "Shared-Commercial-2026!")),
+            Production, CompleteLegal(), CompleteStorage());
+        Assert.Contains(problems, x => x.Contains("DemoAccess__SharedPassword"));
+    }
+
+    [Fact]
     public void Production_refuses_to_start_with_a_known_demo_password()
     {
         var problems = StartupGuard.Validate(

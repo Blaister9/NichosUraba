@@ -609,6 +609,7 @@ app.MapRazorComponents<App>()
 app.MapAdditionalIdentityEndpoints();
 await app.Services.SeedDevelopmentAsync(app.Environment);
 await app.Services.BootstrapDemoAdminAsync(app.Environment);
+await app.Services.NormalizeDemoAccessAsync(app.Environment);
 await app.RunAsync();
 
 static Guid UserId(ClaimsPrincipal user)

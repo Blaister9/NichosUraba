@@ -33,6 +33,8 @@ public static class StartupGuard
             problems.Add("DemoSeed__Enabled debe ser false en Production.");
         if (configuration.GetValue<bool>("DemoBootstrap:Enabled"))
             problems.Add("DemoBootstrap__Enabled debe ser false en Production.");
+        if (!string.IsNullOrWhiteSpace(configuration["DemoAccess:SharedPassword"]))
+            problems.Add("DemoAccess__SharedPassword no debe estar definida en Production.");
         foreach (var key in new[] { "DemoSeed:AdminPassword", "DemoSeed:BusinessPassword" })
             if (!string.IsNullOrWhiteSpace(configuration[key]))
                 problems.Add($"{key.Replace(':', '_').Replace("_", "__")} no debe estar definida en Production.");
@@ -86,7 +88,7 @@ public static class StartupGuard
         foreach (var key in new[]
                  {
                      "DemoSeed:AdminPassword", "DemoSeed:BusinessPassword",
-                     "DemoBootstrap:AdminPassword"
+                     "DemoBootstrap:AdminPassword", "DemoAccess:SharedPassword"
                  })
             if (configuration[key] is { Length: > 0 } value) yield return value;
     }
