@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Threading.RateLimiting;
+using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.DataProtection;
@@ -7,9 +8,11 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using UrabaConecta.Application;
 using UrabaConecta.Contracts;
+using UrabaConecta.Infrastructure;
 using UrabaConecta.Infrastructure.Identity;
 using UrabaConecta.Infrastructure.Persistence;
 using UrabaConecta.Infrastructure.Security;
+using UrabaConecta.Infrastructure.Storage;
 using UrabaConecta.Web.Components;
 using UrabaConecta.Web.Components.Account;
 using UrabaConecta.Web.Services;
@@ -46,12 +49,18 @@ builder.Services.AddAuthorizationBuilder()
     .AddPolicy("BusinessProfile.Manage", policy => policy.RequireRole("BusinessOwner"))
     .AddPolicy("BusinessConfiguration.Manage", policy => policy.RequireRole("BusinessOwner", "BusinessWorker"))
     .AddPolicy("Workers.Manage", policy => policy.RequireRole("BusinessOwner", "BusinessWorker"))
-    .AddPolicy("PlatformAdmin", policy => policy.RequireRole("PlatformAdmin"));
+    .AddPolicy("PlatformAdmin", policy => policy.RequireRole("PlatformAdmin"))
+    // Las socias comparten la consola administrativa; el alcance real lo impone cada caso de uso.
+    .AddPolicy("PlatformOperator", policy => policy.RequireRole("PlatformAdmin", "PartnerOperator"));
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
 {
     options.SignIn.RequireConfirmedAccount = true;
     options.User.RequireUniqueEmail = true;
     options.Password.RequiredLength = 10;
+    // Bloqueo temporal explícito ante intentos fallidos, en lugar del comportamiento implícito.
+    options.Lockout.AllowedForNewUsers = true;
+    options.Lockout.MaxFailedAccessAttempts = 5;
+    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
 }).AddRoles<IdentityRole<Guid>>()
   .AddEntityFrameworkStores<AppDbContext>()
   .AddSignInManager()
@@ -71,6 +80,24 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownIPNetworks.Clear();
     options.KnownProxies.Clear();
 });
+builder.Services.AddHttpContextAccessor();
+builder.Services.Configure<LegalOptions>(builder.Configuration.GetSection(LegalOptions.SectionName));
+builder.Services.Configure<ObjectStorageOptions>(
+    builder.Configuration.GetSection(ObjectStorageOptions.SectionName));
+var storageOptions = builder.Configuration.GetSection(ObjectStorageOptions.SectionName)
+    .Get<ObjectStorageOptions>() ?? new ObjectStorageOptions();
+var legalOptions = builder.Configuration.GetSection(LegalOptions.SectionName).Get<LegalOptions>() ?? new();
+StartupGuard.ThrowIfInvalid(builder.Configuration, builder.Environment, legalOptions, storageOptions);
+if (storageOptions.UsesS3) builder.Services.AddSingleton<IObjectStorage, S3CompatibleObjectStorage>();
+else builder.Services.AddSingleton<IObjectStorage, LocalObjectStorage>();
+builder.Services.AddSingleton<IImageProcessor, ImageSharpImageProcessor>();
+builder.Services.AddScoped<IInvitationTokenService, InvitationTokenService>();
+builder.Services.AddScoped<IInvitationIdentityGateway, InvitationIdentityGateway>();
+builder.Services.AddScoped<IAccessInvitationStore, AccessInvitationStore>();
+builder.Services.AddScoped<IBusinessImageStore, BusinessImageStore>();
+builder.Services.AddScoped<IAccessInvitationUseCases, AccessInvitationUseCases>();
+builder.Services.AddScoped<IBusinessImageUseCases, BusinessImageUseCases>();
+builder.Services.AddScoped<IPlatformHealthProvider, PlatformHealthProvider>();
 builder.Services.AddScoped<IUrabaStore, UrabaStore>();
 builder.Services.AddScoped<IMembershipAdministrationStore, MembershipAdministrationStore>();
 builder.Services.AddScoped<IQueueStore, QueueStore>();
@@ -210,31 +237,132 @@ publicApi.MapPost("/orders/{code}/cancel",
     async (string code, PickupOrderCommandRequest request, IOrderingUseCases orders, CancellationToken ct) =>
     { await orders.CancelPublicAsync(code, request.Version, ct); return Results.NoContent(); })
     .RequireRateLimiting("public-write");
+publicApi.MapGet("/legal", (IOptions<LegalOptions> legal) =>
+{
+    var value = legal.Value;
+    return new LegalInfoDto(value.ResponsibleName, value.Identification, value.Address, value.PrivacyEmail,
+        value.SupportEmail, value.PolicyVersion, value.PolicyEffectiveDate);
+});
 
-var platformApi = app.MapGroup("/api/v1/admin").RequireAuthorization("PlatformAdmin");
+// Sirve las imágenes del proveedor local. En Production el proveedor es S3/R2 y las imágenes
+// se sirven desde su dominio público, por lo que esta ruta no se usa.
+app.MapGet("/media/{**key}", async (string key, IObjectStorage storage, CancellationToken ct) =>
+{
+    if (storage.Provider != ObjectStorageOptions.LocalProvider) return Results.NotFound();
+    var stream = await storage.OpenReadAsync(key, ct);
+    if (stream is null) return Results.NotFound();
+    var contentType = Path.GetExtension(key).ToLowerInvariant() switch
+    {
+        ".png" => "image/png", ".webp" => "image/webp", _ => "image/jpeg"
+    };
+    return Results.Stream(stream, contentType, enableRangeProcessing: true);
+});
+
+// La consola administrativa la comparten el administrador técnico y las socias; el alcance
+// (qué negocios ve y qué acciones puede ejecutar cada una) lo decide el caso de uso, no la ruta.
+var platformApi = app.MapGroup("/api/v1/admin").RequireAuthorization("PlatformOperator");
 platformApi.MapGet("/businesses",
-    (string? q, string? municipality, string? status, string? module,
+    (string? q, string? municipality, string? status, string? module, HttpContext http,
         IPlatformAdministrationUseCases useCases, CancellationToken ct) =>
-        useCases.ListAsync(q, municipality, status, module, ct));
+        useCases.ListAsync(Actor(http), q, municipality, status, module, ct));
 platformApi.MapGet("/businesses/{businessId:guid}",
-    (Guid businessId, IPlatformAdministrationUseCases useCases, CancellationToken ct) =>
-        useCases.GetAsync(businessId, ct));
+    (Guid businessId, HttpContext http, IPlatformAdministrationUseCases useCases, CancellationToken ct) =>
+        useCases.GetAsync(Actor(http), businessId, ct));
 platformApi.MapPost("/businesses",
-    async (CreatePlatformBusinessRequest request, ClaimsPrincipal user,
+    async (CreatePlatformBusinessRequest request, HttpContext http,
         IPlatformAdministrationUseCases useCases, CancellationToken ct) =>
-        Results.Created("", await useCases.CreateAsync(UserId(user), request, ct)));
+        Results.Created("", await useCases.CreateAsync(Actor(http), request, ct)));
 platformApi.MapPut("/businesses/{businessId:guid}",
-    (Guid businessId, UpdatePlatformBusinessRequest request, ClaimsPrincipal user,
+    (Guid businessId, UpdatePlatformBusinessRequest request, HttpContext http,
         IPlatformAdministrationUseCases useCases, CancellationToken ct) =>
-        useCases.UpdateAsync(UserId(user), businessId, request, ct));
-platformApi.MapPost("/businesses/{businessId:guid}/{action}",
-    (Guid businessId, string action, PlatformBusinessStateRequest request, ClaimsPrincipal user,
+        useCases.UpdateAsync(Actor(http), businessId, request, ct));
+platformApi.MapPut("/businesses/{businessId:guid}/profile",
+    (Guid businessId, SaveBusinessProfileRequest request, HttpContext http,
         IPlatformAdministrationUseCases useCases, CancellationToken ct) =>
-        useCases.ChangeStateAsync(UserId(user), businessId, action, request, ct));
+        useCases.SaveProfileAsync(Actor(http), businessId, request, ct));
+platformApi.MapPost("/businesses/{businessId:guid}/submit-review",
+    (Guid businessId, SubmitForReviewRequest request, HttpContext http,
+        IPlatformAdministrationUseCases useCases, CancellationToken ct) =>
+        useCases.SubmitForReviewAsync(Actor(http), businessId, request, ct));
+platformApi.MapPost("/businesses/{businessId:guid}/reject-review",
+    (Guid businessId, RejectReviewRequest request, HttpContext http,
+        IPlatformAdministrationUseCases useCases, CancellationToken ct) =>
+        useCases.RejectReviewAsync(Actor(http), businessId, request, ct));
+platformApi.MapGet("/businesses/{businessId:guid}/preview",
+    (Guid businessId, HttpContext http, IPlatformAdministrationUseCases useCases, CancellationToken ct) =>
+        useCases.PreviewAsync(Actor(http), businessId, ct));
+platformApi.MapGet("/businesses/{businessId:guid}/status-history",
+    (Guid businessId, HttpContext http, IPlatformAdministrationUseCases useCases, CancellationToken ct) =>
+        useCases.ListStatusHistoryAsync(Actor(http), businessId, ct));
+platformApi.MapGet("/businesses/{businessId:guid}/audit",
+    (Guid businessId, HttpContext http, IPlatformAdministrationUseCases useCases, CancellationToken ct) =>
+        useCases.ListAuditAsync(Actor(http), businessId, ct));
 platformApi.MapPut("/businesses/{businessId:guid}/modules",
-    (Guid businessId, UpdatePlatformModulesRequest request, ClaimsPrincipal user,
+    (Guid businessId, UpdatePlatformModulesRequest request, HttpContext http,
         IPlatformAdministrationUseCases useCases, CancellationToken ct) =>
-        useCases.UpdateModulesAsync(UserId(user), businessId, request, ct));
+        useCases.UpdateModulesAsync(Actor(http), businessId, request, ct));
+platformApi.MapGet("/businesses/{businessId:guid}/images",
+    (Guid businessId, HttpContext http, IBusinessImageUseCases images, CancellationToken ct) =>
+        images.ListAsync(Actor(http), businessId, ct));
+platformApi.MapPost("/businesses/{businessId:guid}/images",
+    async (Guid businessId, HttpRequest request, HttpContext http, IBusinessImageUseCases images,
+        CancellationToken ct) =>
+    {
+        if (!request.HasFormContentType) return Results.BadRequest(new { code = "INVALID_UPLOAD" });
+        var form = await request.ReadFormAsync(ct);
+        var file = form.Files["file"];
+        if (file is null) return Results.BadRequest(new { code = "FILE_REQUIRED" });
+        if (file.Length > ImagePolicy.MaximumOriginalBytes)
+            return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+        using var buffer = new MemoryStream();
+        await file.CopyToAsync(buffer, ct);
+        return Results.Created("", await images.UploadAsync(Actor(http), businessId,
+            form["kind"].ToString(), new UploadedImage(file.FileName, file.ContentType, buffer.ToArray()),
+            form["altText"].ToString(), ct));
+    }).DisableAntiforgery();
+platformApi.MapPut("/businesses/{businessId:guid}/images/{imageId:guid}",
+    (Guid businessId, Guid imageId, UpdateBusinessImageRequest request, HttpContext http,
+        IBusinessImageUseCases images, CancellationToken ct) =>
+        images.DescribeAsync(Actor(http), businessId, imageId, request, ct));
+platformApi.MapDelete("/businesses/{businessId:guid}/images/{imageId:guid}",
+    async (Guid businessId, Guid imageId, long version, HttpContext http, IBusinessImageUseCases images,
+        CancellationToken ct) =>
+    { await images.RemoveAsync(Actor(http), businessId, imageId, version, ct); return Results.NoContent(); });
+platformApi.MapGet("/invitations",
+    (Guid? businessId, HttpContext http, IAccessInvitationUseCases invitations, CancellationToken ct) =>
+        invitations.ListAsync(Actor(http), businessId, ct));
+platformApi.MapPost("/invitations",
+    async (CreateInvitationRequest request, HttpContext http, IAccessInvitationUseCases invitations,
+        CancellationToken ct) => Results.Created("", await invitations.InviteAsync(Actor(http), request, ct)));
+platformApi.MapPost("/invitations/{invitationId:guid}/resend",
+    (Guid invitationId, HttpContext http, IAccessInvitationUseCases invitations, CancellationToken ct) =>
+        invitations.ResendAsync(Actor(http), invitationId, ct));
+platformApi.MapDelete("/invitations/{invitationId:guid}",
+    async (Guid invitationId, HttpContext http, IAccessInvitationUseCases invitations, CancellationToken ct) =>
+    { await invitations.RevokeAsync(Actor(http), invitationId, ct); return Results.NoContent(); });
+platformApi.MapPost("/access-resets",
+    async (ResetAccessRequest request, HttpContext http, IAccessInvitationUseCases invitations,
+        CancellationToken ct) => Results.Created("", await invitations.ResetAccessAsync(Actor(http), request, ct)));
+platformApi.MapGet("/partner-operators",
+    (HttpContext http, IAccessInvitationUseCases invitations, CancellationToken ct) =>
+        invitations.ListPartnerOperatorsAsync(Actor(http), ct));
+platformApi.MapDelete("/partner-operators/{userId:guid}",
+    async (Guid userId, HttpContext http, IAccessInvitationUseCases invitations, CancellationToken ct) =>
+    { await invitations.RevokePartnerOperatorAsync(Actor(http), userId, ct); return Results.NoContent(); });
+platformApi.MapGet("/access-audit",
+    (Guid? businessId, HttpContext http, IAccessInvitationUseCases invitations, CancellationToken ct) =>
+        invitations.ListAuditAsync(Actor(http), businessId, ct));
+platformApi.MapGet("/health",
+    async (HttpContext http, IPlatformHealthProvider health, CancellationToken ct) =>
+        http.User.IsInRole("PlatformAdmin")
+            ? Results.Ok(await health.GetAsync(ct))
+            : Results.StatusCode(StatusCodes.Status403Forbidden));
+// Comodín de acciones de estado. Los segmentos literales de arriba tienen mayor precedencia
+// de enrutamiento, así que "submit-review" y "reject-review" nunca llegan aquí.
+platformApi.MapPost("/businesses/{businessId:guid}/{action}",
+    (Guid businessId, string action, PlatformBusinessStateRequest request, HttpContext http,
+        IPlatformAdministrationUseCases useCases, CancellationToken ct) =>
+        useCases.ChangeStateAsync(Actor(http), businessId, action, request, ct));
 
 var privateApi = app.MapGroup("/api/v1/businesses").RequireAuthorization("BusinessMember");
 privateApi.MapGet("/mine", (ClaimsPrincipal user, IUrabaUseCases useCases, CancellationToken ct)
@@ -433,5 +561,10 @@ await app.RunAsync();
 
 static Guid UserId(ClaimsPrincipal user)
     => Guid.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : Guid.Empty;
+
+/// <summary>El rol y la IP se derivan de la petición autenticada, nunca de la carga útil del cliente.</summary>
+static PlatformActor Actor(HttpContext http)
+    => new(UserId(http.User), http.User.IsInRole("PlatformAdmin"), http.User.IsInRole("PartnerOperator"),
+        http.Connection.RemoteIpAddress?.ToString(), http.TraceIdentifier);
 
 public partial class Program;

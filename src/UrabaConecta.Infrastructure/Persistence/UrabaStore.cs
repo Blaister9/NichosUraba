@@ -6,7 +6,7 @@ using UrabaConecta.Domain;
 
 namespace UrabaConecta.Infrastructure.Persistence;
 
-public sealed class UrabaStore(AppDbContext db) : IUrabaStore
+public sealed class UrabaStore(AppDbContext db, IObjectStorage storage) : IUrabaStore
 {
     public async Task<IReadOnlyList<BusinessCardDto>> FindBusinessesAsync(string? search, string? municipality,
         string? category, CancellationToken cancellationToken)
@@ -23,20 +23,35 @@ public sealed class UrabaStore(AppDbContext db) : IUrabaStore
         }
         if (!string.IsNullOrWhiteSpace(municipality)) query = query.Where(x => x.m.Slug == municipality);
         if (!string.IsNullOrWhiteSpace(category)) query = query.Where(x => x.c.Slug == category);
-        return await query.OrderBy(x => x.b.Name).Select(x => new BusinessCardDto(x.b.Slug, x.b.Name,
-            new(x.c.Slug, x.c.Name), new(x.m.Slug, x.m.Name), x.b.Description, x.b.Address,
-            db.BusinessModules.Any(m => m.BusinessId == x.b.Id && m.Module == BusinessModuleKind.VirtualQueues && m.IsEnabled),
-            db.BusinessModules.Any(m => m.BusinessId == x.b.Id && m.Module == BusinessModuleKind.PickupOrders && m.IsEnabled),
-            db.BusinessModules.Any(m => m.BusinessId == x.b.Id && m.Module == BusinessModuleKind.Appointments && m.IsEnabled)))
-            .ToListAsync(cancellationToken);
+        var rows = await query.OrderBy(x => x.b.Name).Select(x => new
+        {
+            x.b.Id, x.b.Slug, x.b.Name, x.b.Description, x.b.ShortDescription, x.b.Address,
+            CategorySlug = x.c.Slug, CategoryName = x.c.Name,
+            MunicipalitySlug = x.m.Slug, MunicipalityName = x.m.Name,
+            HasQueue = db.BusinessModules.Any(m => m.BusinessId == x.b.Id && m.Module == BusinessModuleKind.VirtualQueues && m.IsEnabled),
+            HasOrders = db.BusinessModules.Any(m => m.BusinessId == x.b.Id && m.Module == BusinessModuleKind.PickupOrders && m.IsEnabled),
+            HasAppointments = db.BusinessModules.Any(m => m.BusinessId == x.b.Id && m.Module == BusinessModuleKind.Appointments && m.IsEnabled),
+            Logo = db.BusinessImages.Where(i => i.BusinessId == x.b.Id && !i.IsDeleted && i.Kind == BusinessImageKind.Logo)
+                .Select(i => new { i.StorageKey, i.AltText }).FirstOrDefault(),
+            Cover = db.BusinessImages.Where(i => i.BusinessId == x.b.Id && !i.IsDeleted && i.Kind == BusinessImageKind.Cover)
+                .Select(i => new { i.StorageKey, i.AltText }).FirstOrDefault()
+        }).ToListAsync(cancellationToken);
+        return rows.Select(x => new BusinessCardDto(x.Slug, x.Name,
+            new(x.CategorySlug, x.CategoryName), new(x.MunicipalitySlug, x.MunicipalityName),
+            x.Description, x.Address, x.HasQueue, x.HasOrders, x.HasAppointments,
+            x.Logo is null ? null : storage.PublicUrl(x.Logo.StorageKey),
+            x.Cover is null ? null : storage.PublicUrl(x.Cover.StorageKey),
+            x.Logo?.AltText, x.Cover?.AltText, x.ShortDescription)).ToList();
     }
 
-    public async Task<BusinessProfileDto?> GetBusinessProfileAsync(string slug, CancellationToken cancellationToken)
+    public async Task<BusinessProfileDto?> GetBusinessProfileAsync(string slug, bool requirePublished,
+        CancellationToken cancellationToken)
     {
         var data = await (from b in db.Businesses.AsNoTracking()
                           join m in db.Municipalities on b.MunicipalityId equals m.Id
                           join c in db.Categories on b.CategoryId equals c.Id
-                          where b.Slug == slug && b.Status == BusinessStatus.Active && b.IsPublished
+                          where b.Slug == slug &&
+                                (!requirePublished || (b.Status == BusinessStatus.Active && b.IsPublished))
                           select new { b, m, c }).SingleOrDefaultAsync(cancellationToken);
         if (data is null) return null;
         var hasAppointments = await db.BusinessModules.AnyAsync(x => x.BusinessId == data.b.Id &&
@@ -50,12 +65,44 @@ public sealed class UrabaStore(AppDbContext db) : IUrabaStore
             .Select(x => new ServiceDto(x.Id, x.Name, x.Description, x.DurationMinutes, x.ReferencePrice,
                 x.DisplayOrder, x.IsActive, 0, x.Version))
             .ToListAsync(cancellationToken);
+        var images = await db.BusinessImages.AsNoTracking()
+            .Where(x => x.BusinessId == data.b.Id && !x.IsDeleted)
+            .OrderBy(x => x.Kind).ThenBy(x => x.DisplayOrder)
+            .Select(x => new BusinessImageDto(x.Id, x.Kind.ToString(), x.StorageKey, x.AltText,
+                x.Width, x.Height, x.DisplayOrder, x.Version))
+            .ToListAsync(cancellationToken);
+        var publicHours = await db.BusinessHours.AsNoTracking().Where(x => x.BusinessId == data.b.Id)
+            .OrderBy(x => x.Day)
+            .Select(x => new BusinessHourDto(x.Day, x.OpensAt.ToString("HH:mm"), x.ClosesAt.ToString("HH:mm")))
+            .ToListAsync(cancellationToken);
         return new(data.b.Slug, data.b.Name, data.b.Description, data.b.Address, data.b.PublicPhone,
-            new(data.c.Slug, data.c.Name), new(data.m.Slug, data.m.Name), hours, services,
+            new(data.c.Slug, data.c.Name), new(data.m.Slug, data.m.Name),
+            hours.Count > 0 ? hours : publicHours, services,
             await db.BusinessModules.AnyAsync(q => q.BusinessId == data.b.Id && q.Module == BusinessModuleKind.VirtualQueues && q.IsEnabled,
                 cancellationToken),
             await db.BusinessModules.AnyAsync(s => s.BusinessId == data.b.Id && s.Module == BusinessModuleKind.PickupOrders && s.IsEnabled,
-                cancellationToken));
+                cancellationToken),
+            data.b.ShortDescription, data.b.ReferencePoint, data.b.WhatsAppUrl, data.b.PublicEmail,
+            data.b.InstagramUrl, data.b.FacebookUrl, data.b.LocationUrl, data.b.CustomerInstructions,
+            images.Select(x => x with { Url = storage.PublicUrl(x.Url) }).ToList(),
+            OpenStatus(data.b.TimeZoneId, publicHours));
+    }
+
+    /// <summary>
+    /// "Abierto" o "Cerrado" según el horario publicado y la zona del negocio. Devuelve null
+    /// cuando no hay horario cargado, para no mostrar un estado que no se puede calcular.
+    /// </summary>
+    private static string? OpenStatus(string timeZoneId, IReadOnlyList<BusinessHourDto> hours)
+    {
+        if (hours.Count == 0) return null;
+        TimeZoneInfo zone;
+        try { zone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId); }
+        catch (TimeZoneNotFoundException) { return null; }
+        var local = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, zone);
+        var today = hours.FirstOrDefault(x => x.Day == local.DayOfWeek);
+        if (today is null) return "Cerrado";
+        var now = TimeOnly.FromDateTime(local.DateTime);
+        return now >= TimeOnly.Parse(today.OpensAt) && now < TimeOnly.Parse(today.ClosesAt) ? "Abierto" : "Cerrado";
     }
 
     public async Task<SchedulingContext?> GetSchedulingContextAsync(string slug, Guid serviceId, DateOnly date,

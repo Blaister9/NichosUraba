@@ -242,6 +242,86 @@ public sealed class HttpUrabaConectaApi(HttpClient http) : IUrabaConectaApi
         => await Read<PlatformBusinessDto>(await http.PutAsJsonAsync(
             $"api/v1/admin/businesses/{businessId}/modules", request, Json, cancellationToken), cancellationToken);
 
+    public async Task<PlatformBusinessDto> SavePlatformBusinessProfileAsync(Guid businessId,
+        SaveBusinessProfileRequest request, CancellationToken cancellationToken = default)
+        => await Read<PlatformBusinessDto>(await http.PutAsJsonAsync(
+            $"api/v1/admin/businesses/{businessId}/profile", request, Json, cancellationToken), cancellationToken);
+    public async Task<PlatformBusinessDto> SubmitBusinessForReviewAsync(Guid businessId,
+        SubmitForReviewRequest request, CancellationToken cancellationToken = default)
+        => await Read<PlatformBusinessDto>(await http.PostAsJsonAsync(
+            $"api/v1/admin/businesses/{businessId}/submit-review", request, Json, cancellationToken), cancellationToken);
+    public async Task<PlatformBusinessDto> RejectBusinessReviewAsync(Guid businessId, RejectReviewRequest request,
+        CancellationToken cancellationToken = default)
+        => await Read<PlatformBusinessDto>(await http.PostAsJsonAsync(
+            $"api/v1/admin/businesses/{businessId}/reject-review", request, Json, cancellationToken), cancellationToken);
+    public Task<BusinessProfileDto> PreviewBusinessAsync(Guid businessId, CancellationToken cancellationToken = default)
+        => Get<BusinessProfileDto>($"api/v1/admin/businesses/{businessId}/preview", cancellationToken);
+    public Task<IReadOnlyList<BusinessStatusChangeDto>> GetBusinessStatusHistoryAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => Get<IReadOnlyList<BusinessStatusChangeDto>>(
+            $"api/v1/admin/businesses/{businessId}/status-history", cancellationToken);
+    public Task<IReadOnlyList<PlatformAuditEntryDto>> GetBusinessAuditAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => Get<IReadOnlyList<PlatformAuditEntryDto>>($"api/v1/admin/businesses/{businessId}/audit", cancellationToken);
+
+    public Task<IReadOnlyList<BusinessImageDto>> GetBusinessImagesAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => Get<IReadOnlyList<BusinessImageDto>>($"api/v1/admin/businesses/{businessId}/images", cancellationToken);
+    public async Task<BusinessImageDto> UploadBusinessImageAsync(Guid businessId, string kind, string fileName,
+        string contentType, byte[] content, string? altText, CancellationToken cancellationToken = default)
+    {
+        using var form = new MultipartFormDataContent();
+        var part = new ByteArrayContent(content);
+        part.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+        form.Add(part, "file", fileName);
+        form.Add(new StringContent(kind), "kind");
+        if (!string.IsNullOrWhiteSpace(altText)) form.Add(new StringContent(altText), "altText");
+        return await Read<BusinessImageDto>(await http.PostAsync(
+            $"api/v1/admin/businesses/{businessId}/images", form, cancellationToken), cancellationToken);
+    }
+    public async Task<BusinessImageDto> UpdateBusinessImageAsync(Guid businessId, Guid imageId,
+        UpdateBusinessImageRequest request, CancellationToken cancellationToken = default)
+        => await Read<BusinessImageDto>(await http.PutAsJsonAsync(
+            $"api/v1/admin/businesses/{businessId}/images/{imageId}", request, Json, cancellationToken), cancellationToken);
+    public async Task RemoveBusinessImageAsync(Guid businessId, Guid imageId, long version,
+        CancellationToken cancellationToken = default)
+        => await Ensure(await http.DeleteAsync(
+            $"api/v1/admin/businesses/{businessId}/images/{imageId}?version={version}", cancellationToken),
+            cancellationToken);
+
+    public async Task<InvitationIssuedDto> CreateInvitationAsync(CreateInvitationRequest request,
+        CancellationToken cancellationToken = default)
+        => await Read<InvitationIssuedDto>(await http.PostAsJsonAsync(
+            "api/v1/admin/invitations", request, Json, cancellationToken), cancellationToken);
+    public Task<IReadOnlyList<InvitationDto>> GetInvitationsAsync(Guid? businessId = null,
+        CancellationToken cancellationToken = default)
+        => Get<IReadOnlyList<InvitationDto>>(
+            $"api/v1/admin/invitations{(businessId is { } id ? $"?businessId={id}" : "")}", cancellationToken);
+    public async Task<InvitationIssuedDto> ResendInvitationAsync(Guid invitationId,
+        CancellationToken cancellationToken = default)
+        => await Read<InvitationIssuedDto>(await http.PostAsync(
+            $"api/v1/admin/invitations/{invitationId}/resend", null, cancellationToken), cancellationToken);
+    public async Task RevokeInvitationAsync(Guid invitationId, CancellationToken cancellationToken = default)
+        => await Ensure(await http.DeleteAsync($"api/v1/admin/invitations/{invitationId}", cancellationToken),
+            cancellationToken);
+    public async Task<InvitationIssuedDto> ResetAccessAsync(ResetAccessRequest request,
+        CancellationToken cancellationToken = default)
+        => await Read<InvitationIssuedDto>(await http.PostAsJsonAsync(
+            "api/v1/admin/access-resets", request, Json, cancellationToken), cancellationToken);
+    public Task<IReadOnlyList<PlatformAccountDto>> GetPartnerOperatorsAsync(CancellationToken cancellationToken = default)
+        => Get<IReadOnlyList<PlatformAccountDto>>("api/v1/admin/partner-operators", cancellationToken);
+    public async Task RevokePartnerOperatorAsync(Guid userId, CancellationToken cancellationToken = default)
+        => await Ensure(await http.DeleteAsync($"api/v1/admin/partner-operators/{userId}", cancellationToken),
+            cancellationToken);
+    public Task<IReadOnlyList<PlatformAccessAuditDto>> GetAccessAuditAsync(Guid? businessId = null,
+        CancellationToken cancellationToken = default)
+        => Get<IReadOnlyList<PlatformAccessAuditDto>>(
+            $"api/v1/admin/access-audit{(businessId is { } id ? $"?businessId={id}" : "")}", cancellationToken);
+    public Task<PlatformHealthDto> GetPlatformHealthAsync(CancellationToken cancellationToken = default)
+        => Get<PlatformHealthDto>("api/v1/admin/health", cancellationToken);
+    public Task<LegalInfoDto> GetLegalInfoAsync(CancellationToken cancellationToken = default)
+        => Get<LegalInfoDto>("api/v1/public/legal", cancellationToken);
+
     private async Task<BusinessMemberDto> PostVersion(Guid businessId, Guid membershipId, string action, long version,
         CancellationToken cancellationToken)
         => await Read<BusinessMemberDto>(await http.PostAsJsonAsync(

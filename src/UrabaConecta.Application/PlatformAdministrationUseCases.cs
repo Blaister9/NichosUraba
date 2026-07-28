@@ -7,22 +7,31 @@ namespace UrabaConecta.Application;
 public sealed class PlatformAdministrationUseCases(
     IPlatformAdministrationStore store,
     IIdentityAccountManager identity,
+    IUrabaStore directory,
+    IObjectStorage storage,
     TimeProvider timeProvider) : IPlatformAdministrationUseCases
 {
-    public async Task<PlatformBusinessListDto> ListAsync(string? search, string? municipality, string? status,
-        string? module, CancellationToken cancellationToken = default)
-        => new((await store.ListAsync(search, municipality, status, module, cancellationToken)).Select(ToDto).ToList(),
+    public async Task<PlatformBusinessListDto> ListAsync(PlatformActor actor, string? search, string? municipality,
+        string? status, string? module, CancellationToken cancellationToken = default)
+    {
+        EnsureOperator(actor);
+        // Una socia sólo ve los negocios que ella dio de alta.
+        var scope = actor.IsPlatformAdmin ? (Guid?)null : actor.UserId;
+        return new((await store.ListAsync(search, municipality, status, module, scope, cancellationToken))
+                .Select(ToDto).ToList(),
             await store.ListMunicipalitiesAsync(cancellationToken),
             await store.ListCategoriesAsync(cancellationToken),
             identity.DevelopmentAccountCreationEnabled);
+    }
 
-    public async Task<PlatformBusinessDto> GetAsync(Guid businessId, CancellationToken cancellationToken = default)
-        => ToDto(await store.GetAsync(businessId, cancellationToken)
-            ?? throw new ApiException("BUSINESS_NOT_FOUND", "No encontramos el negocio.", 404));
-
-    public async Task<PlatformBusinessCreatedDto> CreateAsync(Guid actorUserId, CreatePlatformBusinessRequest request,
+    public async Task<PlatformBusinessDto> GetAsync(PlatformActor actor, Guid businessId,
         CancellationToken cancellationToken = default)
+        => ToDto(await RequireScopedAsync(actor, businessId, cancellationToken));
+
+    public async Task<PlatformBusinessCreatedDto> CreateAsync(PlatformActor actor,
+        CreatePlatformBusinessRequest request, CancellationToken cancellationToken = default)
     {
+        EnsureOperator(actor);
         var modules = Selected(request);
         if (modules.Count == 0) throw new ApiException("MODULE_REQUIRED", "Seleccione al menos una función.");
         var slug = Business.NormalizeSlug(request.Slug);
@@ -37,6 +46,7 @@ public sealed class PlatformAdministrationUseCases(
         var business = TryDomain(() => Business.CreateDraft(Guid.NewGuid(), slug, request.Name,
             request.MunicipalityId, request.CategoryId, request.Description, request.Address, request.PublicPhone,
             request.WhatsAppUrl, request.LocationUrl, now));
+        business.AssignCreator(actor.UserId);
         store.AddBusiness(business);
         foreach (var module in modules) store.AddModule(new BusinessModule(business.Id, module, true, now));
         CreateInitialConfiguration(business.Id, request, modules, now);
@@ -52,7 +62,7 @@ public sealed class PlatformAdministrationUseCases(
                 throw new ApiException("OWNER_NAME_REQUIRED", "Ingrese el nombre visible de la persona propietaria.");
             var created = await identity.CreatePilotAsync(request.PilotDisplayName, request.PilotEmail, cancellationToken);
             owner = created.Account; temporaryPassword = created.TemporaryPassword;
-            Audit(business.Id, actorUserId, PlatformAuditAction.PilotAccountCreated, "{}", new { owner.UserId }, now);
+            Audit(business.Id, actor, PlatformAuditAction.PilotAccountCreated, "{}", new { owner.UserId }, now);
         }
         if (owner is not null)
         {
@@ -61,59 +71,50 @@ public sealed class PlatformAdministrationUseCases(
             store.AddMembership(new BusinessMembership(Guid.NewGuid(), business.Id, owner.UserId,
                 MembershipRole.Owner, true, true, true, now,
                 modules.Contains(BusinessModuleKind.VirtualQueues), modules.Contains(BusinessModuleKind.PickupOrders)));
-            Audit(business.Id, actorUserId, PlatformAuditAction.OwnerAssigned, "{}", new { owner.UserId }, now);
+            Audit(business.Id, actor, PlatformAuditAction.OwnerAssigned, "{}", new { owner.UserId }, now);
             if (!request.SaveAsDraft) business.MarkPending(now, business.Version);
         }
-        Audit(business.Id, actorUserId, PlatformAuditAction.BusinessCreated, "{}", Snapshot(business), now);
+        Audit(business.Id, actor, PlatformAuditAction.BusinessCreated, "{}", Snapshot(business), now);
+        store.AddStatusChange(new BusinessStatusChange(Guid.NewGuid(), business.Id, BusinessStatus.Draft,
+            business.Status, actor.UserId, "Alta del negocio.", now));
         await store.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
-
-        var createdRecord = await store.GetAsync(business.Id, cancellationToken)
-            ?? throw new ApiException("BUSINESS_NOT_FOUND", "No encontramos el negocio.", 404);
-        if (!request.SaveAsDraft && Readiness(createdRecord).IsReady)
-        {
-            await using var activateTx = await store.BeginTransactionAsync(cancellationToken);
-            var locked = await store.LockBusinessAsync(business.Id, cancellationToken)
-                ?? throw new ApiException("BUSINESS_NOT_FOUND", "No encontramos el negocio.", 404);
-            locked.Activate(true, now, locked.Version);
-            Audit(locked.Id, actorUserId, PlatformAuditAction.BusinessActivated, "{}", Snapshot(locked), now);
-            await store.SaveChangesAsync(cancellationToken); await activateTx.CommitAsync(cancellationToken);
-        }
         return new(ToDto((await store.GetAsync(business.Id, cancellationToken))!), temporaryPassword);
     }
 
-    public async Task<PlatformBusinessDto> ChangeStateAsync(Guid actorUserId, Guid businessId, string action,
-        PlatformBusinessStateRequest request, CancellationToken cancellationToken = default)
-    {
-        await using var tx = await store.BeginTransactionAsync(cancellationToken);
-        var business = await store.LockBusinessAsync(businessId, cancellationToken)
-            ?? throw new ApiException("BUSINESS_NOT_FOUND", "No encontramos el negocio.", 404);
-        if (business.Version != request.Version)
-            throw new ApiException("CONCURRENCY_CONFLICT", "El negocio cambió. Recargue e intente de nuevo.", 409);
-        var before = Snapshot(business); var now = timeProvider.GetUtcNow();
-        var record = await store.GetAsync(businessId, cancellationToken)
-            ?? throw new ApiException("BUSINESS_NOT_FOUND", "No encontramos el negocio.", 404);
-        var audit = TryDomain(() => action.ToLowerInvariant() switch
-        {
-            "activate" or "reactivate" => Activate(business, Readiness(record).IsReady, now),
-            "suspend" => Suspend(business, request.Reason, now),
-            "archive" => Archive(business, now),
-            "delete" => Delete(business, record.OperationCount),
-            _ => throw new ApiException("INVALID_ACTION", "La acción administrativa no es válida.")
-        });
-        if (action.Equals("delete", StringComparison.OrdinalIgnoreCase))
-        {
-            store.RemoveBusiness(business);
-        }
-        else Audit(business.Id, actorUserId, audit, before, Snapshot(business), now);
-        await store.SaveChangesAsync(cancellationToken); await tx.CommitAsync(cancellationToken);
-        if (action.Equals("delete", StringComparison.OrdinalIgnoreCase)) return ToDto(record);
-        return ToDto((await store.GetAsync(businessId, cancellationToken))!);
-    }
-
-    public async Task<PlatformBusinessDto> UpdateAsync(Guid actorUserId, Guid businessId,
+    public async Task<PlatformBusinessDto> UpdateAsync(PlatformActor actor, Guid businessId,
         UpdatePlatformBusinessRequest request, CancellationToken cancellationToken = default)
     {
+        var current = await RequireScopedAsync(actor, businessId, cancellationToken);
+        return await SaveProfileAsync(actor, businessId, new SaveBusinessProfileRequest
+        {
+            Name = request.Name, Slug = request.Slug, MunicipalityId = request.MunicipalityId,
+            CategoryId = request.CategoryId, Description = request.Description, Address = request.Address,
+            PublicPhone = request.PublicPhone, WhatsAppUrl = request.WhatsAppUrl,
+            LocationUrl = request.LocationUrl, Version = request.Version,
+            // El formulario heredado no envía los campos nuevos: se conservan los ya guardados.
+            ShortDescription = string.IsNullOrWhiteSpace(current.Business.ShortDescription)
+                ? Fallback(request.Description, request.Name)
+                : current.Business.ShortDescription,
+            ReferencePoint = current.Business.ReferencePoint,
+            PublicEmail = current.Business.PublicEmail,
+            InstagramUrl = current.Business.InstagramUrl,
+            FacebookUrl = current.Business.FacebookUrl,
+            CustomerInstructions = current.Business.CustomerInstructions
+        }, cancellationToken);
+    }
+
+    /// <summary>Descripción breve derivada cuando aún no existe una explícita.</summary>
+    private static string Fallback(string description, string name)
+    {
+        var source = string.IsNullOrWhiteSpace(description) ? name : description;
+        return source.Length <= 160 ? source : source[..160];
+    }
+
+    public async Task<PlatformBusinessDto> SaveProfileAsync(PlatformActor actor, Guid businessId,
+        SaveBusinessProfileRequest request, CancellationToken cancellationToken = default)
+    {
+        await RequireScopedAsync(actor, businessId, cancellationToken);
         await using var tx = await store.BeginTransactionAsync(cancellationToken);
         var business = await store.LockBusinessAsync(businessId, cancellationToken)
             ?? throw new ApiException("BUSINESS_NOT_FOUND", "No encontramos el negocio.", 404);
@@ -128,19 +129,130 @@ public sealed class PlatformAdministrationUseCases(
         var before = Snapshot(business); var now = timeProvider.GetUtcNow();
         TryDomain(() =>
         {
-            business.UpdatePlatformProfile(request.Slug, request.Name, request.MunicipalityId, request.CategoryId,
-                request.Description, request.Address, request.PublicPhone, request.WhatsAppUrl, request.LocationUrl,
-                now, request.Version);
+            business.UpdateCommercialProfile(new BusinessProfileEdit(request.Slug, request.Name,
+                request.MunicipalityId, request.CategoryId, request.ShortDescription, request.Description,
+                request.Address, request.ReferencePoint, request.PublicPhone, request.WhatsAppUrl,
+                request.PublicEmail, request.InstagramUrl, request.FacebookUrl, request.LocationUrl,
+                request.CustomerInstructions), now, request.Version);
             return true;
         });
-        Audit(businessId, actorUserId, PlatformAuditAction.BusinessUpdated, before, Snapshot(business), now);
+        Audit(businessId, actor, PlatformAuditAction.BusinessUpdated, before, Snapshot(business), now);
         await store.SaveChangesAsync(cancellationToken); await tx.CommitAsync(cancellationToken);
         return ToDto((await store.GetAsync(businessId, cancellationToken))!);
     }
 
-    public async Task<PlatformBusinessDto> UpdateModulesAsync(Guid actorUserId, Guid businessId,
+    public async Task<PlatformBusinessDto> ChangeStateAsync(PlatformActor actor, Guid businessId, string action,
+        PlatformBusinessStateRequest request, CancellationToken cancellationToken = default)
+    {
+        // Publicar, suspender, archivar y eliminar son actos de revisión: sólo la administración de plataforma.
+        if (!actor.IsPlatformAdmin)
+            throw new ApiException("FORBIDDEN", "Solo la administración de plataforma cambia el estado.", 403);
+        await using var tx = await store.BeginTransactionAsync(cancellationToken);
+        var business = await store.LockBusinessAsync(businessId, cancellationToken)
+            ?? throw new ApiException("BUSINESS_NOT_FOUND", "No encontramos el negocio.", 404);
+        if (business.Version != request.Version)
+            throw new ApiException("CONCURRENCY_CONFLICT", "El negocio cambió. Recargue e intente de nuevo.", 409);
+        var before = Snapshot(business); var previousStatus = business.Status;
+        var now = timeProvider.GetUtcNow();
+        var record = await store.GetAsync(businessId, cancellationToken)
+            ?? throw new ApiException("BUSINESS_NOT_FOUND", "No encontramos el negocio.", 404);
+        var audit = TryDomain(() => action.ToLowerInvariant() switch
+        {
+            "activate" or "reactivate" or "publish" => Activate(business, Readiness(record).IsReady, now),
+            "suspend" => Suspend(business, request.Reason, now),
+            "archive" => Archive(business, now),
+            "delete" => Delete(business, record.OperationCount),
+            _ => throw new ApiException("INVALID_ACTION", "La acción administrativa no es válida.")
+        });
+        if (action.Equals("delete", StringComparison.OrdinalIgnoreCase))
+        {
+            store.RemoveBusiness(business);
+        }
+        else
+        {
+            Audit(business.Id, actor, audit, before, Snapshot(business), now);
+            store.AddStatusChange(new BusinessStatusChange(Guid.NewGuid(), businessId, previousStatus,
+                business.Status, actor.UserId, request.Reason, now));
+        }
+        await store.SaveChangesAsync(cancellationToken); await tx.CommitAsync(cancellationToken);
+        if (action.Equals("delete", StringComparison.OrdinalIgnoreCase)) return ToDto(record);
+        return ToDto((await store.GetAsync(businessId, cancellationToken))!);
+    }
+
+    public async Task<PlatformBusinessDto> SubmitForReviewAsync(PlatformActor actor, Guid businessId,
+        SubmitForReviewRequest request, CancellationToken cancellationToken = default)
+    {
+        await RequireScopedAsync(actor, businessId, cancellationToken);
+        await using var tx = await store.BeginTransactionAsync(cancellationToken);
+        var business = await store.LockBusinessAsync(businessId, cancellationToken)
+            ?? throw new ApiException("BUSINESS_NOT_FOUND", "No encontramos el negocio.", 404);
+        if (business.Version != request.Version)
+            throw new ApiException("CONCURRENCY_CONFLICT", "El negocio cambió. Recargue.", 409);
+        var record = await store.GetAsync(businessId, cancellationToken)
+            ?? throw new ApiException("BUSINESS_NOT_FOUND", "No encontramos el negocio.", 404);
+        var readiness = Readiness(record);
+        if (!readiness.IsReady)
+            throw new ApiException("BUSINESS_NOT_READY",
+                "Falta completar: " + string.Join(" ", readiness.MissingLabels), 409);
+        var previous = business.Status; var now = timeProvider.GetUtcNow();
+        TryDomain(() => { business.SubmitForReview(true, now, request.Version); return true; });
+        Audit(businessId, actor, PlatformAuditAction.BusinessSubmittedForReview, Snapshot(business),
+            Snapshot(business), now);
+        store.AddStatusChange(new BusinessStatusChange(Guid.NewGuid(), businessId, previous, business.Status,
+            actor.UserId, "Enviado a revisión.", now));
+        await store.SaveChangesAsync(cancellationToken); await tx.CommitAsync(cancellationToken);
+        return ToDto((await store.GetAsync(businessId, cancellationToken))!);
+    }
+
+    public async Task<PlatformBusinessDto> RejectReviewAsync(PlatformActor actor, Guid businessId,
+        RejectReviewRequest request, CancellationToken cancellationToken = default)
+    {
+        if (!actor.IsPlatformAdmin)
+            throw new ApiException("FORBIDDEN", "Solo la administración de plataforma revisa negocios.", 403);
+        await using var tx = await store.BeginTransactionAsync(cancellationToken);
+        var business = await store.LockBusinessAsync(businessId, cancellationToken)
+            ?? throw new ApiException("BUSINESS_NOT_FOUND", "No encontramos el negocio.", 404);
+        if (business.Version != request.Version)
+            throw new ApiException("CONCURRENCY_CONFLICT", "El negocio cambió. Recargue.", 409);
+        var previous = business.Status; var now = timeProvider.GetUtcNow();
+        TryDomain(() => { business.RejectReview(request.Notes, now, request.Version); return true; });
+        Audit(businessId, actor, PlatformAuditAction.BusinessReviewRejected, "{}",
+            new { Notes = request.Notes }, now);
+        store.AddStatusChange(new BusinessStatusChange(Guid.NewGuid(), businessId, previous, business.Status,
+            actor.UserId, request.Notes, now));
+        await store.SaveChangesAsync(cancellationToken); await tx.CommitAsync(cancellationToken);
+        return ToDto((await store.GetAsync(businessId, cancellationToken))!);
+    }
+
+    public async Task<BusinessProfileDto> PreviewAsync(PlatformActor actor, Guid businessId,
+        CancellationToken cancellationToken = default)
+    {
+        var record = await RequireScopedAsync(actor, businessId, cancellationToken);
+        var profile = await directory.GetBusinessProfileAsync(record.Business.Slug, requirePublished: false,
+                cancellationToken)
+            ?? throw new ApiException("BUSINESS_NOT_FOUND", "No encontramos el negocio.", 404);
+        return profile with { IsPreview = true };
+    }
+
+    public async Task<IReadOnlyList<BusinessStatusChangeDto>> ListStatusHistoryAsync(PlatformActor actor,
+        Guid businessId, CancellationToken cancellationToken = default)
+    {
+        await RequireScopedAsync(actor, businessId, cancellationToken);
+        return await store.ListStatusHistoryAsync(businessId, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<PlatformAuditEntryDto>> ListAuditAsync(PlatformActor actor, Guid businessId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!actor.IsPlatformAdmin)
+            throw new ApiException("FORBIDDEN", "Solo la administración de plataforma consulta la auditoría.", 403);
+        return await store.ListBusinessAuditAsync(businessId, 200, cancellationToken);
+    }
+
+    public async Task<PlatformBusinessDto> UpdateModulesAsync(PlatformActor actor, Guid businessId,
         UpdatePlatformModulesRequest request, CancellationToken cancellationToken = default)
     {
+        await RequireScopedAsync(actor, businessId, cancellationToken);
         var selected = Selected(request);
         if (selected.Count == 0) throw new ApiException("MODULE_REQUIRED", "Seleccione al menos una función.");
         await using var tx = await store.BeginTransactionAsync(cancellationToken);
@@ -162,10 +274,29 @@ public sealed class PlatformAdministrationUseCases(
             business.ConfigurationChanged(now, business.Version);
             return true;
         });
-        Audit(businessId, actorUserId, PlatformAuditAction.ModulesChanged, "{}",
+        Audit(businessId, actor, PlatformAuditAction.ModulesChanged, "{}",
             JsonSerializer.Serialize(selected.Select(x => x.ToString())), now);
         await store.SaveChangesAsync(cancellationToken); await tx.CommitAsync(cancellationToken);
         return ToDto((await store.GetAsync(businessId, cancellationToken))!);
+    }
+
+    // -----------------------------------------------------------------------
+
+    private async Task<PlatformBusinessRecord> RequireScopedAsync(PlatformActor actor, Guid businessId,
+        CancellationToken cancellationToken)
+    {
+        EnsureOperator(actor);
+        var record = await store.GetAsync(businessId, cancellationToken)
+            ?? throw new ApiException("BUSINESS_NOT_FOUND", "No encontramos el negocio.", 404);
+        if (!actor.IsPlatformAdmin && record.Business.CreatedByUserId != actor.UserId)
+            throw new ApiException("FORBIDDEN", "El negocio no está a su cargo.", 403);
+        return record;
+    }
+
+    private static void EnsureOperator(PlatformActor actor)
+    {
+        if (!actor.CanOperate)
+            throw new ApiException("FORBIDDEN", "No tiene permiso para administrar negocios.", 403);
     }
 
     private void CreateInitialConfiguration(Guid businessId, CreatePlatformBusinessRequest request,
@@ -205,22 +336,40 @@ public sealed class PlatformAdministrationUseCases(
     }
 
     private static BusinessReadiness Readiness(PlatformBusinessRecord r)
-        => BusinessReadinessCalculator.Calculate(!string.IsNullOrWhiteSpace(r.Business.Name) &&
-            !string.IsNullOrWhiteSpace(r.Business.Description), r.Owner is not null,
-            r.Modules.Where(x => x.IsEnabled).Select(x => x.Module).ToList(), r.HasHours, r.HasService,
-            r.HasQueueDefinition, r.HasPickupSettings, r.HasProductCategory, r.HasProduct);
-    private static PlatformBusinessDto ToDto(PlatformBusinessRecord r)
+    {
+        var b = r.Business;
+        var signals = new BusinessCompletionSignals(
+            HasContact: !string.IsNullOrWhiteSpace(b.PublicPhone) || !string.IsNullOrWhiteSpace(b.WhatsAppUrl)
+                        || !string.IsNullOrWhiteSpace(b.PublicEmail),
+            HasLocation: !string.IsNullOrWhiteSpace(b.Address),
+            HasLogo: r.HasLogo, HasCover: r.HasCover);
+        return BusinessReadinessCalculator.Calculate(
+            !string.IsNullOrWhiteSpace(b.Name) && !string.IsNullOrWhiteSpace(b.ShortDescription)
+                && !string.IsNullOrWhiteSpace(b.Description),
+            r.Owner is not null, r.Modules.Where(x => x.IsEnabled).Select(x => x.Module).ToList(),
+            r.HasHours, r.HasService, r.HasQueueDefinition, r.HasPickupSettings, r.HasProductCategory,
+            r.HasProduct, signals);
+    }
+
+    private PlatformBusinessDto ToDto(PlatformBusinessRecord r)
     {
         var readiness = Readiness(r);
-        return new(r.Business.Id, r.Business.Name, r.Business.Slug, r.Municipality, r.Category,
-            r.Business.Status.ToString(), r.Business.IsPublished,
+        var b = r.Business;
+        return new(b.Id, b.Name, b.Slug, r.Municipality, r.Category, b.Status.ToString(), b.IsPublished,
             r.Modules.Where(x => x.IsEnabled).Select(x => x.Module.ToString()).ToList(),
             r.Owner?.DisplayName, r.Owner?.Email,
-            readiness.Requirements.Select(x => new ReadinessItemDto(x.Key, x.Label, x.IsApplicable, x.IsComplete)).ToList(),
-            readiness.IsReady, r.Business.SuspensionReason, r.Business.Version,
-            r.Business.MunicipalityId, r.Business.CategoryId, r.Business.Description, r.Business.Address,
-            r.Business.PublicPhone, r.Business.WhatsAppUrl, r.Business.LocationUrl);
+            readiness.Requirements
+                .Select(x => new ReadinessItemDto(x.Key, x.Label, x.IsApplicable, x.IsComplete, x.MissingHint))
+                .ToList(),
+            readiness.IsReady, b.SuspensionReason, b.Version,
+            b.MunicipalityId, b.CategoryId, b.Description, b.Address, b.PublicPhone, b.WhatsAppUrl, b.LocationUrl,
+            b.ShortDescription, b.ReferencePoint, b.PublicEmail, b.InstagramUrl, b.FacebookUrl,
+            b.CustomerInstructions, readiness.CompletionPercentage, readiness.MissingLabels, b.ReviewNotes,
+            r.LiveImages.OrderBy(x => x.Kind).ThenBy(x => x.DisplayOrder)
+                .Select(x => new BusinessImageDto(x.Id, x.Kind.ToString(), storage.PublicUrl(x.StorageKey),
+                    x.AltText, x.Width, x.Height, x.DisplayOrder, x.Version)).ToList());
     }
+
     private static List<BusinessModuleKind> Selected(CreatePlatformBusinessRequest r)
         => Selected(r.Appointments, r.VirtualQueues, r.PickupOrders);
     private static List<BusinessModuleKind> Selected(UpdatePlatformModulesRequest r)
@@ -241,10 +390,10 @@ public sealed class PlatformAdministrationUseCases(
             throw new ApiException("BUSINESS_DELETE_FORBIDDEN", "El negocio tiene historia o un estado que exige archivarlo.", 409);
         return PlatformAuditAction.BusinessDeleted;
     }
-    private void Audit(Guid businessId, Guid actor, PlatformAuditAction action, object before, object after,
-        DateTimeOffset now) => store.AddAudit(new PlatformAuditEntry(Guid.NewGuid(), businessId, actor, action,
+    private void Audit(Guid businessId, PlatformActor actor, PlatformAuditAction action, object before, object after,
+        DateTimeOffset now) => store.AddAudit(new PlatformAuditEntry(Guid.NewGuid(), businessId, actor.UserId, action,
             before is string s ? s : JsonSerializer.Serialize(before),
-            after is string t ? t : JsonSerializer.Serialize(after), now));
+            after is string t ? t : JsonSerializer.Serialize(after), now, actor.CorrelationId));
     private static object Snapshot(Business b) => new { b.Status, b.IsPublished, b.Version };
     private static T TryDomain<T>(Func<T> action)
     {

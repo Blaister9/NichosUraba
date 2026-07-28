@@ -14,7 +14,7 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
         => store.FindBusinessesAsync(search?.Trim(), municipality, category, cancellationToken);
 
     public Task<BusinessProfileDto?> GetBusinessAsync(string slug, CancellationToken cancellationToken = default)
-        => store.GetBusinessProfileAsync(slug, cancellationToken);
+        => store.GetBusinessProfileAsync(slug, requirePublished: true, cancellationToken);
 
     public async Task<SlotListDto> GetSlotsAsync(string slug, Guid serviceId, DateOnly date,
         CancellationToken cancellationToken = default)

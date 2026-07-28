@@ -7,8 +7,18 @@ public enum PlatformAuditAction
 {
     BusinessCreated, BusinessUpdated, ModulesChanged, OwnerAssigned, OwnerChanged,
     BusinessActivated, BusinessSuspended, BusinessReactivated, BusinessArchived,
-    PilotAccountCreated, TemporaryPasswordChanged, BusinessDeleted
+    PilotAccountCreated, TemporaryPasswordChanged, BusinessDeleted,
+    BusinessSubmittedForReview, BusinessReviewRejected,
+    ImageUploaded, ImageRemoved, InvitationCreated, InvitationAccepted,
+    InvitationRevoked, InvitationResent
 }
+
+/// <summary>Datos editables del perfil comercial público de un negocio.</summary>
+public sealed record BusinessProfileEdit(
+    string Slug, string Name, Guid MunicipalityId, Guid CategoryId,
+    string ShortDescription, string Description, string? Address, string? ReferencePoint,
+    string? PublicPhone, string? WhatsAppUrl, string? PublicEmail,
+    string? InstagramUrl, string? FacebookUrl, string? LocationUrl, string? CustomerInstructions);
 
 public sealed partial class Business
 {
@@ -18,6 +28,69 @@ public sealed partial class Business
     public DateTimeOffset CreatedAtUtc { get; private set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAtUtc { get; private set; } = DateTimeOffset.UtcNow;
     public long Version { get; private set; }
+
+    public string ShortDescription { get; private set; } = "";
+    public string? ReferencePoint { get; private set; }
+    public string? PublicEmail { get; private set; }
+    public string? InstagramUrl { get; private set; }
+    public string? FacebookUrl { get; private set; }
+    public string? CustomerInstructions { get; private set; }
+    public string? ReviewNotes { get; private set; }
+    public DateTimeOffset? SubmittedForReviewAtUtc { get; private set; }
+    public DateTimeOffset? PublishedAtUtc { get; private set; }
+
+    /// <summary>Socia o administrador que dio de alta el negocio. Delimita lo que una socia puede ver.</summary>
+    public Guid? CreatedByUserId { get; private set; }
+
+    public void AssignCreator(Guid userId)
+    {
+        if (CreatedByUserId is not null)
+            throw new DomainException("CREATOR_ALREADY_ASSIGNED", "El negocio ya tiene responsable de alta.");
+        CreatedByUserId = userId;
+    }
+
+    /// <summary>Reemplaza el perfil comercial completo, incluidos los campos añadidos en V5.</summary>
+    public void UpdateCommercialProfile(BusinessProfileEdit edit, DateTimeOffset now, long expectedVersion)
+    {
+        EnsureVersion(expectedVersion);
+        if (Status == BusinessStatus.Archived)
+            throw new DomainException("BUSINESS_ARCHIVED", "Un negocio archivado no se puede editar.");
+        ValidateProfile(edit.Slug, edit.Name, edit.Description, edit.Address, edit.PublicPhone,
+            edit.WhatsAppUrl, edit.LocationUrl);
+        ValidateExtendedProfile(edit);
+        Slug = NormalizeSlug(edit.Slug); Name = edit.Name.Trim();
+        MunicipalityId = edit.MunicipalityId; CategoryId = edit.CategoryId;
+        ShortDescription = edit.ShortDescription.Trim(); Description = edit.Description.Trim();
+        Address = edit.Address?.Trim() ?? ""; ReferencePoint = Clean(edit.ReferencePoint);
+        PublicPhone = edit.PublicPhone?.Trim() ?? ""; WhatsAppUrl = CleanUrl(edit.WhatsAppUrl);
+        PublicEmail = Clean(edit.PublicEmail)?.ToLowerInvariant();
+        InstagramUrl = CleanUrl(edit.InstagramUrl); FacebookUrl = CleanUrl(edit.FacebookUrl);
+        LocationUrl = CleanUrl(edit.LocationUrl); CustomerInstructions = Clean(edit.CustomerInstructions);
+        Touch(now);
+    }
+
+    /// <summary>Envía el negocio a revisión administrativa. No lo publica.</summary>
+    public void SubmitForReview(bool ready, DateTimeOffset now, long expectedVersion)
+    {
+        EnsureVersion(expectedVersion);
+        if (!ready) throw new DomainException("BUSINESS_NOT_READY", "Complete el checklist antes de enviar a revisión.");
+        if (Status is not (BusinessStatus.Draft or BusinessStatus.PendingConfiguration or BusinessStatus.PendingReview))
+            throw new DomainException("INVALID_BUSINESS_TRANSITION", "El estado actual no permite enviar a revisión.");
+        Status = BusinessStatus.PendingReview; IsPublished = false; ReviewNotes = null;
+        SubmittedForReviewAtUtc = now; Touch(now);
+    }
+
+    /// <summary>Devuelve el negocio a configuración con observaciones para la socia.</summary>
+    public void RejectReview(string notes, DateTimeOffset now, long expectedVersion)
+    {
+        EnsureVersion(expectedVersion);
+        if (Status != BusinessStatus.PendingReview)
+            throw new DomainException("INVALID_BUSINESS_TRANSITION", "Solo se rechaza un negocio en revisión.");
+        if (string.IsNullOrWhiteSpace(notes) || notes.Trim().Length > 400)
+            throw new DomainException("REVIEW_NOTES_REQUIRED", "Escriba las observaciones para la socia.");
+        Status = BusinessStatus.PendingConfiguration; IsPublished = false;
+        ReviewNotes = notes.Trim(); Touch(now);
+    }
 
     public static Business CreateDraft(Guid id, string slug, string name, Guid municipalityId, Guid categoryId,
         string description, string? address, string? publicPhone, string? whatsAppUrl, string? locationUrl,
@@ -49,7 +122,8 @@ public sealed partial class Business
     public void MarkPending(DateTimeOffset now, long expectedVersion)
     {
         EnsureVersion(expectedVersion);
-        if (Status is not (BusinessStatus.Draft or BusinessStatus.PendingConfiguration or BusinessStatus.Active))
+        if (Status is not (BusinessStatus.Draft or BusinessStatus.PendingConfiguration or BusinessStatus.PendingReview
+            or BusinessStatus.Active))
             throw new DomainException("INVALID_BUSINESS_TRANSITION", "El negocio no puede pasar a configuración pendiente.");
         Status = BusinessStatus.PendingConfiguration; IsPublished = false; SuspensionReason = null; Touch(now);
     }
@@ -59,7 +133,8 @@ public sealed partial class Business
         EnsureVersion(expectedVersion);
         if (Status == BusinessStatus.Archived)
             throw new DomainException("BUSINESS_ARCHIVED", "Un negocio archivado no se puede configurar.");
-        if (Status == BusinessStatus.Active)
+        // Un cambio de configuración invalida tanto una publicación vigente como una revisión en curso.
+        if (Status is BusinessStatus.Active or BusinessStatus.PendingReview)
         {
             Status = BusinessStatus.PendingConfiguration;
             IsPublished = false;
@@ -73,9 +148,11 @@ public sealed partial class Business
         if (!ready) throw new DomainException("BUSINESS_NOT_READY", "Complete los requisitos antes de activar.");
         if (Status is BusinessStatus.Archived)
             throw new DomainException("INVALID_BUSINESS_TRANSITION", "Un negocio archivado requiere restauración explícita.");
-        if (Status is not (BusinessStatus.Draft or BusinessStatus.PendingConfiguration or BusinessStatus.Suspended or BusinessStatus.Active))
+        if (Status is not (BusinessStatus.Draft or BusinessStatus.PendingConfiguration or BusinessStatus.PendingReview
+            or BusinessStatus.Suspended or BusinessStatus.Active))
             throw new DomainException("INVALID_BUSINESS_TRANSITION", "El estado actual no permite activar.");
-        Status = BusinessStatus.Active; IsPublished = true; SuspensionReason = null; Touch(now);
+        Status = BusinessStatus.Active; IsPublished = true; SuspensionReason = null; ReviewNotes = null;
+        PublishedAtUtc ??= now; Touch(now);
     }
 
     public void Suspend(string reason, DateTimeOffset now, long expectedVersion)
@@ -119,13 +196,56 @@ public sealed partial class Business
             x?.Contains('<') == true || x?.Contains('>') == true))
             throw new DomainException("INVALID_BUSINESS_PROFILE", "No se admite HTML en la información pública.");
     }
+    private static void ValidateExtendedProfile(BusinessProfileEdit edit)
+    {
+        if (string.IsNullOrWhiteSpace(edit.ShortDescription) || edit.ShortDescription.Trim().Length > 160)
+            throw new DomainException("INVALID_SHORT_DESCRIPTION",
+                "La descripción breve es obligatoria y admite máximo 160 caracteres.");
+        if (edit.ReferencePoint?.Length > 160)
+            throw new DomainException("INVALID_REFERENCE_POINT", "El punto de referencia admite máximo 160 caracteres.");
+        if (edit.CustomerInstructions?.Length > 600)
+            throw new DomainException("INVALID_INSTRUCTIONS", "Las instrucciones admiten máximo 600 caracteres.");
+        ValidatePhone(edit.PublicPhone);
+        ValidateEmail(edit.PublicEmail);
+        ValidateSocialUrl(edit.InstagramUrl, "instagram.com");
+        ValidateSocialUrl(edit.FacebookUrl, "facebook.com");
+        if (new[] { edit.ShortDescription, edit.ReferencePoint, edit.CustomerInstructions, edit.PublicEmail }
+            .Any(x => x?.Contains('<') == true || x?.Contains('>') == true))
+            throw new DomainException("INVALID_BUSINESS_PROFILE", "No se admite HTML en la información pública.");
+    }
+
+    private static void ValidatePhone(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return;
+        var digits = value.Count(char.IsDigit);
+        if (digits is < 7 or > 15 || !Regex.IsMatch(value.Trim(), @"^[+]?[0-9()\s.-]{7,30}$"))
+            throw new DomainException("INVALID_PHONE", "Ingrese un teléfono válido de 7 a 15 dígitos.");
+    }
+
+    private static void ValidateEmail(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return;
+        if (value.Trim().Length > 160 || !Regex.IsMatch(value.Trim(), @"^[^@\s]+@[^@\s.]+(\.[^@\s.]+)+$"))
+            throw new DomainException("INVALID_EMAIL", "Ingrese un correo electrónico válido.");
+    }
+
+    private static void ValidateSocialUrl(string? value, string expectedHost)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return;
+        ValidateUrl(value);
+        var host = new Uri(value.Trim()).Host.ToLowerInvariant();
+        if (host != expectedHost && !host.EndsWith('.' + expectedHost))
+            throw new DomainException("INVALID_SOCIAL_URL", $"El enlace debe apuntar a {expectedHost}.");
+    }
+
     private static void ValidateUrl(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return;
-        if (value.Length > 500 || !Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
+        if (value.Length > 500 || !Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri) ||
             uri.Scheme is not ("http" or "https"))
             throw new DomainException("INVALID_URL", "Ingrese un enlace web válido.");
     }
+    private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     private static string? CleanUrl(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     private void EnsureVersion(long expected)
     {
@@ -168,32 +288,67 @@ public sealed class PlatformAuditEntry : IBusinessOwned
     public string? CorrelationId { get; private set; }
 }
 
-public sealed record ReadinessRequirement(string Key, string Label, bool IsApplicable, bool IsComplete);
+public sealed record ReadinessRequirement(string Key, string Label, bool IsApplicable, bool IsComplete,
+    string? MissingHint = null);
 public sealed record BusinessReadiness(IReadOnlyList<ReadinessRequirement> Requirements)
 {
     public bool IsReady => Requirements.Where(x => x.IsApplicable).All(x => x.IsComplete);
+
+    /// <summary>Porcentaje de requisitos aplicables completos, entre 0 y 100.</summary>
+    public int CompletionPercentage
+    {
+        get
+        {
+            var applicable = Requirements.Where(x => x.IsApplicable).ToList();
+            return applicable.Count == 0 ? 100
+                : (int)Math.Round(applicable.Count(x => x.IsComplete) * 100d / applicable.Count,
+                    MidpointRounding.ToZero);
+        }
+    }
+
+    public IReadOnlyList<string> MissingLabels
+        => Requirements.Where(x => x.IsApplicable && !x.IsComplete).Select(x => x.MissingHint ?? x.Label).ToList();
 }
+
+/// <summary>Señales de identidad visual y contacto que alimentan el checklist de onboarding.</summary>
+public sealed record BusinessCompletionSignals(bool HasContact = true, bool HasLocation = true,
+    bool HasLogo = true, bool HasCover = true);
 
 public static class BusinessReadinessCalculator
 {
     public static BusinessReadiness Calculate(bool publicInformation, bool activeOwner,
         IReadOnlyCollection<BusinessModuleKind> enabledModules, bool hasHours, bool hasService,
-        bool hasQueueDefinition, bool hasPickupSettings, bool hasProductCategory, bool hasProduct)
+        bool hasQueueDefinition, bool hasPickupSettings, bool hasProductCategory, bool hasProduct,
+        BusinessCompletionSignals? signals = null)
     {
+        var s = signals ?? new BusinessCompletionSignals();
         var appointments = enabledModules.Contains(BusinessModuleKind.Appointments);
         var queues = enabledModules.Contains(BusinessModuleKind.VirtualQueues);
         var orders = enabledModules.Contains(BusinessModuleKind.PickupOrders);
         return new([
-            new("public-information", "Información pública", true, publicInformation),
-            new("active-owner", "Propietario activo", true, activeOwner),
-            new("modules", "Funciones disponibles", true, enabledModules.Count > 0),
-            new("hours", "Horario", appointments, !appointments || hasHours),
-            new("services", "Servicios", appointments, !appointments || hasService),
-            new("queue", "Fila virtual", queues, !queues || hasQueueDefinition),
-            new("pickup-settings", "Franjas para recoger", orders, !orders || hasPickupSettings),
-            new("catalog-category", "Categoría del menú", orders, !orders || hasProductCategory),
-            new("catalog-product", "Producto activo", orders, !orders || hasProduct),
-            new("permissions", "Permisos del propietario", true, activeOwner)
+            new("public-information", "Información básica", true, publicInformation,
+                "Falta el nombre, la descripción breve o la descripción completa."),
+            new("contact", "Contacto", true, s.HasContact,
+                "Registre al menos un teléfono, un WhatsApp o un correo público."),
+            new("location", "Ubicación", true, s.HasLocation, "Falta la dirección del establecimiento."),
+            new("logo", "Logo", true, s.HasLogo, "Cargue el logo del negocio."),
+            new("cover", "Imagen de portada", true, s.HasCover, "Cargue la imagen de portada."),
+            new("modules", "Funciones disponibles", true, enabledModules.Count > 0,
+                "Habilite al menos una función."),
+            new("hours", "Horario", appointments, !appointments || hasHours, "Configure el horario de atención."),
+            new("services", "Servicios", appointments, !appointments || hasService,
+                "Cree al menos un servicio activo."),
+            new("queue", "Fila virtual", queues, !queues || hasQueueDefinition, "Configure la fila virtual."),
+            new("pickup-settings", "Franjas para recoger", orders, !orders || hasPickupSettings,
+                "Configure las franjas de recogida."),
+            new("catalog-category", "Categoría del menú", orders, !orders || hasProductCategory,
+                "Cree al menos una categoría del menú."),
+            new("catalog-product", "Producto activo", orders, !orders || hasProduct,
+                "Cree al menos un producto activo."),
+            new("active-owner", "Propietario", true, activeOwner,
+                "Invite o asigne a la persona propietaria."),
+            new("permissions", "Permisos del propietario", true, activeOwner,
+                "La persona propietaria debe tener membresía activa.")
         ]);
     }
 }

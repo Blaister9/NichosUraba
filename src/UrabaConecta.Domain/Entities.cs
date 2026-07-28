@@ -1,6 +1,6 @@
 namespace UrabaConecta.Domain;
 
-public enum BusinessStatus { Draft, PendingConfiguration, Active, Suspended, Archived }
+public enum BusinessStatus { Draft, PendingConfiguration, PendingReview, Active, Suspended, Archived }
 public enum MembershipRole { Owner, Worker }
 public enum MembershipAuditAction
 {

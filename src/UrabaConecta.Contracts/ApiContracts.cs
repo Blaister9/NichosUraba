@@ -5,13 +5,18 @@ namespace UrabaConecta.Contracts;
 public sealed record OptionDto(string Slug, string Name);
 public sealed record BusinessCardDto(string Slug, string Name, OptionDto Category, OptionDto Municipality,
     string Description, string Address, bool HasVirtualQueue = false, bool HasPickupOrdering = false,
-    bool HasScheduling = false);
+    bool HasScheduling = false, string? LogoUrl = null, string? CoverUrl = null,
+    string? LogoAltText = null, string? CoverAltText = null, string ShortDescription = "");
 public sealed record BusinessHourDto(DayOfWeek Day, string OpensAt, string ClosesAt);
 public sealed record ServiceDto(Guid Id, string Name, string Description, int DurationMinutes, decimal ReferencePrice,
     int DisplayOrder, bool IsActive, int FutureAppointmentCount = 0, long Version = 0);
 public sealed record BusinessProfileDto(string Slug, string Name, string Description, string Address, string PublicPhone,
     OptionDto Category, OptionDto Municipality, IReadOnlyList<BusinessHourDto> Hours, IReadOnlyList<ServiceDto> Services,
-    bool HasVirtualQueue = false, bool HasPickupOrdering = false);
+    bool HasVirtualQueue = false, bool HasPickupOrdering = false,
+    string ShortDescription = "", string? ReferencePoint = null, string? WhatsAppUrl = null,
+    string? PublicEmail = null, string? InstagramUrl = null, string? FacebookUrl = null,
+    string? LocationUrl = null, string? CustomerInstructions = null,
+    IReadOnlyList<BusinessImageDto>? Images = null, string? OpenStatus = null, bool IsPreview = false);
 public sealed record SlotDto(DateTimeOffset Start, DateTimeOffset End);
 public sealed record SlotListDto(string BusinessTimeZone, DateOnly Date, IReadOnlyList<SlotDto> Slots);
 
@@ -234,13 +239,18 @@ public sealed class PickupOrderCommandRequest
 }
 
 public sealed record PlatformOptionDto(Guid Id, string Slug, string Name);
-public sealed record ReadinessItemDto(string Key, string Label, bool IsApplicable, bool IsComplete);
+public sealed record ReadinessItemDto(string Key, string Label, bool IsApplicable, bool IsComplete,
+    string? MissingHint = null);
 public sealed record PlatformBusinessDto(Guid Id, string Name, string Slug, string Municipality,
     string Category, string Status, bool IsPublished, IReadOnlyList<string> Modules,
     string? OwnerName, string? OwnerEmail, IReadOnlyList<ReadinessItemDto> Readiness,
     bool IsReady, string? SuspensionReason, long Version, Guid MunicipalityId = default,
     Guid CategoryId = default, string Description = "", string Address = "", string PublicPhone = "",
-    string? WhatsAppUrl = null, string? LocationUrl = null);
+    string? WhatsAppUrl = null, string? LocationUrl = null,
+    string ShortDescription = "", string? ReferencePoint = null, string? PublicEmail = null,
+    string? InstagramUrl = null, string? FacebookUrl = null, string? CustomerInstructions = null,
+    int CompletionPercentage = 0, IReadOnlyList<string>? MissingLabels = null, string? ReviewNotes = null,
+    IReadOnlyList<BusinessImageDto>? Images = null);
 public sealed record PlatformBusinessListDto(IReadOnlyList<PlatformBusinessDto> Items,
     IReadOnlyList<PlatformOptionDto> Municipalities, IReadOnlyList<PlatformOptionDto> Categories,
     bool PilotAccountCreationEnabled);
@@ -415,4 +425,36 @@ public interface IUrabaConectaApi
         PlatformBusinessStateRequest request, CancellationToken cancellationToken = default);
     Task<PlatformBusinessDto> UpdatePlatformModulesAsync(Guid businessId, UpdatePlatformModulesRequest request,
         CancellationToken cancellationToken = default);
+    Task<PlatformBusinessDto> SavePlatformBusinessProfileAsync(Guid businessId, SaveBusinessProfileRequest request,
+        CancellationToken cancellationToken = default);
+    Task<PlatformBusinessDto> SubmitBusinessForReviewAsync(Guid businessId, SubmitForReviewRequest request,
+        CancellationToken cancellationToken = default);
+    Task<PlatformBusinessDto> RejectBusinessReviewAsync(Guid businessId, RejectReviewRequest request,
+        CancellationToken cancellationToken = default);
+    Task<BusinessProfileDto> PreviewBusinessAsync(Guid businessId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BusinessStatusChangeDto>> GetBusinessStatusHistoryAsync(Guid businessId,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<PlatformAuditEntryDto>> GetBusinessAuditAsync(Guid businessId,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BusinessImageDto>> GetBusinessImagesAsync(Guid businessId,
+        CancellationToken cancellationToken = default);
+    Task<BusinessImageDto> UploadBusinessImageAsync(Guid businessId, string kind, string fileName,
+        string contentType, byte[] content, string? altText, CancellationToken cancellationToken = default);
+    Task<BusinessImageDto> UpdateBusinessImageAsync(Guid businessId, Guid imageId,
+        UpdateBusinessImageRequest request, CancellationToken cancellationToken = default);
+    Task RemoveBusinessImageAsync(Guid businessId, Guid imageId, long version,
+        CancellationToken cancellationToken = default);
+    Task<InvitationIssuedDto> CreateInvitationAsync(CreateInvitationRequest request,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<InvitationDto>> GetInvitationsAsync(Guid? businessId = null,
+        CancellationToken cancellationToken = default);
+    Task<InvitationIssuedDto> ResendInvitationAsync(Guid invitationId, CancellationToken cancellationToken = default);
+    Task RevokeInvitationAsync(Guid invitationId, CancellationToken cancellationToken = default);
+    Task<InvitationIssuedDto> ResetAccessAsync(ResetAccessRequest request, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<PlatformAccountDto>> GetPartnerOperatorsAsync(CancellationToken cancellationToken = default);
+    Task RevokePartnerOperatorAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<PlatformAccessAuditDto>> GetAccessAuditAsync(Guid? businessId = null,
+        CancellationToken cancellationToken = default);
+    Task<PlatformHealthDto> GetPlatformHealthAsync(CancellationToken cancellationToken = default);
+    Task<LegalInfoDto> GetLegalInfoAsync(CancellationToken cancellationToken = default);
 }

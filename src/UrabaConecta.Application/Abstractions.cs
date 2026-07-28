@@ -79,13 +79,24 @@ public interface IIdentityAccountManager
 
 public sealed record PlatformBusinessRecord(Business Business, string Municipality, string Category,
     IReadOnlyList<BusinessModule> Modules, IdentityAccount? Owner, bool HasHours, bool HasService,
-    bool HasQueueDefinition, bool HasPickupSettings, bool HasProductCategory, bool HasProduct, int OperationCount);
+    bool HasQueueDefinition, bool HasPickupSettings, bool HasProductCategory, bool HasProduct, int OperationCount,
+    IReadOnlyList<BusinessImage>? Images = null)
+{
+    public IReadOnlyList<BusinessImage> LiveImages => (Images ?? []).Where(x => !x.IsDeleted).ToList();
+    public bool HasLogo => LiveImages.Any(x => x.Kind == BusinessImageKind.Logo);
+    public bool HasCover => LiveImages.Any(x => x.Kind == BusinessImageKind.Cover);
+}
 
 public interface IPlatformAdministrationStore
 {
     Task<IApplicationTransaction> BeginTransactionAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<PlatformBusinessRecord>> ListAsync(string? search, string? municipality, string? status,
-        string? module, CancellationToken cancellationToken);
+        string? module, Guid? createdByUserId, CancellationToken cancellationToken);
+    void AddStatusChange(BusinessStatusChange change);
+    Task<IReadOnlyList<BusinessStatusChangeDto>> ListStatusHistoryAsync(Guid businessId,
+        CancellationToken cancellationToken);
+    Task<IReadOnlyList<PlatformAuditEntryDto>> ListBusinessAuditAsync(Guid businessId, int take,
+        CancellationToken cancellationToken);
     Task<PlatformBusinessRecord?> GetAsync(Guid businessId, CancellationToken cancellationToken);
     Task<Business?> LockBusinessAsync(Guid businessId, CancellationToken cancellationToken);
     Task<bool> SlugExistsAsync(string slug, Guid? excludingId, CancellationToken cancellationToken);
@@ -113,17 +124,32 @@ public interface IPlatformAdministrationStore
 
 public interface IPlatformAdministrationUseCases
 {
-    Task<PlatformBusinessListDto> ListAsync(string? search, string? municipality, string? status, string? module,
+    Task<PlatformBusinessListDto> ListAsync(PlatformActor actor, string? search, string? municipality, string? status,
+        string? module, CancellationToken cancellationToken = default);
+    Task<PlatformBusinessDto> GetAsync(PlatformActor actor, Guid businessId,
         CancellationToken cancellationToken = default);
-    Task<PlatformBusinessDto> GetAsync(Guid businessId, CancellationToken cancellationToken = default);
-    Task<PlatformBusinessCreatedDto> CreateAsync(Guid actorUserId, CreatePlatformBusinessRequest request,
+    Task<PlatformBusinessCreatedDto> CreateAsync(PlatformActor actor, CreatePlatformBusinessRequest request,
         CancellationToken cancellationToken = default);
-    Task<PlatformBusinessDto> UpdateAsync(Guid actorUserId, Guid businessId, UpdatePlatformBusinessRequest request,
-        CancellationToken cancellationToken = default);
-    Task<PlatformBusinessDto> ChangeStateAsync(Guid actorUserId, Guid businessId, string action,
+    Task<PlatformBusinessDto> UpdateAsync(PlatformActor actor, Guid businessId,
+        UpdatePlatformBusinessRequest request, CancellationToken cancellationToken = default);
+    /// <summary>Guarda el perfil comercial completo, incluidos los campos añadidos en V5.</summary>
+    Task<PlatformBusinessDto> SaveProfileAsync(PlatformActor actor, Guid businessId,
+        SaveBusinessProfileRequest request, CancellationToken cancellationToken = default);
+    Task<PlatformBusinessDto> ChangeStateAsync(PlatformActor actor, Guid businessId, string action,
         PlatformBusinessStateRequest request, CancellationToken cancellationToken = default);
-    Task<PlatformBusinessDto> UpdateModulesAsync(Guid actorUserId, Guid businessId,
+    Task<PlatformBusinessDto> UpdateModulesAsync(PlatformActor actor, Guid businessId,
         UpdatePlatformModulesRequest request, CancellationToken cancellationToken = default);
+    Task<PlatformBusinessDto> SubmitForReviewAsync(PlatformActor actor, Guid businessId,
+        SubmitForReviewRequest request, CancellationToken cancellationToken = default);
+    Task<PlatformBusinessDto> RejectReviewAsync(PlatformActor actor, Guid businessId,
+        RejectReviewRequest request, CancellationToken cancellationToken = default);
+    /// <summary>Ficha pública tal como se verá al publicar, accesible antes de publicar.</summary>
+    Task<BusinessProfileDto> PreviewAsync(PlatformActor actor, Guid businessId,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BusinessStatusChangeDto>> ListStatusHistoryAsync(PlatformActor actor, Guid businessId,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<PlatformAuditEntryDto>> ListAuditAsync(PlatformActor actor, Guid businessId,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IMembershipAdministrationStore
@@ -149,7 +175,9 @@ public interface IUrabaStore
 {
     Task<IReadOnlyList<BusinessCardDto>> FindBusinessesAsync(string? search, string? municipality, string? category,
         CancellationToken cancellationToken);
-    Task<BusinessProfileDto?> GetBusinessProfileAsync(string slug, CancellationToken cancellationToken);
+    /// <summary>Ficha pública. Con <paramref name="requirePublished"/> en false sirve la vista previa administrativa.</summary>
+    Task<BusinessProfileDto?> GetBusinessProfileAsync(string slug, bool requirePublished,
+        CancellationToken cancellationToken);
     Task<SchedulingContext?> GetSchedulingContextAsync(string slug, Guid serviceId, DateOnly date,
         CancellationToken cancellationToken);
     Task<bool> AddAppointmentAsync(Appointment appointment, ConsentReceipt consent, CancellationToken cancellationToken);

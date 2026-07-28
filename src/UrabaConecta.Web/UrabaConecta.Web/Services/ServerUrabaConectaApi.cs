@@ -1,12 +1,15 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.Options;
 using UrabaConecta.Application;
 using UrabaConecta.Contracts;
 
 namespace UrabaConecta.Web.Services;
 
 public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCases queues, IOrderingUseCases orders,
-    IPlatformAdministrationUseCases platform, AuthenticationStateProvider authentication) : IUrabaConectaApi
+    IPlatformAdministrationUseCases platform, IAccessInvitationUseCases invitations,
+    IBusinessImageUseCases images, IPlatformHealthProvider health, IOptions<LegalOptions> legal,
+    IHttpContextAccessor httpContext, AuthenticationStateProvider authentication) : IUrabaConectaApi
 {
     public Task<IReadOnlyList<BusinessCardDto>> GetBusinessesAsync(string? search = null, string? municipality = null,
         string? category = null, CancellationToken cancellationToken = default)
@@ -158,28 +161,108 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
         PickupOrderCommandRequest request, CancellationToken cancellationToken = default)
         => await orders.ChangeStatusAsync(await UserId(), businessId, orderId, action, request, cancellationToken);
 
-    public Task<PlatformBusinessListDto> GetPlatformBusinessesAsync(string? search = null,
+    public async Task<PlatformBusinessListDto> GetPlatformBusinessesAsync(string? search = null,
         string? municipality = null, string? status = null, string? module = null,
         CancellationToken cancellationToken = default)
-        => platform.ListAsync(search, municipality, status, module, cancellationToken);
-    public Task<PlatformBusinessDto> GetPlatformBusinessAsync(Guid businessId,
-        CancellationToken cancellationToken = default) => platform.GetAsync(businessId, cancellationToken);
+        => await platform.ListAsync(await Actor(), search, municipality, status, module, cancellationToken);
+    public async Task<PlatformBusinessDto> GetPlatformBusinessAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => await platform.GetAsync(await Actor(), businessId, cancellationToken);
     public async Task<PlatformBusinessCreatedDto> CreatePlatformBusinessAsync(CreatePlatformBusinessRequest request,
         CancellationToken cancellationToken = default)
-        => await platform.CreateAsync(await UserId(), request, cancellationToken);
+        => await platform.CreateAsync(await Actor(), request, cancellationToken);
     public async Task<PlatformBusinessDto> UpdatePlatformBusinessAsync(Guid businessId,
         UpdatePlatformBusinessRequest request, CancellationToken cancellationToken = default)
-        => await platform.UpdateAsync(await UserId(), businessId, request, cancellationToken);
+        => await platform.UpdateAsync(await Actor(), businessId, request, cancellationToken);
     public async Task<PlatformBusinessDto> ChangePlatformBusinessStateAsync(Guid businessId, string action,
         PlatformBusinessStateRequest request, CancellationToken cancellationToken = default)
-        => await platform.ChangeStateAsync(await UserId(), businessId, action, request, cancellationToken);
+        => await platform.ChangeStateAsync(await Actor(), businessId, action, request, cancellationToken);
     public async Task<PlatformBusinessDto> UpdatePlatformModulesAsync(Guid businessId,
         UpdatePlatformModulesRequest request, CancellationToken cancellationToken = default)
-        => await platform.UpdateModulesAsync(await UserId(), businessId, request, cancellationToken);
+        => await platform.UpdateModulesAsync(await Actor(), businessId, request, cancellationToken);
+    public async Task<PlatformBusinessDto> SavePlatformBusinessProfileAsync(Guid businessId,
+        SaveBusinessProfileRequest request, CancellationToken cancellationToken = default)
+        => await platform.SaveProfileAsync(await Actor(), businessId, request, cancellationToken);
+    public async Task<PlatformBusinessDto> SubmitBusinessForReviewAsync(Guid businessId,
+        SubmitForReviewRequest request, CancellationToken cancellationToken = default)
+        => await platform.SubmitForReviewAsync(await Actor(), businessId, request, cancellationToken);
+    public async Task<PlatformBusinessDto> RejectBusinessReviewAsync(Guid businessId, RejectReviewRequest request,
+        CancellationToken cancellationToken = default)
+        => await platform.RejectReviewAsync(await Actor(), businessId, request, cancellationToken);
+    public async Task<BusinessProfileDto> PreviewBusinessAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => await platform.PreviewAsync(await Actor(), businessId, cancellationToken);
+    public async Task<IReadOnlyList<BusinessStatusChangeDto>> GetBusinessStatusHistoryAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => await platform.ListStatusHistoryAsync(await Actor(), businessId, cancellationToken);
+    public async Task<IReadOnlyList<PlatformAuditEntryDto>> GetBusinessAuditAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => await platform.ListAuditAsync(await Actor(), businessId, cancellationToken);
+
+    public async Task<IReadOnlyList<BusinessImageDto>> GetBusinessImagesAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => await images.ListAsync(await Actor(), businessId, cancellationToken);
+    public async Task<BusinessImageDto> UploadBusinessImageAsync(Guid businessId, string kind, string fileName,
+        string contentType, byte[] content, string? altText, CancellationToken cancellationToken = default)
+        => await images.UploadAsync(await Actor(), businessId, kind,
+            new UploadedImage(fileName, contentType, content), altText, cancellationToken);
+    public async Task<BusinessImageDto> UpdateBusinessImageAsync(Guid businessId, Guid imageId,
+        UpdateBusinessImageRequest request, CancellationToken cancellationToken = default)
+        => await images.DescribeAsync(await Actor(), businessId, imageId, request, cancellationToken);
+    public async Task RemoveBusinessImageAsync(Guid businessId, Guid imageId, long version,
+        CancellationToken cancellationToken = default)
+        => await images.RemoveAsync(await Actor(), businessId, imageId, version, cancellationToken);
+
+    public async Task<InvitationIssuedDto> CreateInvitationAsync(CreateInvitationRequest request,
+        CancellationToken cancellationToken = default)
+        => await invitations.InviteAsync(await Actor(), request, cancellationToken);
+    public async Task<IReadOnlyList<InvitationDto>> GetInvitationsAsync(Guid? businessId = null,
+        CancellationToken cancellationToken = default)
+        => await invitations.ListAsync(await Actor(), businessId, cancellationToken);
+    public async Task<InvitationIssuedDto> ResendInvitationAsync(Guid invitationId,
+        CancellationToken cancellationToken = default)
+        => await invitations.ResendAsync(await Actor(), invitationId, cancellationToken);
+    public async Task RevokeInvitationAsync(Guid invitationId, CancellationToken cancellationToken = default)
+        => await invitations.RevokeAsync(await Actor(), invitationId, cancellationToken);
+    public async Task<InvitationIssuedDto> ResetAccessAsync(ResetAccessRequest request,
+        CancellationToken cancellationToken = default)
+        => await invitations.ResetAccessAsync(await Actor(), request, cancellationToken);
+    public async Task<IReadOnlyList<PlatformAccountDto>> GetPartnerOperatorsAsync(
+        CancellationToken cancellationToken = default)
+        => await invitations.ListPartnerOperatorsAsync(await Actor(), cancellationToken);
+    public async Task RevokePartnerOperatorAsync(Guid userId, CancellationToken cancellationToken = default)
+        => await invitations.RevokePartnerOperatorAsync(await Actor(), userId, cancellationToken);
+    public async Task<IReadOnlyList<PlatformAccessAuditDto>> GetAccessAuditAsync(Guid? businessId = null,
+        CancellationToken cancellationToken = default)
+        => await invitations.ListAuditAsync(await Actor(), businessId, cancellationToken);
+
+    public async Task<PlatformHealthDto> GetPlatformHealthAsync(CancellationToken cancellationToken = default)
+    {
+        if (!(await Actor()).IsPlatformAdmin)
+            throw new ApiException("FORBIDDEN", "Solo la administración de plataforma consulta la salud.", 403);
+        return await health.GetAsync(cancellationToken);
+    }
+
+    public Task<LegalInfoDto> GetLegalInfoAsync(CancellationToken cancellationToken = default)
+    {
+        var value = legal.Value;
+        return Task.FromResult(new LegalInfoDto(value.ResponsibleName, value.Identification, value.Address,
+            value.PrivacyEmail, value.SupportEmail, value.PolicyVersion, value.PolicyEffectiveDate));
+    }
 
     private async Task<Guid> UserId()
     {
         var user = (await authentication.GetAuthenticationStateAsync()).User;
         return Guid.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : Guid.Empty;
+    }
+
+    /// <summary>El rol se lee de los claims de la petición, nunca de un parámetro del cliente.</summary>
+    private async Task<PlatformActor> Actor()
+    {
+        var user = (await authentication.GetAuthenticationStateAsync()).User;
+        var id = Guid.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var parsed) ? parsed : Guid.Empty;
+        return new(id, user.IsInRole("PlatformAdmin"), user.IsInRole("PartnerOperator"),
+            httpContext.HttpContext?.Connection.RemoteIpAddress?.ToString(),
+            httpContext.HttpContext?.TraceIdentifier);
     }
 }

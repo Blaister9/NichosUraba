@@ -31,6 +31,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<PickupOrderSettings> PickupOrderSettings => Set<PickupOrderSettings>();
     public DbSet<PickupOrder> PickupOrders => Set<PickupOrder>();
     public DbSet<PickupOrderLine> PickupOrderLines => Set<PickupOrderLine>();
+    public DbSet<BusinessImage> BusinessImages => Set<BusinessImage>();
+    public DbSet<AccessInvitation> AccessInvitations => Set<AccessInvitation>();
+    public DbSet<BusinessStatusChange> BusinessStatusChanges => Set<BusinessStatusChange>();
+    public DbSet<PlatformAccessAudit> PlatformAccessAudits => Set<PlatformAccessAudit>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -57,6 +61,13 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             x.Property(e => e.Status).HasConversion<string>().HasMaxLength(20);
             x.Property(e => e.WhatsAppUrl).HasMaxLength(500); x.Property(e => e.LocationUrl).HasMaxLength(500);
             x.Property(e => e.SuspensionReason).HasMaxLength(240); x.Property(e => e.Version).IsConcurrencyToken();
+            x.Property(e => e.ShortDescription).HasMaxLength(160).HasDefaultValue("");
+            x.Property(e => e.ReferencePoint).HasMaxLength(160);
+            x.Property(e => e.PublicEmail).HasMaxLength(160);
+            x.Property(e => e.InstagramUrl).HasMaxLength(500);
+            x.Property(e => e.FacebookUrl).HasMaxLength(500);
+            x.Property(e => e.CustomerInstructions).HasMaxLength(600);
+            x.Property(e => e.ReviewNotes).HasMaxLength(400);
             x.HasOne<Municipality>().WithMany().HasForeignKey(e => e.MunicipalityId).OnDelete(DeleteBehavior.Restrict);
             x.HasOne<Category>().WithMany().HasForeignKey(e => e.CategoryId).OnDelete(DeleteBehavior.Restrict);
         });
@@ -298,5 +309,66 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         });
         builder.Entity<ConsentReceipt>().HasOne<PickupOrder>().WithOne()
             .HasForeignKey<ConsentReceipt>(e => e.PickupOrderId).OnDelete(DeleteBehavior.Restrict);
+
+        builder.Entity<BusinessImage>(x =>
+        {
+            x.ToTable("business_images", t =>
+            {
+                t.HasCheckConstraint("ck_business_image_size", "\"Width\" > 0 AND \"Height\" > 0 AND \"ByteSize\" > 0");
+                t.HasCheckConstraint("ck_business_image_order", "\"DisplayOrder\" >= 0");
+            });
+            x.HasKey(e => e.Id);
+            x.HasIndex(e => new { e.BusinessId, e.Kind, e.IsDeleted });
+            // Logo y portada son únicos entre las imágenes vigentes de cada negocio.
+            x.HasIndex(e => new { e.BusinessId, e.Kind }).IsUnique()
+                .HasFilter("\"IsDeleted\" = FALSE AND \"Kind\" IN ('Logo', 'Cover')");
+            x.HasIndex(e => e.StorageKey).IsUnique();
+            x.Property(e => e.Kind).HasConversion<string>().HasMaxLength(16);
+            x.Property(e => e.StorageKey).HasMaxLength(400);
+            x.Property(e => e.ContentType).HasMaxLength(60);
+            x.Property(e => e.AltText).HasMaxLength(160);
+            x.Property(e => e.Version).IsConcurrencyToken();
+            x.HasOne<Business>().WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Cascade);
+        });
+        builder.Entity<AccessInvitation>(x =>
+        {
+            x.ToTable("access_invitations");
+            x.HasKey(e => e.Id);
+            // El token nunca se guarda en claro: sólo el hash, y su unicidad es la que se consulta.
+            x.HasIndex(e => e.TokenHash).IsUnique();
+            x.HasIndex(e => new { e.Email, e.ExpiresAtUtc });
+            x.HasIndex(e => new { e.BusinessId, e.CreatedAtUtc });
+            x.Property(e => e.Email).HasMaxLength(160);
+            x.Property(e => e.DisplayName).HasMaxLength(100);
+            x.Property(e => e.TokenHash).HasMaxLength(128);
+            x.Property(e => e.Grant).HasConversion<string>().HasMaxLength(24);
+            x.Property(e => e.Purpose).HasConversion<string>().HasMaxLength(24);
+            x.Property(e => e.Version).IsConcurrencyToken();
+            x.HasOne<Business>().WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Cascade);
+        });
+        builder.Entity<BusinessStatusChange>(x =>
+        {
+            x.ToTable("business_status_changes");
+            x.HasKey(e => e.Id);
+            x.HasIndex(e => new { e.BusinessId, e.OccurredAtUtc });
+            x.Property(e => e.FromStatus).HasConversion<string>().HasMaxLength(24);
+            x.Property(e => e.ToStatus).HasConversion<string>().HasMaxLength(24);
+            x.Property(e => e.Notes).HasMaxLength(400);
+            x.HasOne<Business>().WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Cascade);
+        });
+        builder.Entity<PlatformAccessAudit>(x =>
+        {
+            x.ToTable("platform_access_audits");
+            x.HasKey(e => e.Id);
+            x.HasIndex(e => e.OccurredAtUtc);
+            x.HasIndex(e => new { e.BusinessId, e.OccurredAtUtc });
+            x.Property(e => e.Action).HasConversion<string>().HasMaxLength(48);
+            x.Property(e => e.Entity).HasMaxLength(80);
+            x.Property(e => e.EntityId).HasMaxLength(64);
+            x.Property(e => e.Summary).HasMaxLength(400);
+            x.Property(e => e.IpAddress).HasMaxLength(45);
+            x.Property(e => e.CorrelationId).HasMaxLength(64);
+            // Sin clave foránea: un reinicio de acceso puede no pertenecer a ningún negocio.
+        });
     }
 }

@@ -13,9 +13,10 @@ public sealed class PlatformAdministrationStore(AppDbContext db) : IPlatformAdmi
         => new EfApplicationTransaction(await db.Database.BeginTransactionAsync(cancellationToken));
 
     public async Task<IReadOnlyList<PlatformBusinessRecord>> ListAsync(string? search, string? municipality,
-        string? status, string? module, CancellationToken cancellationToken)
+        string? status, string? module, Guid? createdByUserId, CancellationToken cancellationToken)
     {
         var query = db.Businesses.AsQueryable();
+        if (createdByUserId is { } creator) query = query.Where(x => x.CreatedByUserId == creator);
         if (!string.IsNullOrWhiteSpace(search))
             query = query.Where(x => EF.Functions.ILike(x.Name, $"%{search.Trim()}%"));
         if (!string.IsNullOrWhiteSpace(municipality))
@@ -55,8 +56,32 @@ public sealed class PlatformAdministrationStore(AppDbContext db) : IPlatformAdmi
             await db.QueueDefinitions.AnyAsync(x => x.BusinessId == businessId && x.IsActive && x.IsEnabled, cancellationToken),
             await db.PickupOrderSettings.AnyAsync(x => x.BusinessId == businessId && x.IsEnabled, cancellationToken),
             await db.ProductCategories.AnyAsync(x => x.BusinessId == businessId && x.IsActive, cancellationToken),
-            await db.Products.AnyAsync(x => x.BusinessId == businessId && x.IsActive, cancellationToken), operations);
+            await db.Products.AnyAsync(x => x.BusinessId == businessId && x.IsActive, cancellationToken), operations,
+            await db.BusinessImages.Where(x => x.BusinessId == businessId && !x.IsDeleted).ToListAsync(cancellationToken));
     }
+
+    public void AddStatusChange(BusinessStatusChange change) => db.Add(change);
+
+    public async Task<IReadOnlyList<BusinessStatusChangeDto>> ListStatusHistoryAsync(Guid businessId,
+        CancellationToken cancellationToken)
+        => await (from change in db.BusinessStatusChanges.AsNoTracking()
+                  join user in db.Users on change.ActorUserId equals user.Id into actors
+                  from actor in actors.DefaultIfEmpty()
+                  where change.BusinessId == businessId
+                  orderby change.OccurredAtUtc descending
+                  select new BusinessStatusChangeDto(change.FromStatus.ToString(), change.ToStatus.ToString(),
+                      actor.Email, change.Notes, change.OccurredAtUtc)).Take(100).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<PlatformAuditEntryDto>> ListBusinessAuditAsync(Guid businessId, int take,
+        CancellationToken cancellationToken)
+        => await (from entry in db.PlatformAuditEntries.AsNoTracking()
+                  join user in db.Users on entry.ActorUserId equals user.Id into actors
+                  from actor in actors.DefaultIfEmpty()
+                  where entry.BusinessId == businessId
+                  orderby entry.OccurredAtUtc descending
+                  select new PlatformAuditEntryDto(entry.Id, actor.Email, entry.Action.ToString(),
+                      entry.PreviousState, entry.NewState, entry.OccurredAtUtc)).Take(take)
+            .ToListAsync(cancellationToken);
 
     public Task<Business?> LockBusinessAsync(Guid businessId, CancellationToken cancellationToken)
         => db.Businesses.FromSqlInterpolated($"SELECT * FROM businesses WHERE \"Id\"={businessId} FOR UPDATE")
@@ -111,6 +136,8 @@ public sealed class PlatformAdministrationStore(AppDbContext db) : IPlatformAdmi
         db.PickupOrderSettings.RemoveRange(db.PickupOrderSettings.Where(x => x.BusinessId == businessId));
         db.BusinessMemberships.RemoveRange(memberships);
         db.BusinessModules.RemoveRange(db.BusinessModules.Where(x => x.BusinessId == businessId));
+        db.BusinessImages.RemoveRange(db.BusinessImages.Where(x => x.BusinessId == businessId));
+        db.BusinessStatusChanges.RemoveRange(db.BusinessStatusChanges.Where(x => x.BusinessId == businessId));
         db.Businesses.Remove(business);
     }
     public async Task SaveChangesAsync(CancellationToken cancellationToken)
