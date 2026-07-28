@@ -41,7 +41,7 @@ else
             </p>
         </fieldset>
         @if (error is not null) { <p class="error" role="alert">@error</p> }
-        <button class="primary" disabled="@(!interactiveReady || submitting)">@(submitting ? "Enviando…" : "Enviar solicitud")</button>
+        <button class="primary" disabled="@(!interactiveReady || loadingSlots || submitting)">@(submitting ? "Enviando…" : "Enviar solicitud")</button>
         </fieldset>
     </EditForm>
 }
@@ -78,6 +78,8 @@ else
             System.Globalization.DateTimeStyles.None, out var date))
         { error = "Seleccione una fecha válida."; return; }
         loadingSlots = true;
+        request.Start = default;
+        slots = null;
         try { slots = (await Api.GetSlotsAsync(Slug, request.ServiceId, date)).Slots.ToList(); }
         catch (ApiException ex) { error = ex.Message; slots = []; }
         finally { loadingSlots = false; }
