@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl gosu \
 WORKDIR /app
 COPY --from=build /app/publish .
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN mkdir -p /app/keys \
+RUN mkdir -p /app/keys /app/media \
     && chmod 0755 /usr/local/bin/docker-entrypoint.sh
 ENV ASPNETCORE_HTTP_PORTS=8080
 EXPOSE 8080

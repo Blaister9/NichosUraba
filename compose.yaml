@@ -3,18 +3,43 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    # Se usa la forma de lista a propósito: una entrada sin "=" solo se pasa al contenedor
+    # cuando la variable existe. Con la forma de mapa, una variable ausente se convierte en
+    # cadena vacía y pisa los valores de appsettings.<Ambiente>.json.
     environment:
-      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Demo}
-      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-urabaconecta};Username=${POSTGRES_USER:-urabaconecta};Password=${POSTGRES_PASSWORD}
-      URABACONECTA_TRACKING_HMAC_KEY: ${URABACONECTA_TRACKING_HMAC_KEY}
-      DataProtection__KeysPath: /app/keys
-      DemoSeed__Enabled: ${DEMO_SEED_ENABLED:-true}
-      DemoSeed__AdminPassword: ${DEMO_SEED_ADMIN_PASSWORD}
-      DemoSeed__BusinessPassword: ${DEMO_SEED_BUSINESS_PASSWORD}
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Demo}
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=${POSTGRES_DB:-urabaconecta};Username=${POSTGRES_USER:-urabaconecta};Password=${POSTGRES_PASSWORD}
+      - URABACONECTA_TRACKING_HMAC_KEY=${URABACONECTA_TRACKING_HMAC_KEY}
+      - URABACONECTA_INVITATION_HMAC_KEY
+      - DataProtection__KeysPath=/app/keys
+      - DataProtection__CertificateBase64
+      - DataProtection__CertificatePassword
+      - DemoSeed__Enabled=${DEMO_SEED_ENABLED:-true}
+      - DemoSeed__AdminPassword=${DEMO_SEED_ADMIN_PASSWORD}
+      - DemoSeed__BusinessPassword=${DEMO_SEED_BUSINESS_PASSWORD}
+      # Las imágenes viven en un volumen propio: nunca en wwwroot ni en el volumen de llaves.
+      - ObjectStorage__Provider=${ObjectStorage__Provider:-Local}
+      - ObjectStorage__LocalRootPath=/app/media
+      - ObjectStorage__ServiceUrl
+      - ObjectStorage__Bucket
+      - ObjectStorage__AccessKey
+      - ObjectStorage__SecretKey
+      - ObjectStorage__PublicBaseUrl
+      - ObjectStorage__Region
+      - Legal__ResponsibleName
+      - Legal__Identification
+      - Legal__Address
+      - Legal__PrivacyEmail
+      - Legal__SupportEmail
+      - Legal__PolicyVersion
+      - Legal__PolicyEffectiveDate
+      - Deployment__Commit
+      - Deployment__DeployedAtUtc
     ports:
       - "${APP_PORT:-8088}:8080"
     volumes:
       - urabaconecta_keys:/app/keys
+      - urabaconecta_media:/app/media
     depends_on:
       postgres:
         condition: service_healthy
@@ -41,3 +66,4 @@ services:
 volumes:
   urabaconecta_pgdata:
   urabaconecta_keys:
+  urabaconecta_media:

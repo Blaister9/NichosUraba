@@ -82,12 +82,23 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
 
 builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
-var dataProtection = builder.Services.AddDataProtection().SetApplicationName("UrabaConecta");
+var dataProtection = builder.Services.AddDataProtection()
+    .SetApplicationName(builder.Configuration["DataProtection:ApplicationName"] ?? "UrabaConecta");
 var keysPath = builder.Configuration["DataProtection:KeysPath"];
 if (!string.IsNullOrWhiteSpace(keysPath))
     dataProtection.PersistKeysToFileSystem(new DirectoryInfo(keysPath));
 else if (builder.Environment.IsEnvironment("Demo"))
     throw new InvalidOperationException("Falta DataProtection:KeysPath para el ambiente Demo.");
+// Cifrado de las llaves en reposo. Sin certificado, el anillo queda persistido pero sin
+// protección aplicativa adicional: quien acceda al volumen puede descifrar los datos personales.
+if (builder.Configuration["DataProtection:CertificateBase64"] is { Length: > 0 } certificateBase64)
+{
+    var certificate = System.Security.Cryptography.X509Certificates.X509CertificateLoader
+        .LoadPkcs12(Convert.FromBase64String(certificateBase64),
+            builder.Configuration["DataProtection:CertificatePassword"],
+            System.Security.Cryptography.X509Certificates.X509KeyStorageFlags.EphemeralKeySet);
+    dataProtection.ProtectKeysWithCertificate(certificate);
+}
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
