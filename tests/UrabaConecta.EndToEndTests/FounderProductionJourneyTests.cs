@@ -33,10 +33,12 @@ public sealed class FounderProductionJourneyTests(BrowserFixture fixture) : ICla
         var admin = await adminContext.NewPageAsync();
         await Login(admin, DevelopmentSeeder.PlatformAdminEmail, DevelopmentSeeder.DemoPassword);
         await admin.GotoAsync($"{fixture.BaseUrl}/admin/accesos");
-        await WaitForInteractivity(admin, "Invitar a una socia");
-        await admin.GetByLabel("Correo", new() { Exact = true }).First.FillAsync(partnerEmail);
-        await admin.GetByLabel("Nombre visible").FillAsync("Socia fundadora");
-        await admin.GetByRole(AriaRole.Button, new() { Name = "Generar enlace de invitación" }).ClickAsync();
+        await WaitForSection(admin, "Invitar a una socia");
+        await SubmitUntilNotice(admin, async () =>
+        {
+            await admin.GetByLabel("Correo", new() { Exact = true }).First.FillAsync(partnerEmail);
+            await admin.GetByLabel("Nombre visible").FillAsync("Socia fundadora");
+        }, "Generar enlace de invitación", "Enlace generado");
         var partnerLink = await admin.GetByLabel("Enlace generado").InputValueAsync();
         Assert.Contains("/Account/AcceptInvitation?token=", partnerLink);
 
@@ -49,15 +51,18 @@ public sealed class FounderProductionJourneyTests(BrowserFixture fixture) : ICla
         // 3. La socia crea el negocio y 4-5. completa su perfil desde la interfaz.
         var businessId = await CreateBusiness(partner, slug);
         await partner.GotoAsync($"{fixture.BaseUrl}/admin/negocios/{businessId}");
-        await WaitForInteractivity(partner, "Perfil comercial");
-        await partner.GetByLabel("Descripción breve (máx. 160)")
-            .FillAsync("Salón ficticio del recorrido de producción fundadora.");
-        await partner.GetByLabel("Descripción completa").FillAsync("Descripción completa del negocio ficticio.");
-        await partner.GetByLabel("Dirección").FillAsync("Calle 100 # 00-00");
-        await partner.GetByLabel("Punto de referencia").FillAsync("Frente al parque principal");
-        await partner.GetByLabel("Teléfono público").FillAsync("3001234567");
-        await partner.GetByLabel("Correo público").FillAsync($"contacto-{suffix}@example.test");
-        await ClickAndExpectNotice(partner, "Guardar perfil", "Perfil actualizado.");
+        await WaitForSection(partner, "Perfil comercial");
+        await SubmitUntilNotice(partner, async () =>
+        {
+            await partner.GetByLabel("Descripción breve (máx. 160)")
+                .FillAsync("Salón ficticio del recorrido de producción fundadora.");
+            await partner.GetByLabel("Descripción completa")
+                .FillAsync("Descripción completa del negocio ficticio.");
+            await partner.GetByLabel("Dirección").FillAsync("Calle 100 # 00-00");
+            await partner.GetByLabel("Punto de referencia").FillAsync("Frente al parque principal");
+            await partner.GetByLabel("Teléfono público").FillAsync("3001234567");
+            await partner.GetByLabel("Correo público").FillAsync($"contacto-{suffix}@example.test");
+        }, "Guardar perfil", "Perfil actualizado.");
 
         // 6-7. Sube logo, portada y una fotografía de galería.
         foreach (var kind in new[] { "Logo", "Cover", "Gallery" })
@@ -65,14 +70,13 @@ public sealed class FounderProductionJourneyTests(BrowserFixture fixture) : ICla
 
         // 8. Invita a la persona propietaria y copia su enlace.
         await partner.GotoAsync($"{fixture.BaseUrl}/admin/negocios/{businessId}");
-        await WaitForInteractivity(partner, "Personas con acceso");
-        await partner.GetByLabel("Correo de la persona").FillAsync(ownerEmail);
-        await partner.GetByLabel("Nombre visible").FillAsync("Persona propietaria");
-        await partner.GetByLabel("Tipo de acceso").SelectOptionAsync("BusinessOwner");
-        await partner.GetByRole(AriaRole.Button, new() { Name = "Generar enlace de invitación" }).ClickAsync();
-        var invitationNotice = partner.Locator("p.notice[role=alert]");
-        await Expect(invitationNotice).ToBeVisibleAsync();
-        Assert.StartsWith("Enlace generado", (await invitationNotice.TextContentAsync())!.Trim());
+        await WaitForSection(partner, "Personas con acceso");
+        await SubmitUntilNotice(partner, async () =>
+        {
+            await partner.GetByLabel("Correo de la persona").FillAsync(ownerEmail);
+            await partner.GetByLabel("Nombre visible").FillAsync("Persona propietaria");
+            await partner.GetByLabel("Tipo de acceso").SelectOptionAsync("BusinessOwner");
+        }, "Generar enlace de invitación", "Enlace generado");
         var ownerLink = await partner.GetByLabel("Enlace de invitación").InputValueAsync();
 
         await using var ownerContext = await fixture.Browser.NewContextAsync();
@@ -93,31 +97,32 @@ public sealed class FounderProductionJourneyTests(BrowserFixture fixture) : ICla
 
         // 10. La socia envía a revisión; no puede publicar por sí misma.
         await partner.GotoAsync($"{fixture.BaseUrl}/admin/negocios/{businessId}");
-        await WaitForInteractivity(partner, "Revisión y publicación");
-        await ClickAndExpectNotice(partner, "Enviar a revisión", "Enviado a revisión.");
+        await WaitForSection(partner, "Revisión y publicación");
+        await ClickUntilNotice(partner, "Enviar a revisión", "Enviado a revisión.");
         await Expect(partner.Locator("span.tag").Filter(new() { HasText = "En revisión" })).ToBeVisibleAsync();
         await Expect(partner.GetByRole(AriaRole.Button, new() { Name = "Aprobar y publicar" })).ToHaveCountAsync(0);
 
         // 11. El administrador devuelve con observaciones y la socia lo reenvía.
         await admin.GotoAsync($"{fixture.BaseUrl}/admin/negocios/{businessId}");
-        await WaitForInteractivity(admin, "Revisión y publicación");
-        await admin.GetByLabel("Observaciones para la socia").FillAsync("Ajuste el punto de referencia.");
-        // @bind se propaga al perder el foco: se fuerza el blur antes de pulsar el botón.
-        await admin.Keyboard.PressAsync("Tab");
-        await admin.WaitForTimeoutAsync(250);
-        await ClickAndExpectNotice(admin, "Devolver con observaciones", "Devuelto a la socia con observaciones.");
+        await WaitForSection(admin, "Revisión y publicación");
+        await SubmitUntilNotice(admin, async () =>
+        {
+            await admin.GetByLabel("Observaciones para la socia").FillAsync("Ajuste el punto de referencia.");
+            // @bind se propaga al perder el foco: se fuerza el blur antes de pulsar el botón.
+            await admin.Keyboard.PressAsync("Tab");
+        }, "Devolver con observaciones", "Devuelto a la socia con observaciones.");
         await Expect(admin.Locator("div.notice").Filter(new() { HasText = "Ajuste el punto de referencia." }))
             .ToBeVisibleAsync();
 
         await partner.GotoAsync($"{fixture.BaseUrl}/admin/negocios/{businessId}");
-        await WaitForInteractivity(partner, "Revisión y publicación");
-        await ClickAndExpectNotice(partner, "Enviar a revisión", "Enviado a revisión.");
+        await WaitForSection(partner, "Revisión y publicación");
+        await ClickUntilNotice(partner, "Enviar a revisión", "Enviado a revisión.");
         await Expect(partner.Locator("span.tag").Filter(new() { HasText = "En revisión" })).ToBeVisibleAsync();
 
         // 12. El administrador aprueba y publica.
         await admin.GotoAsync($"{fixture.BaseUrl}/admin/negocios/{businessId}");
-        await WaitForInteractivity(admin, "Revisión y publicación");
-        await ClickAndExpectNotice(admin, "Aprobar y publicar", "Negocio publicado.");
+        await WaitForSection(admin, "Revisión y publicación");
+        await ClickUntilNotice(admin, "Aprobar y publicar", "Negocio publicado.");
         await Expect(admin.Locator("span.tag").Filter(new() { HasText = "Publicado" })).ToBeVisibleAsync();
 
         // 13. El negocio aparece públicamente, con su logo y su ficha completa.
@@ -234,24 +239,46 @@ public sealed class FounderProductionJourneyTests(BrowserFixture fixture) : ICla
     }
 
     /// <summary>
-    /// Pulsa un botón y comprueba el aviso resultante. Si el servidor devolvió otro mensaje, el fallo
-    /// lo muestra tal cual, que es lo útil para diagnosticar.
+    /// Llena el formulario, pulsa el botón y comprueba el aviso resultante.
+    ///
+    /// El render es <c>InteractiveAuto</c>: hasta que Blazor termina de montarse —en WebAssembly
+    /// puede tardar bastante en una máquina cargada— escribir en un campo sólo toca el DOM
+    /// prerenderizado y el clic no dispara nada; al montarse, el re-render descarta lo escrito.
+    /// Por eso no se espera un tiempo fijo sino que se reintenta la secuencia completa hasta que
+    /// produzca su efecto observable. Si el servidor responde otra cosa, el fallo muestra el
+    /// mensaje real en vez de un tiempo de espera agotado.
     /// </summary>
-    private static async Task ClickAndExpectNotice(IPage page, string button, string expected)
+    private static async Task<string> SubmitUntilNotice(IPage page, Func<Task> fill, string button,
+        string expectedPrefix)
     {
-        await page.GetByRole(AriaRole.Button, new() { Name = button }).ClickAsync();
         var notice = page.Locator("p.notice[role=alert]");
-        await Expect(notice).ToBeVisibleAsync();
-        Assert.Equal(expected, (await notice.TextContentAsync())!.Trim());
+        for (var attempt = 1; attempt <= 6; attempt++)
+        {
+            await fill();
+            await page.GetByRole(AriaRole.Button, new() { Name = button }).ClickAsync();
+            try
+            {
+                await Assertions.Expect(notice).ToContainTextAsync(expectedPrefix, new() { Timeout = 5000 });
+            }
+            catch (PlaywrightException)
+            {
+                // Todavía no era interactivo: se vuelve a intentar la secuencia completa.
+                continue;
+            }
+            var text = (await notice.TextContentAsync())!.Trim();
+            Assert.StartsWith(expectedPrefix, text);
+            return text;
+        }
+        Assert.Fail($"«{button}» no produjo respuesta tras varios intentos.");
+        throw new InvalidOperationException();
     }
 
-    /// <summary>Espera a que el componente interactivo esté montado antes de escribir en el formulario.</summary>
-    private static async Task WaitForInteractivity(IPage page, string heading)
-    {
-        await Expect(page.GetByRole(AriaRole.Heading, new() { Name = heading })).ToBeVisibleAsync();
-        // InteractiveAuto puede arrancar en WebAssembly, que tarda más que el modo servidor.
-        await page.WaitForTimeoutAsync(2500);
-    }
+    private static Task<string> ClickUntilNotice(IPage page, string button, string expectedPrefix)
+        => SubmitUntilNotice(page, () => Task.CompletedTask, button, expectedPrefix);
+
+    /// <summary>Espera a que la sección esté renderizada antes de interactuar con ella.</summary>
+    private static Task WaitForSection(IPage page, string heading)
+        => Expect(page.GetByRole(AriaRole.Heading, new() { Name = heading })).ToBeVisibleAsync();
 
     private async Task<Guid> CreateBusiness(IPage partner, string slug)
     {
