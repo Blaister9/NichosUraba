@@ -1,6 +1,6 @@
 @page "/admin/negocios/nuevo"
 @rendermode InteractiveAuto
-@attribute [Authorize(Roles = "PlatformAdmin")]
+@attribute [Authorize(Roles = "PlatformAdmin,PartnerOperator")]
 @inject IUrabaConectaApi Api
 @inject NavigationManager Navigation
 

@@ -79,6 +79,7 @@ public sealed class QueueStore(AppDbContext db) : IQueueStore
     public void AddDefinition(QueueDefinition x) => db.Add(x);
     public void AddSession(QueueSession x) => db.Add(x);
     public void AddTicket(QueueTicket x) => db.Add(x);
+    public void AddConsent(ConsentReceipt x) => db.Add(x);
     public async Task SaveChangesAsync(CancellationToken ct)
     {
         try { await db.SaveChangesAsync(ct); }

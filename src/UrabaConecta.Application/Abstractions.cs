@@ -246,6 +246,7 @@ public interface IQueueStore
     void AddDefinition(QueueDefinition definition);
     void AddSession(QueueSession session);
     void AddTicket(QueueTicket ticket);
+    void AddConsent(ConsentReceipt consent);
     Task SaveChangesAsync(CancellationToken cancellationToken);
 }
 

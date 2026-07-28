@@ -1,0 +1,152 @@
+@page "/legal/{Document}"
+@rendermode InteractiveAuto
+@inject IUrabaConectaApi Api
+
+@* Los datos del responsable no están escritos en el código: vienen de la configuración Legal__*. *@
+
+<PageTitle>@Title | UrabáConecta</PageTitle>
+<a class="back-link" href="/">← Directorio</a>
+<article class="legal-document">
+    <p class="eyebrow">Documento legal</p>
+    <h1>@Title</h1>
+
+    @if (legal is null) { <p class="notice">Cargando…</p> }
+    else if (Incomplete)
+    {
+        <p class="notice" role="alert">
+            <strong>Este documento aún no está configurado.</strong>
+            La persona responsable del tratamiento de datos debe registrarse en la configuración
+            de la instalación antes de publicar este texto.
+        </p>
+    }
+    else
+    {
+        <p>
+            <strong>Responsable del tratamiento:</strong> @legal.ResponsibleName<br />
+            <strong>Identificación:</strong> @legal.Identification<br />
+            <strong>Domicilio:</strong> @legal.Address<br />
+            <strong>Correo para asuntos de privacidad:</strong> @legal.PrivacyEmail<br />
+            <strong>Canal de consultas y reclamos:</strong> @legal.SupportEmail<br />
+            <strong>Versión:</strong> @legal.PolicyVersion ·
+            <strong>Vigente desde:</strong> @legal.PolicyEffectiveDate
+        </p>
+
+        @switch (Document)
+        {
+            case "politica-de-datos":
+                <h2>Finalidad</h2>
+                <p>
+                    Los datos que usted entrega al agendar una cita, tomar un turno o hacer un pedido se
+                    usan únicamente para que el establecimiento pueda atenderle y comunicarse con usted
+                    sobre esa operación. No se usan con fines publicitarios ni se ceden a terceros.
+                </p>
+                <h2>Datos que se recogen</h2>
+                <p>
+                    Un nombre o alias, un número de teléfono de contacto y, cuando usted lo escribe,
+                    una nota sobre la solicitud. No se solicitan datos sensibles ni documentos de identidad.
+                </p>
+                <h2>Cómo se protegen</h2>
+                <p>
+                    El alias, el teléfono y las notas se guardan cifrados. Los códigos de seguimiento no se
+                    almacenan en claro. El acceso administrativo es individual y queda registrado en auditoría.
+                </p>
+                <h2>Sus derechos</h2>
+                <p>
+                    Puede conocer, actualizar, rectificar y solicitar la supresión de sus datos escribiendo a
+                    @legal.PrivacyEmail. La solicitud se atiende en los plazos previstos por la ley aplicable.
+                </p>
+                break;
+
+            case "aviso-de-privacidad":
+                <h2>Aviso</h2>
+                <p>
+                    Al enviar el formulario usted autoriza el tratamiento de los datos indicados, con la
+                    finalidad exclusiva de gestionar la cita, el turno o el pedido solicitado.
+                </p>
+                <p>
+                    La versión de la política que usted acepta y la fecha de aceptación quedan registradas
+                    como evidencia del consentimiento.
+                </p>
+                <p>La política completa está disponible en <a href="/legal/politica-de-datos">esta página</a>.</p>
+                break;
+
+            case "terminos":
+                <h2>Uso del servicio</h2>
+                <p>
+                    UrabáConecta es un directorio que permite a establecimientos locales recibir citas,
+                    turnos y pedidos para recoger. La plataforma no cobra ni procesa pagos: el pago se
+                    hace directamente en el establecimiento.
+                </p>
+                <h2>Responsabilidad</h2>
+                <p>
+                    Cada establecimiento es responsable de la información que publica, de sus horarios,
+                    de sus precios de referencia y de la atención que presta.
+                </p>
+                <h2>Cancelaciones</h2>
+                <p>
+                    Puede cancelar su cita, turno o pedido desde el enlace de seguimiento mientras la
+                    operación lo permita.
+                </p>
+                break;
+
+            case "retencion":
+                <h2>Retención</h2>
+                <p>
+                    Los registros de citas, turnos y pedidos se conservan mientras sean necesarios para
+                    la operación del establecimiento y para atender reclamaciones.
+                </p>
+                <h2>Eliminación</h2>
+                <p>
+                    Puede solicitar la eliminación de sus datos escribiendo a @legal.PrivacyEmail.
+                    Al eliminarlos se conservan únicamente los registros anonimizados que la ley exige.
+                </p>
+                <h2>Negocios retirados</h2>
+                <p>
+                    Cuando un establecimiento deja la plataforma, su ficha se archiva y deja de ser
+                    pública; su historial permanece disponible solo para la administración.
+                </p>
+                break;
+
+            case "reclamos":
+                <h2>Canal de consultas y reclamos</h2>
+                <p>
+                    Escriba a <strong>@legal.SupportEmail</strong> indicando su nombre, el establecimiento
+                    involucrado y el código de seguimiento de la operación, si lo tiene.
+                </p>
+                <p>
+                    Para asuntos relacionados con el tratamiento de datos personales, escriba a
+                    <strong>@legal.PrivacyEmail</strong>.
+                </p>
+                break;
+
+            default:
+                <p class="notice">No encontramos este documento.</p>
+                break;
+        }
+    }
+</article>
+
+@code {
+    [Parameter] public string Document { get; set; } = "";
+    private LegalInfoDto? legal;
+
+    private bool Incomplete => legal is null
+        || string.IsNullOrWhiteSpace(legal.ResponsibleName)
+        || string.IsNullOrWhiteSpace(legal.PrivacyEmail)
+        || string.IsNullOrWhiteSpace(legal.PolicyVersion);
+
+    private string Title => Document switch
+    {
+        "politica-de-datos" => "Política de tratamiento de datos",
+        "aviso-de-privacidad" => "Aviso de privacidad",
+        "terminos" => "Términos y condiciones",
+        "retencion" => "Política de eliminación y retención",
+        "reclamos" => "Consultas y reclamos",
+        _ => "Documento legal"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { legal = await Api.GetLegalInfoAsync(); } catch (ApiException) { legal = null; }
+    }
+}

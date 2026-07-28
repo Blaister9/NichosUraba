@@ -9,7 +9,8 @@ namespace UrabaConecta.Web.Services;
 public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCases queues, IOrderingUseCases orders,
     IPlatformAdministrationUseCases platform, IAccessInvitationUseCases invitations,
     IBusinessImageUseCases images, IPlatformHealthProvider health, IOptions<LegalOptions> legal,
-    IHttpContextAccessor httpContext, AuthenticationStateProvider authentication) : IUrabaConectaApi
+    IConsentPolicyProvider consentPolicy, IHttpContextAccessor httpContext,
+    AuthenticationStateProvider authentication) : IUrabaConectaApi
 {
     public Task<IReadOnlyList<BusinessCardDto>> GetBusinessesAsync(string? search = null, string? municipality = null,
         string? category = null, CancellationToken cancellationToken = default)
@@ -246,8 +247,9 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
     public Task<LegalInfoDto> GetLegalInfoAsync(CancellationToken cancellationToken = default)
     {
         var value = legal.Value;
+        // PolicyVersion es la versión efectiva que el servidor exigirá en los formularios públicos.
         return Task.FromResult(new LegalInfoDto(value.ResponsibleName, value.Identification, value.Address,
-            value.PrivacyEmail, value.SupportEmail, value.PolicyVersion, value.PolicyEffectiveDate));
+            value.PrivacyEmail, value.SupportEmail, consentPolicy.CurrentVersion, value.PolicyEffectiveDate));
     }
 
     private async Task<Guid> UserId()

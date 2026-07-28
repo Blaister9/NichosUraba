@@ -1,0 +1,182 @@
+@page "/admin/accesos"
+@rendermode InteractiveAuto
+@attribute [Authorize(Roles = "PlatformAdmin")]
+@inject IUrabaConectaApi Api
+
+<PageTitle>Accesos y socias | UrabáConecta</PageTitle>
+<p class="eyebrow">Administración de plataforma</p>
+<h1>Accesos</h1>
+<div class="notice">
+    <strong>Nunca se muestra ni se envía una contraseña.</strong> Cada persona define la suya al abrir
+    un enlace de un solo uso. Copie el enlace y entrégueselo directamente por el canal que prefiera.
+</div>
+@if (message is not null) { <p class="notice" role="alert">@message</p> }
+@if (issuedLink is { Length: > 0 })
+{
+    <div class="success">
+        <p><strong>Enlace de un solo uso generado.</strong> Vence el @issuedExpiry?.ToLocalTime().ToString("dd/MM/yyyy HH:mm").</p>
+        <input readonly value="@issuedLink" aria-label="Enlace generado" />
+    </div>
+}
+
+<section class="panel-card"><h2>Invitar a una socia</h2>
+    <p>Una socia puede crear y configurar negocios, pero no puede publicarlos ni volverse administradora.</p>
+    <label>Correo<input @bind="partnerEmail" type="email" /></label>
+    <label>Nombre visible<input @bind="partnerName" /></label>
+    <button class="primary" @onclick="InvitePartner">Generar enlace de invitación</button>
+</section>
+
+<section class="panel-card"><h2>Socias con acceso</h2>
+    @if (partners.Count == 0) { <p>Todavía no hay socias activas.</p> }
+    else
+    {
+        <table class="data-table">
+            <thead><tr><th>Correo</th><th>Nombre</th><th>Estado</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var partner in partners)
+            {
+                <tr>
+                    <td>@partner.Email</td><td>@partner.DisplayName</td>
+                    <td>@(partner.IsActive ? "Activa" : "Bloqueada")</td>
+                    <td><button class="danger" @onclick="() => RevokePartner(partner)">Revocar acceso</button></td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+</section>
+
+<section class="panel-card"><h2>Reiniciar el acceso de una cuenta</h2>
+    <p>Cierra las sesiones abiertas y emite un enlace temporal para que la persona defina una contraseña nueva.</p>
+    <label>Correo de la cuenta<input @bind="resetEmail" type="email" /></label>
+    <button class="secondary" @onclick="ResetAccess">Generar enlace de reinicio</button>
+</section>
+
+<section class="panel-card"><h2>Invitaciones emitidas</h2>
+    @if (invitations.Count == 0) { <p>Sin invitaciones registradas.</p> }
+    else
+    {
+        <table class="data-table">
+            <thead><tr><th>Correo</th><th>Acceso</th><th>Motivo</th><th>Negocio</th><th>Estado</th><th>Vence</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var invitation in invitations)
+            {
+                <tr>
+                    <td>@invitation.Email</td><td>@invitation.Grant</td><td>@PurposeLabel(invitation.Purpose)</td>
+                    <td>@(invitation.BusinessName ?? "—")</td><td>@StatusLabel(invitation.Status)</td>
+                    <td>@invitation.ExpiresAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                    <td>
+                        @if (invitation.Status is "Pending" or "Expired")
+                        {
+                            <button class="secondary" @onclick="() => Resend(invitation)">Reenviar</button>
+                        }
+                        @if (invitation.Status == "Pending")
+                        {
+                            <button class="danger" @onclick="() => Revoke(invitation)">Revocar</button>
+                        }
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+</section>
+
+<section class="panel-card"><h2>Auditoría de accesos</h2>
+    @if (audit.Count == 0) { <p>Sin registros.</p> }
+    else
+    {
+        <table class="data-table">
+            <thead><tr><th>Fecha</th><th>Responsable</th><th>Acción</th><th>Resumen</th><th>IP</th></tr></thead>
+            <tbody>
+            @foreach (var entry in audit)
+            {
+                <tr>
+                    <td>@entry.OccurredAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                    <td>@(entry.ActorEmail ?? "—")</td><td>@entry.Action</td>
+                    <td>@entry.Summary</td><td>@(entry.IpAddress ?? "—")</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+</section>
+
+@code {
+    private IReadOnlyList<PlatformAccountDto> partners = [];
+    private IReadOnlyList<InvitationDto> invitations = [];
+    private IReadOnlyList<PlatformAccessAuditDto> audit = [];
+    private string? partnerEmail, partnerName, resetEmail, issuedLink, message;
+    private DateTimeOffset? issuedExpiry;
+
+    protected override Task OnInitializedAsync() => Reload();
+
+    private async Task Reload()
+    {
+        try
+        {
+            partners = await Api.GetPartnerOperatorsAsync();
+            invitations = await Api.GetInvitationsAsync();
+            audit = await Api.GetAccessAuditAsync();
+        }
+        catch (ApiException ex) { message = ex.Message; }
+    }
+
+    private async Task InvitePartner()
+    {
+        try
+        {
+            var issued = await Api.CreateInvitationAsync(new()
+            {
+                Email = partnerEmail ?? "", DisplayName = partnerName ?? "", Grant = "PartnerOperator"
+            });
+            issuedLink = issued.AcceptPath; issuedExpiry = issued.ExpiresAtUtc;
+            message = "Enlace generado."; partnerEmail = partnerName = null;
+            await Reload();
+        }
+        catch (ApiException ex) { message = ex.Message; }
+    }
+
+    private async Task ResetAccess()
+    {
+        try
+        {
+            var issued = await Api.ResetAccessAsync(new() { Email = resetEmail ?? "" });
+            issuedLink = issued.AcceptPath; issuedExpiry = issued.ExpiresAtUtc;
+            message = "Sesiones cerradas y enlace de reinicio generado."; resetEmail = null;
+            await Reload();
+        }
+        catch (ApiException ex) { message = ex.Message; }
+    }
+
+    private async Task Resend(InvitationDto invitation)
+    {
+        try
+        {
+            var issued = await Api.ResendInvitationAsync(invitation.Id);
+            issuedLink = issued.AcceptPath; issuedExpiry = issued.ExpiresAtUtc;
+            message = "Se generó un enlace nuevo; el anterior quedó anulado.";
+            await Reload();
+        }
+        catch (ApiException ex) { message = ex.Message; }
+    }
+
+    private async Task Revoke(InvitationDto invitation)
+    {
+        try { await Api.RevokeInvitationAsync(invitation.Id); message = "Invitación revocada."; await Reload(); }
+        catch (ApiException ex) { message = ex.Message; }
+    }
+
+    private async Task RevokePartner(PlatformAccountDto partner)
+    {
+        try { await Api.RevokePartnerOperatorAsync(partner.UserId); message = "Acceso revocado."; await Reload(); }
+        catch (ApiException ex) { message = ex.Message; }
+    }
+
+    private static string StatusLabel(string status) => status switch
+    {
+        "Pending" => "Vigente", "Accepted" => "Aceptada", "Revoked" => "Revocada", _ => "Vencida"
+    };
+    private static string PurposeLabel(string purpose)
+        => purpose == "PasswordReset" ? "Reinicio de acceso" : "Invitación";
+}

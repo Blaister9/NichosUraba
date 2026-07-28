@@ -102,7 +102,12 @@ public sealed class SaveQueueDefinitionRequest
     public long Version { get; set; }
 }
 public sealed class QueueSessionCommandRequest { public long Version { get; set; } }
-public sealed class CreateQueueTicketRequest { [StringLength(40)] public string? Alias { get; set; } }
+public sealed class CreateQueueTicketRequest
+{
+    [StringLength(40)] public string? Alias { get; set; }
+    [Required] public string ConsentNoticeVersion { get; set; } = "";
+    public bool ConsentAccepted { get; set; }
+}
 public sealed class QueueTicketCommandRequest
 {
     public long TicketVersion { get; set; }

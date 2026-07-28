@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Playwright;
 using UrabaConecta.Contracts;
 using UrabaConecta.Infrastructure.Persistence;
+using UrabaConecta.Infrastructure.Security;
 
 namespace UrabaConecta.EndToEndTests;
 
@@ -18,7 +19,8 @@ public sealed class PlatformOnboardingJourneyTests(BrowserFixture fixture) : ICl
         var slug = Unique("salon");
         var pilotEmail = $"{slug}@example.test";
         var created = await CreateWithWizard(admin, slug, pilotEmail);
-        Assert.Equal("Active", created.Business.Status);
+        var published = await CompleteAndPublish(admin, created.Business);
+        Assert.Equal("Active", published.Status);
         await admin.GotoAsync($"{fixture.BaseUrl}/");
         await Expect(admin.GetByText(created.Business.Name, new() { Exact = true })).ToBeVisibleAsync();
 
@@ -39,7 +41,7 @@ public sealed class PlatformOnboardingJourneyTests(BrowserFixture fixture) : ICl
         var admin = await adminContext.NewPageAsync();
         await Login(admin, DevelopmentSeeder.PlatformAdminEmail, DevelopmentSeeder.DemoPassword);
         var created = await Create(admin, Unique("barberia"), queues: true, saveAsDraft: false);
-        Assert.Equal("Active", created.Business.Status);
+        Assert.Equal("Active", (await CompleteAndPublish(admin, created.Business)).Status);
         await using var ownerContext = await fixture.Browser.NewContextAsync();
         var owner = await ownerContext.NewPageAsync();
         await Login(owner, DevelopmentSeeder.BellaOwnerEmail, DevelopmentSeeder.DemoPassword);
@@ -62,7 +64,7 @@ public sealed class PlatformOnboardingJourneyTests(BrowserFixture fixture) : ICl
         await Login(admin, DevelopmentSeeder.PlatformAdminEmail, DevelopmentSeeder.DemoPassword);
         var created = await Create(admin, Unique("restaurante"), orders: true, product: "Bowl piloto",
             productCategory: "Almuerzos", saveAsDraft: false);
-        Assert.Equal("Active", created.Business.Status);
+        Assert.Equal("Active", (await CompleteAndPublish(admin, created.Business)).Status);
         await admin.GotoAsync($"{fixture.BaseUrl}/negocios/{created.Business.Slug}/pedidos");
         await Expect(admin.GetByText("Bowl piloto", new() { Exact = true })).ToBeVisibleAsync();
         Assert.False(await admin.EvaluateAsync<bool>("document.documentElement.scrollWidth > window.innerWidth"));
@@ -77,7 +79,7 @@ public sealed class PlatformOnboardingJourneyTests(BrowserFixture fixture) : ICl
         var created = await Create(admin, Unique("incompleto"), appointments: true, saveAsDraft: true);
         await admin.GotoAsync($"{fixture.BaseUrl}/admin/negocios/{created.Business.Id}");
         await Expect(admin.Locator(".checklist-item").Filter(new() { HasText = "Servicios" })).ToBeVisibleAsync();
-        await Expect(admin.GetByRole(AriaRole.Button, new() { Name = "Activar" })).ToBeDisabledAsync();
+        await Expect(admin.GetByRole(AriaRole.Button, new() { Name = "Enviar a revisión" })).ToBeDisabledAsync();
 
         await using var ownerContext = await fixture.Browser.NewContextAsync();
         var owner = await ownerContext.NewPageAsync();
@@ -85,15 +87,14 @@ public sealed class PlatformOnboardingJourneyTests(BrowserFixture fixture) : ICl
         var serviceResponse = await Fetch(owner, "POST", $"/api/v1/businesses/{created.Business.Id}/services",
             new CreateServiceRequest { Name = "Servicio completado", DurationMinutes = 30, ReferencePrice = 0 });
         Assert.Equal(201, serviceResponse.Status);
-        await admin.ReloadAsync();
-        await Expect(admin.GetByRole(AriaRole.Button, new() { Name = "Activar" })).ToBeEnabledAsync();
         var refreshed = await Fetch(admin, "GET", $"/api/v1/admin/businesses/{created.Business.Id}");
-        var ready = JsonSerializer.Deserialize<PlatformBusinessDto>(refreshed.Body, Json)!;
-        var activation = await Fetch(admin, "POST", $"/api/v1/admin/businesses/{created.Business.Id}/activate",
-            new PlatformBusinessStateRequest { Version = ready.Version });
-        Assert.Equal(200, activation.Status);
+        var withService = JsonSerializer.Deserialize<PlatformBusinessDto>(refreshed.Body, Json)!;
+        // El servicio ya existe, pero la identidad visual sigue faltando: aún no se puede enviar a revisión.
+        Assert.False(withService.IsReady);
+        Assert.Contains(withService.Readiness, x => x.Key == "logo" && !x.IsComplete);
+        Assert.Equal("Active", (await CompleteAndPublish(admin, withService)).Status);
         await admin.ReloadAsync();
-        await Expect(admin.GetByText("Active", new() { Exact = true })).ToBeVisibleAsync();
+        await Expect(admin.Locator("span.tag").Filter(new() { HasText = "Publicado" })).ToBeVisibleAsync();
     }
 
     [Fact]
@@ -103,6 +104,7 @@ public sealed class PlatformOnboardingJourneyTests(BrowserFixture fixture) : ICl
         var admin = await context.NewPageAsync();
         await Login(admin, DevelopmentSeeder.PlatformAdminEmail, DevelopmentSeeder.DemoPassword);
         var created = await Create(admin, Unique("suspension"), queues: true, saveAsDraft: false);
+        var published = await CompleteAndPublish(admin, created.Business);
         await using var ownerContext = await fixture.Browser.NewContextAsync();
         var owner = await ownerContext.NewPageAsync();
         await Login(owner, DevelopmentSeeder.BellaOwnerEmail, DevelopmentSeeder.DemoPassword);
@@ -110,10 +112,10 @@ public sealed class PlatformOnboardingJourneyTests(BrowserFixture fixture) : ICl
         Assert.Equal(200, open.Status);
         var ticketResponse = await Fetch(admin, "POST",
             $"/api/v1/public/businesses/{created.Business.Slug}/queue/tickets",
-            new CreateQueueTicketRequest { Alias = "Historia E2E" });
+            new CreateQueueTicketRequest { Alias = "Historia E2E", ConsentAccepted = true, ConsentNoticeVersion = ConsentPolicyProvider.FallbackVersion });
         Assert.Equal(201, ticketResponse.Status);
         var ticket = JsonSerializer.Deserialize<QueueTicketCreatedDto>(ticketResponse.Body, Json)!;
-        var version = created.Business.Version;
+        var version = published.Version;
         var suspended = await Fetch(admin, "POST", $"/api/v1/admin/businesses/{created.Business.Id}/suspend",
             new PlatformBusinessStateRequest { Version = version, Reason = "Pausa E2E" });
         Assert.Equal(200, suspended.Status);
@@ -121,7 +123,7 @@ public sealed class PlatformOnboardingJourneyTests(BrowserFixture fixture) : ICl
         await Expect(admin.GetByText(created.Business.Name, new() { Exact = true })).ToHaveCountAsync(0);
         var publicWrite = await Fetch(admin, "POST",
             $"/api/v1/public/businesses/{created.Business.Slug}/queue/tickets",
-            new CreateQueueTicketRequest { Alias = "Bloqueado" });
+            new CreateQueueTicketRequest { Alias = "Bloqueado", ConsentAccepted = true, ConsentNoticeVersion = ConsentPolicyProvider.FallbackVersion });
         Assert.True(publicWrite.Status == 404, $"La operación pública devolvió {publicWrite.Status}: {publicWrite.Body}");
         var historical = await Fetch(admin, "GET", $"/api/v1/public/queue/tickets/{ticket.TrackingCode}");
         Assert.Equal(200, historical.Status);
@@ -174,6 +176,62 @@ public sealed class PlatformOnboardingJourneyTests(BrowserFixture fixture) : ICl
         await old.GetByRole(AriaRole.Button, new() { Name = "Ingresar" }).ClickAsync();
         await Expect(old.GetByText("Correo o contraseña incorrectos.")).ToBeVisibleAsync();
     }
+
+    /// <summary>
+    /// Desde V5 la publicación exige el checklist completo (descripción breve, contacto, ubicación,
+    /// logo y portada) y pasar por revisión. Este auxiliar recorre ese camino y devuelve el negocio publicado.
+    /// </summary>
+    private static async Task<PlatformBusinessDto> CompleteAndPublish(IPage admin, PlatformBusinessDto business)
+    {
+        var catalog = JsonSerializer.Deserialize<PlatformBusinessListDto>(
+            (await Fetch(admin, "GET", "/api/v1/admin/businesses")).Body, Json)!;
+        var savedResponse = await Fetch(admin, "PUT", $"/api/v1/admin/businesses/{business.Id}/profile",
+            new SaveBusinessProfileRequest
+            {
+                Name = business.Name, Slug = business.Slug,
+                MunicipalityId = catalog.Municipalities[0].Id, CategoryId = catalog.Categories[0].Id,
+                ShortDescription = "Negocio ficticio de la prueba de extremo a extremo.",
+                Description = "Descripción completa del negocio ficticio.",
+                Address = "Calle 1 # 1-1", PublicPhone = "3000000000", Version = business.Version
+            });
+        Assert.Equal(200, savedResponse.Status);
+        foreach (var kind in new[] { "Logo", "Cover" })
+            Assert.Equal(201, await UploadImage(admin, business.Id, kind));
+
+        var ready = JsonSerializer.Deserialize<PlatformBusinessDto>(
+            (await Fetch(admin, "GET", $"/api/v1/admin/businesses/{business.Id}")).Body, Json)!;
+        Assert.True(ready.IsReady, string.Join(" ", ready.MissingLabels ?? []));
+        var review = await Fetch(admin, "POST", $"/api/v1/admin/businesses/{business.Id}/submit-review",
+            new SubmitForReviewRequest { Version = ready.Version });
+        Assert.Equal(200, review.Status);
+        var reviewed = JsonSerializer.Deserialize<PlatformBusinessDto>(review.Body, Json)!;
+        Assert.Equal("PendingReview", reviewed.Status);
+        var published = await Fetch(admin, "POST", $"/api/v1/admin/businesses/{business.Id}/activate",
+            new PlatformBusinessStateRequest { Version = reviewed.Version });
+        Assert.Equal(200, published.Status);
+        return JsonSerializer.Deserialize<PlatformBusinessDto>(published.Body, Json)!;
+    }
+
+    /// <summary>Sube un PNG de 1x1 real como multipart, tal como lo hace el formulario del navegador.</summary>
+    private static async Task<int> UploadImage(IPage admin, Guid businessId, string kind)
+        => await admin.EvaluateAsync<int>(
+            """
+            async ({ businessId, kind, base64 }) => {
+              const binary = atob(base64);
+              const bytes = new Uint8Array(binary.length);
+              for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+              const form = new FormData();
+              form.append('file', new Blob([bytes], { type: 'image/png' }), 'foto.png');
+              form.append('kind', kind);
+              form.append('altText', 'Imagen ficticia de prueba');
+              const response = await fetch(`/api/v1/admin/businesses/${businessId}/images`,
+                { method: 'POST', credentials: 'same-origin', body: form });
+              return response.status;
+            }
+            """, new { businessId, kind, base64 = TinyPngBase64 });
+
+    private const string TinyPngBase64 =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
     private async Task<PlatformBusinessCreatedDto> Create(IPage admin, string slug, bool appointments = false,
         bool queues = false, bool orders = false, string? pilotEmail = null, string? service = null,

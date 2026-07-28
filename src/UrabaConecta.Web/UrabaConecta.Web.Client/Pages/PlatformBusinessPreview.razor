@@ -1,0 +1,29 @@
+@page "/admin/negocios/{BusinessId:guid}/vista-previa"
+@rendermode InteractiveAuto
+@attribute [Authorize(Roles = "PlatformAdmin,PartnerOperator")]
+@inject IUrabaConectaApi Api
+
+<PageTitle>Vista previa | UrabáConecta</PageTitle>
+<p class="eyebrow">Vista previa</p>
+<div class="notice">
+    <strong>Así se verá la ficha pública.</strong> Mientras el negocio no esté publicado, esta página
+    solo es visible para la administración de plataforma.
+</div>
+<a class="button-link" href="/admin/negocios/@BusinessId">Volver a la configuración</a>
+
+@if (error is not null) { <p class="error" role="alert">@error</p> }
+else if (profile is null) { <p class="notice">Cargando…</p> }
+else { <BusinessProfileView Profile="profile" /> }
+
+@code {
+    [Parameter] public Guid BusinessId { get; set; }
+    private BusinessProfileDto? profile;
+    private string? error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        error = null;
+        try { profile = await Api.PreviewBusinessAsync(BusinessId); }
+        catch (ApiException ex) { error = ex.Message; }
+    }
+}

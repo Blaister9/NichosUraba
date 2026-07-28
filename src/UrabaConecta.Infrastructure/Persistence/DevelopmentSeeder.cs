@@ -13,6 +13,7 @@ public static class DevelopmentSeeder
 {
     public const string BellaOwnerEmail = "propietaria@bella.demo";
     public const string PlatformAdminEmail = "admin@urabaconecta.demo";
+    public const string PartnerOperatorEmail = "socia@urabaconecta.demo";
     public const string OtherOwnerEmail = "propietario@otro.demo";
     public const string BellaWorkerEmail = "trabajadora@bella.demo";
     public const string BellaConfigurationWorkerEmail = "configuradora@bella.demo";
@@ -48,12 +49,13 @@ public static class DevelopmentSeeder
             ? DemoPassword
             : RequiredSecret(configuration, "DemoSeed:AdminPassword");
         var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
-        foreach (var role in new[] { "PlatformAdmin", "BusinessOwner", "BusinessWorker" })
+        foreach (var role in new[] { "PlatformAdmin", "PartnerOperator", "BusinessOwner", "BusinessWorker" })
             if (!await roleManager.RoleExistsAsync(role))
                 await roleManager.CreateAsync(new IdentityRole<Guid>(role));
 
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
         var platformAdmin = await EnsureUser(userManager, PlatformAdminEmail, "Administración UrabáConecta", adminPassword);
+        var partnerOperator = await EnsureUser(userManager, PartnerOperatorEmail, "Socia demostrativa", businessPassword);
         var bellaOwner = await EnsureUser(userManager, BellaOwnerEmail, "Propietaria Bella", businessPassword);
         var otherOwner = await EnsureUser(userManager, OtherOwnerEmail, "Propietario negocio aislado", businessPassword);
         var bellaWorker = await EnsureUser(userManager, BellaWorkerEmail, "Trabajadora Bella", businessPassword);
@@ -66,6 +68,8 @@ public static class DevelopmentSeeder
         var noOrdersPermission = await EnsureUser(userManager, SazonNoPermissionEmail, "Trabajador sin pedidos", businessPassword);
         if (!await userManager.IsInRoleAsync(platformAdmin, "PlatformAdmin"))
             await userManager.AddToRoleAsync(platformAdmin, "PlatformAdmin");
+        if (!await userManager.IsInRoleAsync(partnerOperator, "PartnerOperator"))
+            await userManager.AddToRoleAsync(partnerOperator, "PartnerOperator");
         if (!await userManager.IsInRoleAsync(bellaOwner, "BusinessOwner")) await userManager.AddToRoleAsync(bellaOwner, "BusinessOwner");
         if (!await userManager.IsInRoleAsync(otherOwner, "BusinessOwner")) await userManager.AddToRoleAsync(otherOwner, "BusinessOwner");
         if (!await userManager.IsInRoleAsync(bellaWorker, "BusinessWorker")) await userManager.AddToRoleAsync(bellaWorker, "BusinessWorker");
@@ -88,6 +92,7 @@ public static class DevelopmentSeeder
             await EnsureOrderingDemo(db, sazonOwner.Id, ordersWorker.Id, noOrdersPermission.Id);
             await db.SaveChangesAsync();
             await EnsureModules(db);
+            await EnsureShortDescriptions(db);
             await EnsureHistoricalDemo(db, codes, protector);
             await db.SaveChangesAsync();
             return;
@@ -127,6 +132,7 @@ public static class DevelopmentSeeder
         await EnsureOrderingDemo(db, sazonOwner.Id, ordersWorker.Id, noOrdersPermission.Id);
         await db.SaveChangesAsync();
         await EnsureModules(db);
+        await EnsureShortDescriptions(db);
         await EnsureHistoricalDemo(db, codes, protector);
         await db.SaveChangesAsync();
     }
@@ -306,6 +312,28 @@ public static class DevelopmentSeeder
             order.Transition(PickupOrderStatus.Delivered, now, 3);
             db.AddRange(consent, order);
         }
+    }
+
+    /// <summary>
+    /// Los negocios ficticios se crearon antes de V5, cuando no existía la descripción breve.
+    /// Se completa aquí para que el checklist de onboarding refleje su estado real.
+    /// </summary>
+    private static async Task EnsureShortDescriptions(AppDbContext db)
+    {
+        var now = DateTimeOffset.UtcNow;
+        foreach (var business in await db.Businesses.Where(x => x.ShortDescription == "").ToListAsync())
+            business.UpdateCommercialProfile(new BusinessProfileEdit(business.Slug, business.Name,
+                business.MunicipalityId, business.CategoryId,
+                Shorten(business.Description, business.Name), business.Description, business.Address,
+                business.ReferencePoint, business.PublicPhone, business.WhatsAppUrl, business.PublicEmail,
+                business.InstagramUrl, business.FacebookUrl, business.LocationUrl,
+                business.CustomerInstructions), now, business.Version);
+    }
+
+    private static string Shorten(string description, string name)
+    {
+        var source = string.IsNullOrWhiteSpace(description) ? name : description;
+        return source.Length <= 160 ? source : source[..160];
     }
 
     private static async Task EnsureModules(AppDbContext db)

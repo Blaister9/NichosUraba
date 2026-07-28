@@ -7,7 +7,8 @@ namespace UrabaConecta.Application;
 
 public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdministrationStore membershipStore,
     IIdentityAccountManager identityAccounts, IPublicCodeService codes,
-    IPersonalDataProtector protector, TimeProvider timeProvider) : IUrabaUseCases
+    IPersonalDataProtector protector, IConsentPolicyProvider consentPolicy,
+    TimeProvider timeProvider) : IUrabaUseCases
 {
     public Task<IReadOnlyList<BusinessCardDto>> GetBusinessesAsync(string? search, string? municipality,
         string? category, CancellationToken cancellationToken = default)
@@ -331,9 +332,9 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
             throw new ApiException("CONFIGURATION_FORBIDDEN", "No tiene permiso para cambiar la configuración.", 403);
     }
 
-    private static void ValidateContact(CreateAppointmentRequest request)
+    private void ValidateContact(CreateAppointmentRequest request)
     {
-        if (!request.ConsentAccepted || request.ConsentNoticeVersion != "pilot-1")
+        if (!request.ConsentAccepted || request.ConsentNoticeVersion != consentPolicy.CurrentVersion)
             throw new ApiException("CONSENT_REQUIRED", "Debe aceptar la versión vigente del aviso.");
         if (request.CustomerAlias.Trim().Length is < 2 or > 100)
             throw new ApiException("INVALID_ALIAS", "Ingrese un nombre o alias de 2 a 100 caracteres.");

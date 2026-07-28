@@ -4,7 +4,7 @@ using UrabaConecta.Domain;
 namespace UrabaConecta.Application;
 
 public sealed class QueueUseCases(IQueueStore store, IPublicCodeService codes, IPersonalDataProtector protector,
-    IQueueChangeNotifier notifier, TimeProvider clock) : IQueueUseCases
+    IQueueChangeNotifier notifier, IConsentPolicyProvider consentPolicy, TimeProvider clock) : IQueueUseCases
 {
     public async Task<QueuePublicStatusDto?> GetPublicAsync(string slug, CancellationToken ct = default)
     {
@@ -18,6 +18,9 @@ public sealed class QueueUseCases(IQueueStore store, IPublicCodeService codes, I
 
     public async Task<QueueTicketCreatedDto> JoinAsync(string slug, CreateQueueTicketRequest request, CancellationToken ct = default)
     {
+        // El turno público exige aceptar la versión vigente del aviso, igual que las citas y los pedidos.
+        if (!request.ConsentAccepted || request.ConsentNoticeVersion != consentPolicy.CurrentVersion)
+            throw new ApiException("CONSENT_REQUIRED", "Debe aceptar la versión vigente del aviso de tratamiento de datos.");
         var context = await store.GetPublicContextAsync(slug, ct)
             ?? throw new ApiException("QUEUE_NOT_FOUND", "La fila virtual no está disponible.", 404);
         return await CreateTicket(context.Definition, context.Business.Id, request, QueueTicketSource.Online, ct);
@@ -167,7 +170,7 @@ public sealed class QueueUseCases(IQueueStore store, IPublicCodeService codes, I
     }
 
     private async Task<QueueTicketCreatedDto> CreateTicket(QueueDefinition definition, Guid businessId,
-        CreateQueueTicketRequest request, QueueTicketSource source, CancellationToken ct)
+        CreateQueueTicketRequest request, QueueTicketSource source, CancellationToken ct, string? ipAddress = null)
     {
         var alias = request.Alias?.Trim();
         if ((alias?.Length ?? 0) > 40) throw new ApiException("INVALID_ALIAS", "El alias puede tener máximo 40 caracteres.");
@@ -181,9 +184,18 @@ public sealed class QueueUseCases(IQueueStore store, IPublicCodeService codes, I
             throw new ApiException("QUEUE_FULL", "La fila alcanzó su capacidad de espera.", 409);
         var number = TryDomain(() => session.AllocateNumber(session.Version));
         var publicCode = codes.Generate();
+        var now = clock.GetUtcNow();
         var ticket = new QueueTicket(Guid.NewGuid(), businessId, session.Id, number, publicCode.Hash,
-            string.IsNullOrEmpty(alias) ? null : protector.Protect(alias), source, clock.GetUtcNow());
+            string.IsNullOrEmpty(alias) ? null : protector.Protect(alias), source, now);
         store.AddTicket(ticket);
+        if (source == QueueTicketSource.Online)
+        {
+            var consent = new ConsentReceipt(Guid.NewGuid(), businessId, request.ConsentNoticeVersion,
+                "Gestionar el turno virtual y anunciar el llamado.", now);
+            consent.LinkQueueTicket(ticket.Id);
+            consent.RecordOrigin(ipAddress);
+            store.AddConsent(consent);
+        }
         await store.SaveChangesAsync(ct); await tx.CommitAsync(ct);
         await Notify(definition.Id, ticket.Id, businessId, ct);
         return new(number, publicCode.PlainText, ticket.Status.ToString(), waiting, waiting * definition.AverageDurationMinutes);

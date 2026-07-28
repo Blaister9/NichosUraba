@@ -1,6 +1,6 @@
 @page "/admin/negocios"
 @rendermode InteractiveAuto
-@attribute [Authorize(Roles = "PlatformAdmin")]
+@attribute [Authorize(Roles = "PlatformAdmin,PartnerOperator")]
 @inject IUrabaConectaApi Api
 
 <PageTitle>Administración de plataforma | UrabáConecta</PageTitle>

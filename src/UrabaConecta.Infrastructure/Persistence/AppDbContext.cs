@@ -166,7 +166,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             x.ToTable("consent_receipts"); x.HasKey(e => e.Id); x.HasIndex(e => new { e.BusinessId, e.AcceptedAtUtc });
             x.HasIndex(e => e.AppointmentId).IsUnique(); x.Property(e => e.NoticeVersion).HasMaxLength(40);
             x.HasIndex(e => e.PickupOrderId).IsUnique();
+            x.HasIndex(e => e.QueueTicketId).IsUnique();
             x.Property(e => e.Purpose).HasMaxLength(240);
+            x.Property(e => e.IpAddress).HasMaxLength(45);
+            x.HasOne<QueueTicket>().WithOne().HasForeignKey<ConsentReceipt>(e => e.QueueTicketId)
+                .OnDelete(DeleteBehavior.Restrict);
             x.HasOne<Business>().WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Restrict);
         });
         builder.Entity<Appointment>(x =>

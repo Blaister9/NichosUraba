@@ -1,0 +1,121 @@
+@* Ficha pública reutilizable: la usan el directorio y la vista previa administrativa. *@
+
+@if (Cover is not null)
+{
+    <img class="profile-cover" src="@Cover.Url" alt="@(Cover.AltText ?? $"Portada de {Profile.Name}")"
+         width="@Cover.Width" height="@Cover.Height" loading="lazy" />
+}
+<section class="profile-head">
+    <div class="profile-identity">
+        @if (Logo is not null)
+        {
+            <img class="profile-logo" src="@Logo.Url" alt="@(Logo.AltText ?? $"Logo de {Profile.Name}")"
+                 width="@Logo.Width" height="@Logo.Height" loading="lazy" />
+        }
+        <div>
+            <span class="tag">@Profile.Category.Name</span>
+            <h1>@Profile.Name</h1>
+            @if (Profile.OpenStatus is { Length: > 0 } open)
+            {
+                <span class="operation-badge">@open ahora</span>
+            }
+        </div>
+    </div>
+    @if (!string.IsNullOrWhiteSpace(Profile.ShortDescription)) { <p class="lead">@Profile.ShortDescription</p> }
+    @if (!string.IsNullOrWhiteSpace(Profile.Description)) { <p>@Profile.Description</p> }
+    <p>
+        <strong>@Profile.Municipality.Name</strong><br />
+        @Profile.Address
+        @if (!string.IsNullOrWhiteSpace(Profile.ReferencePoint)) { <br /><text>@Profile.ReferencePoint</text> }
+    </p>
+</section>
+
+<section class="contact-block"><h2>Contacto</h2>
+    @if (!string.IsNullOrWhiteSpace(Profile.PublicPhone)) { <p>Teléfono: @Profile.PublicPhone</p> }
+    @if (!string.IsNullOrWhiteSpace(Profile.PublicEmail)) { <p>Correo: @Profile.PublicEmail</p> }
+    @if (!string.IsNullOrWhiteSpace(Profile.WhatsAppUrl))
+    { <p><a href="@Profile.WhatsAppUrl" rel="noopener noreferrer nofollow">Escribir por WhatsApp</a></p> }
+    @if (!string.IsNullOrWhiteSpace(Profile.InstagramUrl))
+    { <p><a href="@Profile.InstagramUrl" rel="noopener noreferrer nofollow">Instagram</a></p> }
+    @if (!string.IsNullOrWhiteSpace(Profile.FacebookUrl))
+    { <p><a href="@Profile.FacebookUrl" rel="noopener noreferrer nofollow">Facebook</a></p> }
+    @if (!string.IsNullOrWhiteSpace(Profile.LocationUrl))
+    { <p><a href="@Profile.LocationUrl" rel="noopener noreferrer nofollow">Cómo llegar</a></p> }
+</section>
+
+@if (!string.IsNullOrWhiteSpace(Profile.CustomerInstructions))
+{
+    <section class="notice"><h2>Antes de venir</h2><p>@Profile.CustomerInstructions</p></section>
+}
+
+@if (Profile.HasVirtualQueue)
+{
+    <section class="queue-promo"><h2>Atención por orden de llegada</h2>
+        <p>Consulta el estado y toma un turno sin crear una cuenta.</p>
+        @if (!Profile.IsPreview) { <a class="button-link" href="/negocios/@Profile.Slug/turnos">Ver fila virtual</a> }
+    </section>
+}
+@if (Profile.HasPickupOrdering)
+{
+    <section class="queue-promo"><h2>Pedidos para recoger</h2>
+        <p>Elige del menú, reserva una franja y paga directamente en el establecimiento.</p>
+        @if (!Profile.IsPreview) { <a class="button-link" href="/negocios/@Profile.Slug/pedidos">Ver menú</a> }
+    </section>
+}
+
+@if (Profile.Services.Count > 0)
+{
+    <section><h2>Servicios</h2><div class="card-grid">
+        @foreach (var service in Profile.Services)
+        {
+            <article class="service-card"><h3>@service.Name</h3>
+                <p>@service.DurationMinutes min · Precio de referencia @service.ReferencePrice.ToString("C0", Colombia)</p>
+                @if (!Profile.IsPreview)
+                {
+                    <a class="button-link" href="/negocios/@Profile.Slug/citas?serviceId=@service.Id">Solicitar cita</a>
+                }
+            </article>
+        }
+    </div></section>
+}
+
+@if (Gallery.Count > 0)
+{
+    <section><h2>Fotografías</h2><div class="card-grid">
+        @foreach (var image in Gallery)
+        {
+            <img class="gallery-photo" src="@image.Url" alt="@(image.AltText ?? $"Fotografía de {Profile.Name}")"
+                 width="@image.Width" height="@image.Height" loading="lazy" />
+        }
+    </div></section>
+}
+
+<section class="hours"><h2>Horario</h2>
+    @if (Profile.Hours.Count == 0) { <p>Este establecimiento aún no publicó su horario.</p> }
+    else
+    {
+        @foreach (var hour in Profile.Hours)
+        {
+            <p><span>@Day(hour.Day)</span><strong>@hour.OpensAt – @hour.ClosesAt</strong></p>
+        }
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public BusinessProfileDto Profile { get; set; } = default!;
+
+    private static readonly System.Globalization.CultureInfo Colombia = new("es-CO");
+
+    private IReadOnlyList<BusinessImageDto> Images => Profile.Images ?? [];
+    private BusinessImageDto? Logo => Images.FirstOrDefault(x => x.Kind == "Logo");
+    private BusinessImageDto? Cover => Images.FirstOrDefault(x => x.Kind == "Cover");
+    private IReadOnlyList<BusinessImageDto> Gallery
+        => Images.Where(x => x.Kind == "Gallery").OrderBy(x => x.DisplayOrder).ToList();
+
+    private static string Day(DayOfWeek day) => day switch
+    {
+        DayOfWeek.Monday => "Lunes", DayOfWeek.Tuesday => "Martes", DayOfWeek.Wednesday => "Miércoles",
+        DayOfWeek.Thursday => "Jueves", DayOfWeek.Friday => "Viernes", DayOfWeek.Saturday => "Sábado",
+        _ => "Domingo"
+    };
+}

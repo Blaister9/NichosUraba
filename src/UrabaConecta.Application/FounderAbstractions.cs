@@ -152,6 +152,16 @@ public interface IBusinessImageUseCases
 // Textos legales configurables
 // ---------------------------------------------------------------------------
 
+/// <summary>
+/// Versión vigente de la política de tratamiento de datos que se debe aceptar en los formularios
+/// públicos. Se toma de <c>Legal__PolicyVersion</c>; los formularios envían la versión que mostraron
+/// y el servidor rechaza cualquier otra.
+/// </summary>
+public interface IConsentPolicyProvider
+{
+    string CurrentVersion { get; }
+}
+
 /// <summary>Estado funcional de la instalación, para la pantalla administrativa de salud.</summary>
 public interface IPlatformHealthProvider
 {

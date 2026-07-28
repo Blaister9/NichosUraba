@@ -98,6 +98,7 @@ builder.Services.AddScoped<IBusinessImageStore, BusinessImageStore>();
 builder.Services.AddScoped<IAccessInvitationUseCases, AccessInvitationUseCases>();
 builder.Services.AddScoped<IBusinessImageUseCases, BusinessImageUseCases>();
 builder.Services.AddScoped<IPlatformHealthProvider, PlatformHealthProvider>();
+builder.Services.AddSingleton<IConsentPolicyProvider, ConsentPolicyProvider>();
 builder.Services.AddScoped<IUrabaStore, UrabaStore>();
 builder.Services.AddScoped<IMembershipAdministrationStore, MembershipAdministrationStore>();
 builder.Services.AddScoped<IQueueStore, QueueStore>();
@@ -237,11 +238,12 @@ publicApi.MapPost("/orders/{code}/cancel",
     async (string code, PickupOrderCommandRequest request, IOrderingUseCases orders, CancellationToken ct) =>
     { await orders.CancelPublicAsync(code, request.Version, ct); return Results.NoContent(); })
     .RequireRateLimiting("public-write");
-publicApi.MapGet("/legal", (IOptions<LegalOptions> legal) =>
+// PolicyVersion es la versión *efectiva*: la que el servidor exigirá en los formularios públicos.
+publicApi.MapGet("/legal", (IOptions<LegalOptions> legal, IConsentPolicyProvider consent) =>
 {
     var value = legal.Value;
     return new LegalInfoDto(value.ResponsibleName, value.Identification, value.Address, value.PrivacyEmail,
-        value.SupportEmail, value.PolicyVersion, value.PolicyEffectiveDate);
+        value.SupportEmail, consent.CurrentVersion, value.PolicyEffectiveDate);
 });
 
 // Sirve las imágenes del proveedor local. En Production el proveedor es S3/R2 y las imágenes

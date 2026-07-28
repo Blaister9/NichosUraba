@@ -1,0 +1,89 @@
+@page "/Account/AcceptInvitation"
+@using System.ComponentModel.DataAnnotations
+@using UrabaConecta.Application
+@using UrabaConecta.Contracts
+@inject IAccessInvitationUseCases Invitations
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Activar acceso | UrabáConecta</PageTitle>
+<section class="narrow">
+    <p class="eyebrow">Activación de acceso</p>
+    @if (preview is null)
+    {
+        <h1>Enlace no válido</h1>
+        <p>@(message ?? "Este enlace no es válido, ya se usó o expiró. Pide uno nuevo a quien te invitó.")</p>
+    }
+    else
+    {
+        <h1>Crea tu contraseña</h1>
+        <p>
+            Hola, @preview.DisplayName. Estás activando el acceso de <strong>@preview.Email</strong>
+            @if (preview.BusinessName is { Length: > 0 } business)
+            {
+                <text> para <strong>@business</strong></text>
+            }.
+            El enlace vence el @preview.ExpiresAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm").
+        </p>
+        <p>Nadie más conoce esta contraseña: la defines tú y solo tú.</p>
+        <StatusMessage Message="@message" />
+        <EditForm Model="Input" FormName="accept-invitation" OnValidSubmit="Submit" method="post"
+                  class="appointment-form">
+            <DataAnnotationsValidator /><ValidationSummary />
+            <label>Contraseña nueva
+                <InputText type="password" @bind-Value="Input.Password" autocomplete="new-password" />
+            </label>
+            <label>Confirma la contraseña
+                <InputText type="password" @bind-Value="Input.Confirmation" autocomplete="new-password" />
+            </label>
+            <button class="primary" type="submit">Activar mi acceso</button>
+        </EditForm>
+    }
+</section>
+
+@code {
+    private InvitationPreviewDto? preview;
+    private string? message;
+
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+    [SupplyParameterFromQuery] private string? Token { get; set; }
+    [SupplyParameterFromForm] private InputModel Input { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Input ??= new();
+        await LoadPreviewAsync();
+    }
+
+    private async Task LoadPreviewAsync()
+    {
+        try { preview = await Invitations.PreviewAsync(Token ?? ""); }
+        catch (ApiException ex) { preview = null; message = ex.Message; }
+    }
+
+    private async Task Submit()
+    {
+        try
+        {
+            await Invitations.AcceptAsync(Token ?? "", Input.Password,
+                HttpContext.Connection.RemoteIpAddress?.ToString());
+        }
+        catch (ApiException ex)
+        {
+            message = $"Error: {ex.Message}";
+            await LoadPreviewAsync();
+            return;
+        }
+        // El acceso queda activo, pero el inicio de sesión se hace de forma explícita.
+        RedirectManager.RedirectTo("/Account/Login",
+            new() { ["message"] = "Tu acceso quedó activo. Ingresa con tu correo y la contraseña que acabas de crear." });
+    }
+
+    private sealed class InputModel
+    {
+        [Required(ErrorMessage = "La contraseña es obligatoria.")]
+        [StringLength(100, MinimumLength = 10, ErrorMessage = "Debe tener al menos 10 caracteres.")]
+        public string Password { get; set; } = "";
+        [Compare(nameof(Password), ErrorMessage = "Las contraseñas no coinciden.")]
+        public string Confirmation { get; set; } = "";
+    }
+}

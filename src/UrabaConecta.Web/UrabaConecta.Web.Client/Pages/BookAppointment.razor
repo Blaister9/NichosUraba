@@ -33,7 +33,11 @@ else
         </fieldset>
         <fieldset class="consent"><legend>3. Autorización</legend>
             <label class="check"><InputCheckbox @bind-Value="request.ConsentAccepted" /> Acepto que estos datos se usen para gestionar esta cita y contactarme sobre ella.</label>
-            <p><strong>Texto demostrativo sujeto a revisión jurídica antes de usar datos reales.</strong></p>
+            <p class="meta">
+                Consulta la <a href="/legal/politica-de-datos" target="_blank">política de tratamiento de datos</a>
+                y el <a href="/legal/aviso-de-privacidad" target="_blank">aviso de privacidad</a>.
+                Se registra la versión @request.ConsentNoticeVersion y la fecha de tu aceptación.
+            </p>
         </fieldset>
         @if (error is not null) { <p class="error" role="alert">@error</p> }
         <button class="primary" disabled="@(!interactiveReady || submitting)">@(submitting ? "Enviando…" : "Enviar solicitud")</button>
@@ -52,6 +56,9 @@ else
     protected override async Task OnInitializedAsync()
     {
         request ??= new();
+        // El formulario declara la versión que mostró; el servidor rechaza cualquier otra.
+        try { request.ConsentNoticeVersion = (await Api.GetLegalInfoAsync()).PolicyVersion; }
+        catch (ApiException) { }
         business = await Api.GetBusinessAsync(Slug);
         if (request.ServiceId == Guid.Empty)
             request.ServiceId = ServiceId ?? business?.Services.FirstOrDefault()?.Id ?? Guid.Empty;

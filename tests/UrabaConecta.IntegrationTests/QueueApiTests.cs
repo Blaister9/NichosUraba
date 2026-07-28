@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using UrabaConecta.Contracts;
 using UrabaConecta.Domain;
 using UrabaConecta.Infrastructure.Persistence;
+using UrabaConecta.Infrastructure.Security;
 
 namespace UrabaConecta.IntegrationTests;
 
@@ -24,7 +25,7 @@ public sealed partial class QueueApiTests(PostgresWebFactory factory) : IClassFi
             "/api/v1/public/businesses/barberia-el-corte/queue", Json);
         Assert.True(status!.CanJoin);
         var response = await client.PostAsJsonAsync("/api/v1/public/businesses/barberia-el-corte/queue/tickets",
-            new CreateQueueTicketRequest { Alias = "Ana" }, Json);
+            new CreateQueueTicketRequest { Alias = "Ana", ConsentAccepted = true, ConsentNoticeVersion = ConsentPolicyProvider.FallbackVersion }, Json);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var created = (await response.Content.ReadFromJsonAsync<QueueTicketCreatedDto>(Json))!;
         Assert.True(Convert.FromBase64String(created.TrackingCode.Replace('-', '+').Replace('_', '/') + "==").Length >= 16);
@@ -44,7 +45,7 @@ public sealed partial class QueueApiTests(PostgresWebFactory factory) : IClassFi
         using var client = Client();
         var operations = Enumerable.Range(0, 6).Select(i => client.PostAsJsonAsync(
             "/api/v1/public/businesses/barberia-el-corte/queue/tickets",
-            new CreateQueueTicketRequest { Alias = $"P{i}" }, Json));
+            new CreateQueueTicketRequest { Alias = $"P{i}", ConsentAccepted = true, ConsentNoticeVersion = ConsentPolicyProvider.FallbackVersion }, Json));
         var responses = await Task.WhenAll(operations);
         Assert.All(responses, x => Assert.Equal(HttpStatusCode.Created, x.StatusCode));
         var tickets = await Task.WhenAll(responses.Select(x => x.Content.ReadFromJsonAsync<QueueTicketCreatedDto>(Json)));
@@ -113,7 +114,7 @@ public sealed partial class QueueApiTests(PostgresWebFactory factory) : IClassFi
         for (var i = 0; i < 2; i++)
             Assert.Equal(HttpStatusCode.Created, (await visitor.PostAsJsonAsync(
                 "/api/v1/public/businesses/barberia-el-corte/queue/tickets",
-                new CreateQueueTicketRequest { Alias = $"Concurrencia {i}" }, Json)).StatusCode);
+                new CreateQueueTicketRequest { Alias = $"Concurrencia {i}", ConsentAccepted = true, ConsentNoticeVersion = ConsentPolicyProvider.FallbackVersion }, Json)).StatusCode);
         using var first = Client(); using var second = Client();
         await Login(first, DevelopmentSeeder.CorteOwnerEmail);
         await Login(second, DevelopmentSeeder.CorteOwnerEmail);

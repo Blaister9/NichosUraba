@@ -103,9 +103,18 @@ public sealed partial class PlatformAdministrationApiTests(PostgresWebFactory fa
         request.InitialServiceName = "Consulta";
         var created = (await (await admin.PostAsJsonAsync("/api/v1/admin/businesses", request, Json))
             .Content.ReadFromJsonAsync<PlatformBusinessCreatedDto>(Json))!.Business;
-        Assert.True(created.IsReady);
+        // Desde V5 la identidad visual y el contacto forman parte del checklist obligatorio.
+        Assert.False(created.IsReady);
+        Assert.Contains(created.Readiness, x => x.Key == "logo" && !x.IsComplete);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsJsonAsync(
+            $"/api/v1/admin/businesses/{created.Id}/activate",
+            new PlatformBusinessStateRequest { Version = created.Version }, Json)).StatusCode);
+
+        var ready = await CompleteChecklistAsync(admin, created, catalog!);
+        Assert.True(ready.IsReady);
+        Assert.Equal(100, ready.CompletionPercentage);
         var activatedResponse = await admin.PostAsJsonAsync($"/api/v1/admin/businesses/{created.Id}/activate",
-            new PlatformBusinessStateRequest { Version = created.Version }, Json);
+            new PlatformBusinessStateRequest { Version = ready.Version }, Json);
         Assert.Equal(HttpStatusCode.OK, activatedResponse.StatusCode);
         var activated = (await activatedResponse.Content.ReadFromJsonAsync<PlatformBusinessDto>(Json))!;
         Assert.Contains((await admin.GetFromJsonAsync<List<BusinessCardDto>>("/api/v1/public/businesses", Json))!,
@@ -146,6 +155,46 @@ public sealed partial class PlatformAdministrationApiTests(PostgresWebFactory fa
         Assert.Equal(HttpStatusCode.OK, deleted.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound,
             (await admin.GetAsync($"/api/v1/admin/businesses/{created.Id}")).StatusCode);
+    }
+
+    /// <summary>PNG válido de 1x1 con firma real, para probar la carga de imágenes.</summary>
+    internal static byte[] TinyPng() => Convert.FromBase64String(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+
+    /// <summary>
+    /// Completa los requisitos que V5 añadió al checklist: descripción breve, contacto,
+    /// ubicación, logo y portada. Devuelve el negocio ya listo para enviar a revisión.
+    /// </summary>
+    internal static async Task<PlatformBusinessDto> CompleteChecklistAsync(HttpClient admin,
+        PlatformBusinessDto business, PlatformBusinessListDto catalog)
+    {
+        var saved = (await (await admin.PutAsJsonAsync($"/api/v1/admin/businesses/{business.Id}/profile",
+            new SaveBusinessProfileRequest
+            {
+                Name = business.Name, Slug = business.Slug,
+                MunicipalityId = catalog.Municipalities[0].Id, CategoryId = catalog.Categories[0].Id,
+                ShortDescription = "Negocio ficticio para pruebas automatizadas.",
+                Description = "Descripción completa del negocio ficticio.",
+                Address = "Calle 1 # 1-1", PublicPhone = "3000000000",
+                Version = business.Version
+            }, Json)).Content.ReadFromJsonAsync<PlatformBusinessDto>(Json))!;
+        foreach (var kind in new[] { "Logo", "Cover" })
+            Assert.Equal(HttpStatusCode.Created,
+                (await UploadImageAsync(admin, saved.Id, kind, "foto.png", "image/png", TinyPng())).StatusCode);
+        return (await admin.GetFromJsonAsync<PlatformBusinessDto>(
+            $"/api/v1/admin/businesses/{saved.Id}", Json))!;
+    }
+
+    internal static Task<HttpResponseMessage> UploadImageAsync(HttpClient client, Guid businessId, string kind,
+        string fileName, string contentType, byte[] content, string? altText = null)
+    {
+        var form = new MultipartFormDataContent();
+        var part = new ByteArrayContent(content);
+        part.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+        form.Add(part, "file", fileName);
+        form.Add(new StringContent(kind), "kind");
+        if (altText is not null) form.Add(new StringContent(altText), "altText");
+        return client.PostAsync($"/api/v1/admin/businesses/{businessId}/images", form);
     }
 
     private static CreatePlatformBusinessRequest NewRequest(PlatformBusinessListDto catalog, string slug, bool saveAsDraft)

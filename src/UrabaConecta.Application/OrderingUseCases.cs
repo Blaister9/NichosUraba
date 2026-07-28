@@ -4,7 +4,8 @@ using UrabaConecta.Domain;
 namespace UrabaConecta.Application;
 
 public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService codes,
-    IPersonalDataProtector protector, TimeProvider clock) : IOrderingUseCases
+    IPersonalDataProtector protector, IConsentPolicyProvider consentPolicy,
+    TimeProvider clock) : IOrderingUseCases
 {
     public async Task<PickupMenuDto?> GetMenuAsync(string slug, CancellationToken ct = default)
     {
@@ -52,7 +53,8 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
     public async Task<PickupOrderCreatedDto> CreateAsync(string slug, CreatePickupOrderRequest request,
         CancellationToken ct = default)
     {
-        if (!request.ConsentAccepted) throw new ApiException("CONSENT_REQUIRED", "Debe aceptar el aviso de tratamiento de datos.");
+        if (!request.ConsentAccepted || request.ConsentNoticeVersion != consentPolicy.CurrentVersion)
+            throw new ApiException("CONSENT_REQUIRED", "Debe aceptar la versión vigente del aviso de tratamiento de datos.");
         if (request.Lines.Count == 0) throw new ApiException("ORDER_LINES_REQUIRED", "Agregue al menos un producto.");
         var context = await store.GetPublicContextAsync(slug, ct)
             ?? throw new ApiException("ORDERING_NOT_AVAILABLE", "Los pedidos para recoger no están disponibles.", 404);

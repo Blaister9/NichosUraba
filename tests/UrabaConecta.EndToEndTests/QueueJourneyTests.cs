@@ -30,6 +30,9 @@ public sealed class QueueJourneyTests(BrowserFixture fixture) : IClassFixture<Br
 
         // 2. Toma y conserva su código individual.
         await visitor.GetByLabel("Alias corto (opcional)").FillAsync("E2E");
+        // Desde V5 el turno público también exige aceptar el aviso de tratamiento de datos.
+        await visitor.GetByLabel("Acepto que este alias se use para gestionar mi turno y anunciar el llamado.")
+            .CheckAsync();
         await visitor.GetByRole(AriaRole.Button, new() { Name = "Tomar turno" }).ClickAsync();
         await Expect(visitor.GetByTestId("queue-created")).ToBeVisibleAsync();
         await publicChanged.Task.WaitAsync(TimeSpan.FromSeconds(10));

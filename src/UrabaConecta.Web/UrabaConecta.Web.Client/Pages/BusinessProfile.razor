@@ -4,53 +4,21 @@
 
 <PageTitle>@(business?.Name ?? "Establecimiento") | UrabáConecta</PageTitle>
 @if (loading) { <p class="notice">Cargando perfil…</p> }
-else if (business is null) { <div class="empty"><h1>No encontramos el establecimiento</h1><a href="/">Volver al directorio</a></div> }
+else if (business is null)
+{
+    <div class="empty"><h1>No encontramos el establecimiento</h1><a href="/">Volver al directorio</a></div>
+}
 else
 {
     <a class="back-link" href="/">← Directorio</a>
-    <section class="profile-head">
-        <span class="tag">@business.Category.Name</span><h1>@business.Name</h1><p>@business.Description</p>
-        <p><strong>@business.Municipality.Name</strong><br />@business.Address<br />@business.PublicPhone</p>
-    </section>
-    @if (business.HasVirtualQueue)
-    {
-        <section class="queue-promo"><h2>Atención por orden de llegada</h2>
-            <p>Consulta el estado y toma un turno sin crear una cuenta.</p>
-            <a class="button-link" href="/negocios/@Slug/turnos">Ver fila virtual</a>
-        </section>
-    }
-    @if (business.HasPickupOrdering)
-    {
-        <section class="queue-promo"><h2>Pedidos para recoger</h2>
-            <p>Elige del menú, reserva una franja y paga directamente en el establecimiento.</p>
-            <a class="button-link" href="/negocios/@Slug/pedidos">Ver menú</a>
-        </section>
-    }
-    @if (business.Services.Count > 0)
-    {
-    <section><h2>Servicios</h2><div class="card-grid">
-        @foreach (var service in business.Services)
-        {
-            <article class="service-card"><h3>@service.Name</h3>
-                <p>@service.DurationMinutes min · Precio de referencia @service.ReferencePrice.ToString("C0", Colombia)</p>
-                <a class="button-link" href="/negocios/@Slug/citas?serviceId=@service.Id">Solicitar cita</a></article>
-        }
-    </div></section>
-    }
-    <section class="hours"><h2>Horario demostrativo</h2>
-        @foreach (var hour in business.Hours) { <p><span>@Day(hour.Day)</span><strong>@hour.OpensAt – @hour.ClosesAt</strong></p> }
-    </section>
+    <BusinessProfileView Profile="business" />
 }
+
 @code {
     [Parameter] public string Slug { get; set; } = "";
     private BusinessProfileDto? business;
     private bool loading = true;
-    private static readonly System.Globalization.CultureInfo Colombia = new("es-CO");
+
     protected override async Task OnParametersSetAsync()
     { loading = true; business = await Api.GetBusinessAsync(Slug); loading = false; }
-    private static string Day(DayOfWeek day) => day switch
-    {
-        DayOfWeek.Monday => "Lunes", DayOfWeek.Tuesday => "Martes", DayOfWeek.Wednesday => "Miércoles",
-        DayOfWeek.Thursday => "Jueves", DayOfWeek.Friday => "Viernes", DayOfWeek.Saturday => "Sábado", _ => "Domingo"
-    };
 }

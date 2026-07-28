@@ -1,17 +1,48 @@
 @page "/admin/negocios/{BusinessId:guid}"
 @rendermode InteractiveAuto
-@attribute [Authorize(Roles = "PlatformAdmin")]
+@attribute [Authorize(Roles = "PlatformAdmin,PartnerOperator")]
+@using Microsoft.AspNetCore.Components.Forms
 @inject IUrabaConectaApi Api
+@inject AuthenticationStateProvider AuthenticationState
 
-<PageTitle>Preparación del piloto | UrabáConecta</PageTitle>
+<PageTitle>Preparación del negocio | UrabáConecta</PageTitle>
 @if (business is null) { <p class="notice">Cargando…</p> }
 else
 {
     <p class="eyebrow">Administración de plataforma</p>
-    <div class="title-actions"><h1>@business.Name</h1><span class="tag">@business.Status</span></div>
-    @if (business.Status == "Suspended") { <div class="notice"><strong>Negocio suspendido.</strong> No aparece en el directorio ni recibe operaciones públicas nuevas. El historial permanece disponible.</div> }
+    <div class="title-actions"><h1>@business.Name</h1><span class="tag">@StatusLabel(business.Status)</span></div>
+    @if (business.Status == "Suspended")
+    {
+        <div class="notice"><strong>Negocio suspendido.</strong> No aparece en el directorio ni recibe operaciones públicas nuevas. El historial permanece disponible.</div>
+    }
+    @if (business.Status == "Archived")
+    {
+        <div class="notice"><strong>Negocio archivado.</strong> Solo lectura administrativa.</div>
+    }
+    @if (business.ReviewNotes is { Length: > 0 } notes)
+    {
+        <div class="notice"><strong>Observaciones de la revisión:</strong> @notes</div>
+    }
+
+    <section class="panel-card">
+        <h2>Avance de la configuración</h2>
+        <progress value="@business.CompletionPercentage" max="100"
+                  aria-label="Avance de la configuración"></progress>
+        <p><strong>@business.CompletionPercentage %</strong> completo</p>
+        @foreach (var item in business.Readiness.Where(x => x.IsApplicable))
+        {
+            <p class="checklist-item">
+                <span aria-hidden="true">@(item.IsComplete ? "✓" : "○")</span> @item.Label
+                @if (!item.IsComplete && item.MissingHint is { Length: > 0 } hint) { <em> — @hint</em> }
+            </p>
+        }
+        <p class="@(business.IsReady ? "success" : "notice")">
+            <strong>@(business.IsReady ? "Listo para enviar a revisión" : "Faltan requisitos")</strong>
+        </p>
+    </section>
+
     <div class="two-columns">
-        <section class="panel-card"><h2>Información del negocio</h2>
+        <section class="panel-card"><h2>Perfil comercial</h2>
             <label>Nombre<input @bind="profile.Name" /></label>
             <label>Identificador público<input @bind="profile.Slug" /></label>
             @if (catalog is not null)
@@ -19,78 +50,304 @@ else
                 <label>Municipio<select @bind="profile.MunicipalityId">@foreach (var x in catalog.Municipalities) { <option value="@x.Id">@x.Name</option> }</select></label>
                 <label>Categoría<select @bind="profile.CategoryId">@foreach (var x in catalog.Categories) { <option value="@x.Id">@x.Name</option> }</select></label>
             }
-            <label>Descripción<textarea @bind="profile.Description"></textarea></label>
+            <label>Descripción breve (máx. 160)<input @bind="profile.ShortDescription" maxlength="160" /></label>
+            <label>Descripción completa<textarea @bind="profile.Description"></textarea></label>
+            <label>Instrucciones para clientes<textarea @bind="profile.CustomerInstructions"></textarea></label>
+            <button class="secondary" @onclick="SaveProfile" disabled="@readOnly">Guardar perfil</button>
+        </section>
+
+        <section class="panel-card"><h2>Contacto y ubicación</h2>
             <label>Dirección<input @bind="profile.Address" /></label>
+            <label>Punto de referencia<input @bind="profile.ReferencePoint" /></label>
             <label>Teléfono público<input @bind="profile.PublicPhone" /></label>
-            <button class="secondary" @onclick="SaveProfile">Guardar información</button>
+            <label>Enlace de WhatsApp<input @bind="profile.WhatsAppUrl" placeholder="https://wa.me/57…" /></label>
+            <label>Correo público<input @bind="profile.PublicEmail" type="email" /></label>
+            <label>Instagram<input @bind="profile.InstagramUrl" placeholder="https://instagram.com/…" /></label>
+            <label>Facebook<input @bind="profile.FacebookUrl" placeholder="https://facebook.com/…" /></label>
+            <label>Enlace de ubicación<input @bind="profile.LocationUrl" /></label>
+            <button class="secondary" @onclick="SaveProfile" disabled="@readOnly">Guardar contacto</button>
         </section>
-        <section class="panel-card"><h2>Lista de preparación</h2>
-            @foreach (var item in business.Readiness.Where(x => x.IsApplicable))
-            { <p class="checklist-item"><span aria-hidden="true">@(item.IsComplete ? "✓" : "○")</span> @item.Label</p> }
-            <p class="@(business.IsReady ? "success" : "notice")"><strong>@(business.IsReady ? "Listo para activar" : "Faltan requisitos")</strong></p>
-        </section>
+
         <section class="panel-card"><h2>Funciones</h2>
             <label class="check"><input type="checkbox" @bind="appointments" /> Citas</label>
             <label class="check"><input type="checkbox" @bind="queues" /> Turnos virtuales</label>
             <label class="check"><input type="checkbox" @bind="orders" /> Pedidos para recoger</label>
-            <button class="secondary" @onclick="SaveModules">Guardar funciones</button>
+            <button class="secondary" @onclick="SaveModules" disabled="@readOnly">Guardar funciones</button>
             <p>Desactivar una función conserva su configuración y datos históricos.</p>
         </section>
+
+        <section class="panel-card"><h2>Identidad visual</h2>
+            <p>JPEG, PNG o WebP. Máximo 5 MB. Se reescala a 1600 px y se eliminan los metadatos EXIF.</p>
+            <label>Tipo de imagen
+                <select @bind="uploadKind">
+                    <option value="Logo">Logo (uno)</option>
+                    <option value="Cover">Portada (una)</option>
+                    <option value="Gallery">Galería (hasta 8)</option>
+                </select>
+            </label>
+            <label>Texto alternativo<input @bind="uploadAltText" maxlength="160" /></label>
+            <InputFile OnChange="Upload" accept="image/jpeg,image/png,image/webp" disabled="@readOnly" />
+            @if (uploading) { <p class="notice">Procesando la imagen…</p> }
+            <div class="card-grid">
+                @foreach (var image in images)
+                {
+                    <figure class="business-card">
+                        <img src="@image.Url" alt="@(image.AltText ?? business.Name)"
+                             width="@image.Width" height="@image.Height" loading="lazy" />
+                        <figcaption>@KindLabel(image.Kind) · @image.Width×@image.Height</figcaption>
+                        <button class="danger" disabled="@readOnly"
+                                @onclick="() => RemoveImage(image)">Eliminar</button>
+                    </figure>
+                }
+            </div>
+        </section>
     </div>
-    <section class="panel-card"><h2>Control del piloto</h2>
-        <p><strong>Responsable:</strong> @(business.OwnerName ?? "Sin asignar") · @business.OwnerEmail</p>
-        @if (business.Status is "Draft" or "PendingConfiguration" or "Suspended")
-        { <button class="primary" disabled="@(!business.IsReady)" @onclick="Activate">Activar</button> }
-        @if (business.Status == "Active")
-        { <label>Motivo de suspensión<input @bind="reason" /></label><button class="danger" @onclick="Suspend">Suspender</button> }
-        @if (business.Status != "Archived") { <button class="secondary" @onclick="Archive">Archivar</button> }
-        @if (business.Status is "Draft" or "PendingConfiguration") { <button class="danger" @onclick="Delete">Eliminar si no tiene operaciones</button> }
-        @if (message is not null) { <p class="notice">@message</p> }
+
+    <section class="panel-card"><h2>Personas con acceso</h2>
+        <p><strong>Propietario:</strong> @(business.OwnerName ?? "Sin asignar") @business.OwnerEmail</p>
+        <label>Correo de la persona<input @bind="inviteEmail" type="email" /></label>
+        <label>Nombre visible<input @bind="inviteName" /></label>
+        <label>Tipo de acceso
+            <select @bind="inviteGrant">
+                <option value="BusinessOwner">Propietario</option>
+                <option value="BusinessStaff">Personal del negocio</option>
+            </select>
+        </label>
+        <button class="secondary" @onclick="Invite" disabled="@readOnly">Generar enlace de invitación</button>
+        @if (issuedLink is { Length: > 0 })
+        {
+            <div class="success">
+                <p><strong>Copie este enlace y entrégueselo directamente a la persona.</strong>
+                   Se puede usar una sola vez y vence en la fecha indicada.</p>
+                <input readonly value="@issuedLink" aria-label="Enlace de invitación" />
+            </div>
+        }
+        @if (invitations.Count > 0)
+        {
+            <table class="data-table">
+                <thead><tr><th>Correo</th><th>Acceso</th><th>Estado</th><th>Vence</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var invitation in invitations)
+                {
+                    <tr>
+                        <td>@invitation.Email</td><td>@invitation.Grant</td>
+                        <td>@InvitationStatusLabel(invitation.Status)</td>
+                        <td>@invitation.ExpiresAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                        <td>
+                            @if (invitation.Status == "Pending" || invitation.Status == "Expired")
+                            {
+                                <button class="secondary" @onclick="() => Resend(invitation)">Reenviar</button>
+                            }
+                            @if (invitation.Status == "Pending")
+                            {
+                                <button class="danger" @onclick="() => Revoke(invitation)">Revocar</button>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
     </section>
+
+    <section class="panel-card"><h2>Revisión y publicación</h2>
+        <a class="button-link" href="/admin/negocios/@BusinessId/vista-previa">Ver vista previa pública</a>
+        @if (business.Status is "Draft" or "PendingConfiguration" or "PendingReview")
+        {
+            <button class="primary" disabled="@(!business.IsReady)" @onclick="SubmitForReview">Enviar a revisión</button>
+        }
+        @if (isPlatformAdmin)
+        {
+            @if (business.Status == "PendingReview")
+            {
+                <button class="primary" @onclick="Publish">Aprobar y publicar</button>
+                <label>Observaciones para la socia<input @bind="reviewNotes" /></label>
+                <button class="danger" @onclick="Reject">Devolver con observaciones</button>
+            }
+            @if (business.Status is "Suspended") { <button class="primary" @onclick="Publish">Reactivar</button> }
+            @if (business.Status == "Active")
+            {
+                <label>Motivo de suspensión<input @bind="reason" /></label>
+                <button class="danger" @onclick="Suspend">Suspender</button>
+            }
+            @if (business.Status != "Archived") { <button class="secondary" @onclick="Archive">Archivar</button> }
+        }
+        @if (message is not null) { <p class="notice" role="alert">@message</p> }
+    </section>
+
+    @if (history.Count > 0)
+    {
+        <section class="panel-card"><h2>Historial de estados</h2>
+            <table class="data-table">
+                <thead><tr><th>Fecha</th><th>De</th><th>A</th><th>Responsable</th><th>Nota</th></tr></thead>
+                <tbody>
+                @foreach (var change in history)
+                {
+                    <tr>
+                        <td>@change.OccurredAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                        <td>@StatusLabel(change.FromStatus)</td><td>@StatusLabel(change.ToStatus)</td>
+                        <td>@(change.ActorEmail ?? "—")</td><td>@(change.Notes ?? "—")</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </section>
+    }
 }
+
 @code {
     [Parameter] public Guid BusinessId { get; set; }
-    private PlatformBusinessDto? business; private PlatformBusinessListDto? catalog;
-    private UpdatePlatformBusinessRequest profile = new();
-    private bool appointments, queues, orders; private string? reason, message;
-    protected override async Task OnParametersSetAsync() => await Reload();
+    private PlatformBusinessDto? business;
+    private PlatformBusinessListDto? catalog;
+    private SaveBusinessProfileRequest profile = new();
+    private IReadOnlyList<BusinessImageDto> images = [];
+    private IReadOnlyList<InvitationDto> invitations = [];
+    private IReadOnlyList<BusinessStatusChangeDto> history = [];
+    private bool appointments, queues, orders, uploading, isPlatformAdmin, readOnly;
+    private string uploadKind = "Logo", inviteGrant = "BusinessOwner";
+    private string? uploadAltText, inviteEmail, inviteName, issuedLink, reason, reviewNotes, message;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        isPlatformAdmin = (await AuthenticationState.GetAuthenticationStateAsync()).User.IsInRole("PlatformAdmin");
+        await Reload();
+    }
+
     private async Task Reload()
     {
         catalog ??= await Api.GetPlatformBusinessesAsync();
         business = await Api.GetPlatformBusinessAsync(BusinessId);
-        appointments = business.Modules.Contains("Appointments"); queues = business.Modules.Contains("VirtualQueues"); orders = business.Modules.Contains("PickupOrders");
+        readOnly = business.Status is "Archived" or "Suspended";
+        appointments = business.Modules.Contains("Appointments");
+        queues = business.Modules.Contains("VirtualQueues");
+        orders = business.Modules.Contains("PickupOrders");
+        images = business.Images ?? [];
         profile = new()
         {
             Name = business.Name, Slug = business.Slug, MunicipalityId = business.MunicipalityId,
-            CategoryId = business.CategoryId, Description = business.Description, Address = business.Address,
-            PublicPhone = business.PublicPhone, WhatsAppUrl = business.WhatsAppUrl,
-            LocationUrl = business.LocationUrl, Version = business.Version
+            CategoryId = business.CategoryId, ShortDescription = business.ShortDescription,
+            Description = business.Description, Address = business.Address,
+            ReferencePoint = business.ReferencePoint, PublicPhone = business.PublicPhone,
+            WhatsAppUrl = business.WhatsAppUrl, PublicEmail = business.PublicEmail,
+            InstagramUrl = business.InstagramUrl, FacebookUrl = business.FacebookUrl,
+            LocationUrl = business.LocationUrl, CustomerInstructions = business.CustomerInstructions,
+            Version = business.Version
         };
+        try { invitations = await Api.GetInvitationsAsync(BusinessId); } catch (ApiException) { invitations = []; }
+        try { history = await Api.GetBusinessStatusHistoryAsync(BusinessId); } catch (ApiException) { history = []; }
     }
-    private async Task SaveProfile()
+
+    private async Task Run(Func<Task> action, string success)
     {
-        try { business = await Api.UpdatePlatformBusinessAsync(BusinessId, profile); message = "Información actualizada."; await Reload(); }
+        try { await action(); message = success; await Reload(); }
         catch (ApiException ex) { message = ex.Message; }
     }
-    private async Task SaveModules()
+
+    private Task SaveProfile() => Run(async () =>
+        await Api.SavePlatformBusinessProfileAsync(BusinessId, profile), "Perfil actualizado.");
+
+    private Task SaveModules() => Run(async () =>
+        await Api.UpdatePlatformModulesAsync(BusinessId, new()
+        {
+            Appointments = appointments, VirtualQueues = queues, PickupOrders = orders,
+            Version = business!.Version
+        }), "Funciones actualizadas.");
+
+    private async Task Upload(InputFileChangeEventArgs args)
     {
-        if (business is null) return;
-        try { business = await Api.UpdatePlatformModulesAsync(BusinessId, new() { Appointments = appointments, VirtualQueues = queues, PickupOrders = orders, Version = business.Version }); message = "Funciones actualizadas."; }
-        catch (ApiException ex) { message = ex.Message; }
-    }
-    private async Task State(string action)
-    {
-        if (business is null) return;
+        uploading = true; message = null;
         try
         {
-            await Api.ChangePlatformBusinessStateAsync(BusinessId, action, new() { Version = business.Version, Reason = reason });
-            if (action == "delete") { message = "Negocio eliminado."; business = null; return; }
-            await Reload(); message = "Estado actualizado.";
+            var file = args.File;
+            await using var stream = file.OpenReadStream(ImagePolicyMaximumBytes);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            await Api.UploadBusinessImageAsync(BusinessId, uploadKind, file.Name,
+                file.ContentType, buffer.ToArray(), uploadAltText);
+            uploadAltText = null;
+            message = "Imagen cargada.";
+            await Reload();
+        }
+        catch (ApiException ex) { message = ex.Message; }
+        catch (IOException) { message = "El archivo supera el máximo de 5 MB."; }
+        finally { uploading = false; }
+    }
+
+    private Task RemoveImage(BusinessImageDto image) => Run(async () =>
+        await Api.RemoveBusinessImageAsync(BusinessId, image.Id, image.Version), "Imagen eliminada.");
+
+    private async Task Invite()
+    {
+        try
+        {
+            var issued = await Api.CreateInvitationAsync(new()
+            {
+                Email = inviteEmail ?? "", DisplayName = inviteName ?? "",
+                Grant = inviteGrant, BusinessId = BusinessId
+            });
+            issuedLink = AbsolutePath(issued.AcceptPath);
+            message = $"Enlace generado. Vence el {issued.ExpiresAtUtc.ToLocalTime():dd/MM/yyyy HH:mm}.";
+            inviteEmail = inviteName = null;
+            await Reload();
         }
         catch (ApiException ex) { message = ex.Message; }
     }
-    private Task Activate() => State("activate");
-    private Task Suspend() => State("suspend");
-    private Task Archive() => State("archive");
-    private Task Delete() => State("delete");
+
+    private async Task Resend(InvitationDto invitation)
+    {
+        try
+        {
+            var issued = await Api.ResendInvitationAsync(invitation.Id);
+            issuedLink = AbsolutePath(issued.AcceptPath);
+            message = "Se generó un enlace nuevo; el anterior quedó anulado.";
+            await Reload();
+        }
+        catch (ApiException ex) { message = ex.Message; }
+    }
+
+    private Task Revoke(InvitationDto invitation) => Run(async () =>
+        await Api.RevokeInvitationAsync(invitation.Id), "Invitación revocada.");
+
+    private Task SubmitForReview() => Run(async () =>
+        await Api.SubmitBusinessForReviewAsync(BusinessId, new() { Version = business!.Version }),
+        "Enviado a revisión.");
+
+    private Task Reject() => Run(async () =>
+        await Api.RejectBusinessReviewAsync(BusinessId,
+            new() { Version = business!.Version, Notes = reviewNotes ?? "" }),
+        "Devuelto a la socia con observaciones.");
+
+    private Task Publish() => State("activate", "Negocio publicado.");
+    private Task Suspend() => State("suspend", "Negocio suspendido.");
+    private Task Archive() => State("archive", "Negocio archivado.");
+
+    private Task State(string action, string success) => Run(async () =>
+        await Api.ChangePlatformBusinessStateAsync(BusinessId, action,
+            new() { Version = business!.Version, Reason = reason }), success);
+
+    private const long ImagePolicyMaximumBytes = 5 * 1024 * 1024;
+
+    private static string AbsolutePath(string path) => path;
+
+    private static string StatusLabel(string status) => status switch
+    {
+        "Draft" => "Borrador",
+        "PendingConfiguration" => "En configuración",
+        "PendingReview" => "En revisión",
+        "Active" => "Publicado",
+        "Suspended" => "Suspendido",
+        "Archived" => "Archivado",
+        _ => status
+    };
+
+    private static string KindLabel(string kind) => kind switch
+    {
+        "Logo" => "Logo", "Cover" => "Portada", _ => "Galería"
+    };
+
+    private static string InvitationStatusLabel(string status) => status switch
+    {
+        "Pending" => "Vigente", "Accepted" => "Aceptada",
+        "Revoked" => "Revocada", _ => "Vencida"
+    };
 }

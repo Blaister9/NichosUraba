@@ -35,8 +35,23 @@ else
         @foreach (var business in businesses)
         {
             <article class="business-card">
-                <span class="tag">@business.Category.Name</span><h2>@business.Name</h2>
-                <p>@business.Description</p><p><strong>@business.Municipality.Name</strong> · @business.Address</p>
+                @if (business.CoverUrl is { Length: > 0 } cover)
+                {
+                    @* Dimensiones fijas para reservar el espacio y evitar saltos al cargar. *@
+                    <img class="card-cover" src="@cover" alt="@(business.CoverAltText ?? $"Portada de {business.Name}")"
+                         width="640" height="360" loading="lazy" />
+                }
+                <div class="card-identity">
+                    @if (business.LogoUrl is { Length: > 0 } logo)
+                    {
+                        <img class="card-logo" src="@logo" alt="@(business.LogoAltText ?? $"Logo de {business.Name}")"
+                             width="64" height="64" loading="lazy" />
+                    }
+                    <span class="tag">@business.Category.Name</span>
+                </div>
+                <h2>@business.Name</h2>
+                <p>@(string.IsNullOrWhiteSpace(business.ShortDescription) ? business.Description : business.ShortDescription)</p>
+                <p><strong>@business.Municipality.Name</strong> · @business.Address</p>
                 @if (business.HasScheduling) { <span class="operation-badge">Citas disponibles</span> }
                 @if (business.HasVirtualQueue) { <span class="operation-badge">Turnos virtuales activos</span> }
                 @if (business.HasPickupOrdering) { <span class="operation-badge">Pedidos activos</span> }

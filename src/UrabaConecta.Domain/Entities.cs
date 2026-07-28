@@ -333,6 +333,13 @@ public sealed class ConsentReceipt : IBusinessOwned
     public DateTimeOffset AcceptedAtUtc { get; private set; }
     public Guid? AppointmentId { get; private set; }
     public Guid? PickupOrderId { get; private set; }
+    public Guid? QueueTicketId { get; private set; }
+    /// <summary>Evidencia mínima del consentimiento, sin datos que no sean necesarios.</summary>
+    public string? IpAddress { get; private set; }
     public void LinkAppointment(Guid appointmentId) => AppointmentId = appointmentId;
     public void LinkPickupOrder(Guid orderId) => PickupOrderId = orderId;
+    public void LinkQueueTicket(Guid ticketId) => QueueTicketId = ticketId;
+    public void RecordOrigin(string? ipAddress)
+        => IpAddress = string.IsNullOrWhiteSpace(ipAddress) ? null
+            : ipAddress.Length <= 45 ? ipAddress : ipAddress[..45];
 }
