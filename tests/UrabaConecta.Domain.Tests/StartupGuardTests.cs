@@ -72,6 +72,15 @@ public sealed class StartupGuardTests
     }
 
     [Fact]
+    public void Production_refuses_to_start_with_the_demo_bootstrap_enabled()
+    {
+        var problems = StartupGuard.Validate(
+            ProductionConfiguration(("DemoBootstrap:Enabled", "true")),
+            Production, CompleteLegal(), CompleteStorage());
+        Assert.Contains(problems, x => x.Contains("DemoBootstrap__Enabled"));
+    }
+
+    [Fact]
     public void Production_refuses_to_start_with_a_known_demo_password()
     {
         var problems = StartupGuard.Validate(

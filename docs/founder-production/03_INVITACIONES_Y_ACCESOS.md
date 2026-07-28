@@ -60,6 +60,12 @@ definidos o si se detecta una contraseña de demostración conocida. Ver
 [09_BACKUP_Y_RESTORE.md](09_BACKUP_Y_RESTORE.md) y
 [11_RUNBOOK_PRODUCCION.md](11_RUNBOOK_PRODUCCION.md).
 
+Si se pierde el acceso de la única cuenta administrativa Demo, existe un bootstrap de recuperación
+de una sola ejecución controlado por `DemoBootstrap__Enabled`, `DemoBootstrap__AdminEmail` y el
+secreto `DemoBootstrap__AdminPassword`. Solo funciona en `Demo`, conserva la cuenta existente,
+invalida sus sesiones y obliga a cambiar la contraseña. Después de usarlo se debe deshabilitar y
+eliminar el secreto según `docs/deployment/02_VARIABLES_REQUERIDAS.md`.
+
 ## Lo que esta versión todavía no hace
 
 - **No hay envío de correo.** `IdentityNoOpEmailSender` sigue siendo un no-operativo, así que

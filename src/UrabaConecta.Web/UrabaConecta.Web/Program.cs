@@ -584,6 +584,7 @@ app.MapRazorComponents<App>()
     .AddAdditionalAssemblies(typeof(UrabaConecta.Web.Client.Pages.Home).Assembly);
 app.MapAdditionalIdentityEndpoints();
 await app.Services.SeedDevelopmentAsync(app.Environment);
+await app.Services.BootstrapDemoAdminAsync(app.Environment);
 await app.RunAsync();
 
 static Guid UserId(ClaimsPrincipal user)
