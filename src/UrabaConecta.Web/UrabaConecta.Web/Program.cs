@@ -163,6 +163,7 @@ builder.Services.AddRateLimiter(options =>
 });
 
 var app = builder.Build();
+var contentSecurityPolicy = ContentSecurityPolicyFactory.Create(storageOptions.PublicBaseUrl);
 app.UseForwardedHeaders();
 if (app.Environment.IsDevelopment()) app.UseWebAssemblyDebugging();
 else { app.UseExceptionHandler(); app.UseHsts(); }
@@ -175,8 +176,7 @@ app.Use(async (context, next) =>
     context.Response.Headers.XContentTypeOptions = "nosniff";
     context.Response.Headers.XFrameOptions = "DENY";
     context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
-    context.Response.Headers.ContentSecurityPolicy =
-        "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; img-src 'self' data:; connect-src 'self' ws: wss:";
+    context.Response.Headers.ContentSecurityPolicy = contentSecurityPolicy;
     await next();
 });
 app.UseRateLimiter();
