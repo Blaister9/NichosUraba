@@ -391,6 +391,37 @@ public sealed partial class FounderProductionApiTests(PostgresWebFactory factory
         Assert.Contains("Cargue el logo", await response.Content.ReadAsStringAsync());
     }
 
+    [Fact]
+    public async Task A_business_created_from_the_console_is_bookable_once_published()
+    {
+        using var admin = Client();
+        await Login(admin, DevelopmentSeeder.PlatformAdminEmail);
+        var catalog = (await admin.GetFromJsonAsync<PlatformBusinessListDto>("/api/v1/admin/businesses", Json))!;
+        var slug = $"agendable-{Guid.NewGuid():N}";
+        var business = await CreateAsync(admin, catalog, slug);
+        var ready = await PlatformAdministrationApiTests.CompleteChecklistAsync(admin, business, catalog);
+        var reviewed = await PostAsync<PlatformBusinessDto>(admin,
+            $"/api/v1/admin/businesses/{business.Id}/submit-review",
+            new SubmitForReviewRequest { Version = ready.Version });
+        await PostAsync<PlatformBusinessDto>(admin, $"/api/v1/admin/businesses/{business.Id}/activate",
+            new PlatformBusinessStateRequest { Version = reviewed.Version });
+
+        // El horario que la consola crea debe ser una jornada real, no un intervalo de microsegundos.
+        var profile = (await admin.GetFromJsonAsync<BusinessProfileDto>(
+            $"/api/v1/public/businesses/{slug}", Json))!;
+        var hours = Assert.Single(profile.Hours, x => x.Day == DayOfWeek.Monday);
+        Assert.Equal("08:00", hours.OpensAt);
+        Assert.Equal("18:00", hours.ClosesAt);
+
+        var serviceId = Assert.Single(profile.Services).Id;
+        var date = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+        while (date.DayOfWeek == DayOfWeek.Sunday) date = date.AddDays(1);
+        var slots = (await admin.GetFromJsonAsync<SlotListDto>(
+            $"/api/v1/public/businesses/{slug}/appointment-slots?serviceId={serviceId}&date={date:yyyy-MM-dd}",
+            Json))!;
+        Assert.NotEmpty(slots.Slots);
+    }
+
     // ------------------------------------------------------------ consentimiento
 
     [Fact]
