@@ -1,0 +1,251 @@
+@inject IUrabaConectaApi Api
+
+<section class="panel-card" data-testid="platform-schedule">
+    <h2>Horarios del negocio</h2>
+    <p>Configure apertura, cierre, días cerrados y pausas o excepciones por fecha.</p>
+    @if (!interactiveReady)
+    {
+        <p class="notice" role="status">Activando controles de horarios…</p>
+    }
+    @if (loading)
+    {
+        <p class="notice">Cargando horarios…</p>
+    }
+    else
+    {
+        <fieldset disabled="@(!interactiveReady || ReadOnly)">
+            @if (message is not null) { <p class="success" role="status">@message</p> }
+            @if (error is not null) { <p class="error" role="alert">@error</p> }
+            <div class="hours-editor">
+                @foreach (var row in hours)
+                {
+                    <section class="hour-row" data-testid="platform-hour-row">
+                        <div class="row-title"><h3>@DayLabel(row.Day)</h3>
+                            <span class="status @(row.IsClosed ? "cancelled" : "confirmed")">
+                                @(row.IsClosed ? "Cerrado" : "Abierto")
+                            </span>
+                        </div>
+                        <label class="switch-row">
+                            <input type="checkbox" @bind="row.IsClosed" /> Día cerrado
+                        </label>
+                        <div class="time-grid">
+                            <label>Apertura
+                                <input type="time" value="@row.OpensAtText"
+                                       @oninput="e => row.OpensAtText = e.Value?.ToString() ?? string.Empty"
+                                       disabled="@row.IsClosed"
+                                       aria-label="@($"Apertura {DayLabel(row.Day)}")" />
+                            </label>
+                            <label>Cierre
+                                <input type="time" value="@row.ClosesAtText"
+                                       @oninput="e => row.ClosesAtText = e.Value?.ToString() ?? string.Empty"
+                                       disabled="@row.IsClosed"
+                                       aria-label="@($"Cierre {DayLabel(row.Day)}")" />
+                            </label>
+                        </div>
+                        <button class="secondary" type="button" @onclick="() => SaveHour(row)" disabled="@saving">
+                            Guardar @DayLabel(row.Day)
+                        </button>
+                    </section>
+                }
+            </div>
+
+            <section class="config-form">
+                <h3>Excepciones por fecha</h3>
+                @if (staff.Count == 0)
+                {
+                    <p class="notice">Agregue primero un servicio o producto que cree una persona operativa.</p>
+                }
+                else
+                {
+                    <div class="form-grid">
+                        <label>Persona
+                            <select @bind="exception.StaffMemberId">
+                                @foreach (var person in staff.Where(x => x.IsActive))
+                                { <option value="@person.Id">@person.DisplayName</option> }
+                            </select>
+                        </label>
+                        <label>Fecha<input type="date" @bind="exception.Date" min="@Today" /></label>
+                        <label>Tipo
+                            <select @bind="exception.Type">
+                                <option value="ClosedAllDay">Día cerrado</option>
+                                <option value="ClosedInterval">Pausa o cierre parcial</option>
+                                <option value="ExtraordinaryOpening">Apertura extraordinaria</option>
+                            </select>
+                        </label>
+                        @if (exception.Type != "ClosedAllDay")
+                        {
+                            <label>Hora inicial<input type="time" @bind="exception.OpensAt" /></label>
+                            <label>Hora final<input type="time" @bind="exception.ClosesAt" /></label>
+                        }
+                        <label>Motivo opcional<input @bind="exception.Reason" maxlength="160" /></label>
+                    </div>
+                    <button class="secondary" type="button" @onclick="SaveException" disabled="@saving">
+                        Guardar excepción
+                    </button>
+                }
+                @foreach (var item in exceptions)
+                {
+                    <div class="config-row" data-testid="platform-exception-row">
+                        <span><strong>@item.Date.ToString("dd/MM/yyyy")</strong> · @ExceptionLabel(item)</span>
+                        <button class="danger" type="button" @onclick="() => DeleteException(item)" disabled="@saving">
+                            Eliminar
+                        </button>
+                    </div>
+                }
+            </section>
+        </fieldset>
+    }
+</section>
+
+@code {
+    [Parameter] public Guid BusinessId { get; set; }
+    [Parameter] public bool ReadOnly { get; set; }
+    private List<HourForm> hours = [];
+    private IReadOnlyList<StaffMemberDto> staff = [];
+    private IReadOnlyList<AvailabilityExceptionDto> exceptions = [];
+    private ExceptionForm exception = new();
+    private bool loading = true, saving, interactiveReady;
+    private string? error, message;
+    private Guid loadedBusinessId;
+    private string Today => DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd");
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (loadedBusinessId == BusinessId) return;
+        loadedBusinessId = BusinessId;
+        await Load();
+    }
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+        interactiveReady = true;
+        StateHasChanged();
+    }
+
+    private async Task Load()
+    {
+        loading = true;
+        try
+        {
+            hours = (await Api.GetPlatformBusinessHoursAsync(BusinessId)).OrderBy(x => SortDay(x.Day))
+                .Select(x => new HourForm
+                {
+                    Day = x.Day, IsClosed = x.IsClosed,
+                    OpensAtText = (x.OpensAt ?? new TimeOnly(8, 0)).ToString("HH:mm"),
+                    ClosesAtText = (x.ClosesAt ?? new TimeOnly(18, 0)).ToString("HH:mm"),
+                    Version = x.Version
+                }).ToList();
+            staff = await Api.GetPlatformSchedulingStaffAsync(BusinessId);
+            exceptions = await Api.GetPlatformSchedulingExceptionsAsync(BusinessId,
+                DateOnly.FromDateTime(DateTime.Today));
+            if (exception.StaffMemberId == Guid.Empty)
+                exception.StaffMemberId = staff.FirstOrDefault(x => x.IsActive)?.Id ?? Guid.Empty;
+        }
+        catch (ApiException ex) { error = ex.Message; }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task SaveHour(HourForm row)
+    {
+        error = message = null;
+        if (!row.IsClosed && (!row.TryTimes(out var opens, out var closes) || opens >= closes))
+        { error = "La apertura debe ser anterior al cierre."; return; }
+        saving = true;
+        try
+        {
+            await Api.SetPlatformBusinessHourAsync(BusinessId, row.Day, row.Request());
+            message = "Horario guardado.";
+            await Load();
+        }
+        catch (ApiException ex) { error = ex.Message; }
+        finally { saving = false; }
+    }
+
+    private async Task SaveException()
+    {
+        error = message = null;
+        if (exception.StaffMemberId == Guid.Empty) { error = "Seleccione una persona."; return; }
+        if (exception.Date < DateOnly.FromDateTime(DateTime.Today))
+        { error = "La fecha no puede estar en el pasado."; return; }
+        if (exception.Type != "ClosedAllDay" && exception.OpensAt >= exception.ClosesAt)
+        { error = "La hora inicial debe ser anterior a la hora final."; return; }
+        saving = true;
+        try
+        {
+            await Api.SavePlatformSchedulingExceptionAsync(BusinessId, exception.Request());
+            message = "Excepción guardada.";
+            exception = new() { StaffMemberId = staff.FirstOrDefault(x => x.IsActive)?.Id ?? Guid.Empty };
+            await Load();
+        }
+        catch (ApiException ex) { error = ex.Message; }
+        finally { saving = false; }
+    }
+
+    private async Task DeleteException(AvailabilityExceptionDto item)
+    {
+        saving = true; error = message = null;
+        try
+        {
+            await Api.DeletePlatformSchedulingExceptionAsync(BusinessId, item.Id, item.Version);
+            message = "Excepción eliminada.";
+            await Load();
+        }
+        catch (ApiException ex) { error = ex.Message; }
+        finally { saving = false; }
+    }
+
+    private static int SortDay(DayOfWeek day) => day == DayOfWeek.Sunday ? 7 : (int)day;
+    private static string DayLabel(DayOfWeek day) => day switch
+    {
+        DayOfWeek.Monday => "Lunes", DayOfWeek.Tuesday => "Martes", DayOfWeek.Wednesday => "Miércoles",
+        DayOfWeek.Thursday => "Jueves", DayOfWeek.Friday => "Viernes", DayOfWeek.Saturday => "Sábado",
+        _ => "Domingo"
+    };
+    private static string ExceptionLabel(AvailabilityExceptionDto item) => item.Type switch
+    {
+        "ClosedInterval" => $"Pausa {item.OpensAt:HH\\:mm}–{item.ClosesAt:HH\\:mm}",
+        "ExtraordinaryOpening" => $"Apertura {item.OpensAt:HH\\:mm}–{item.ClosesAt:HH\\:mm}",
+        _ => "Día cerrado"
+    };
+
+    private sealed class HourForm
+    {
+        public DayOfWeek Day { get; set; }
+        public bool IsClosed { get; set; }
+        public string OpensAtText { get; set; } = "08:00";
+        public string ClosesAtText { get; set; } = "18:00";
+        public long Version { get; set; }
+        public bool TryTimes(out TimeOnly opens, out TimeOnly closes)
+        {
+            var first = TimeOnly.TryParse(OpensAtText, out opens);
+            var second = TimeOnly.TryParse(ClosesAtText, out closes);
+            return first && second;
+        }
+        public SaveBusinessHourRequest Request() => new()
+        {
+            IsClosed = IsClosed,
+            OpensAt = IsClosed ? null : TimeOnly.Parse(OpensAtText),
+            ClosesAt = IsClosed ? null : TimeOnly.Parse(ClosesAtText),
+            Version = Version
+        };
+    }
+
+    private sealed class ExceptionForm
+    {
+        public Guid StaffMemberId { get; set; }
+        public DateOnly Date { get; set; } = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+        public string Type { get; set; } = "ClosedAllDay";
+        public TimeOnly OpensAt { get; set; } = new(12, 0);
+        public TimeOnly ClosesAt { get; set; } = new(13, 0);
+        public string? Reason { get; set; }
+        public SaveAvailabilityExceptionRequest Request() => new()
+        {
+            StaffMemberId = StaffMemberId, Date = Date, Type = Type,
+            OpensAt = Type == "ClosedAllDay" ? null : OpensAt,
+            ClosesAt = Type == "ClosedAllDay" ? null : ClosesAt, Reason = Reason
+        };
+    }
+}

@@ -1,11 +1,13 @@
 @page "/admin/accesos"
-@rendermode InteractiveAuto
+@rendermode InteractiveServer
 @attribute [Authorize(Roles = "PlatformAdmin")]
 @inject IUrabaConectaApi Api
 
 <PageTitle>Accesos y socias | UrabáConecta</PageTitle>
 <p class="eyebrow">Administración de plataforma</p>
 <h1>Accesos</h1>
+@if (!interactiveReady) { <p class="notice" role="status">Activando controles de acceso…</p> }
+<fieldset disabled="@(!interactiveReady)">
 <div class="notice">
     <strong>Nunca se muestra ni se envía una contraseña.</strong> Cada persona define la suya al abrir
     un enlace de un solo uso. Copie el enlace y entrégueselo directamente por el canal que prefiera.
@@ -101,15 +103,23 @@
         </table>
     }
 </section>
+</fieldset>
 
 @code {
     private IReadOnlyList<PlatformAccountDto> partners = [];
     private IReadOnlyList<InvitationDto> invitations = [];
     private IReadOnlyList<PlatformAccessAuditDto> audit = [];
     private string? partnerEmail, partnerName, resetEmail, issuedLink, message;
+    private bool interactiveReady;
     private DateTimeOffset? issuedExpiry;
 
     protected override Task OnInitializedAsync() => Reload();
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+        interactiveReady = true;
+        StateHasChanged();
+    }
 
     private async Task Reload()
     {

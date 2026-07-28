@@ -441,6 +441,18 @@ public interface IUrabaConectaApi
         CancellationToken cancellationToken = default);
     Task<IReadOnlyList<PlatformAuditEntryDto>> GetBusinessAuditAsync(Guid businessId,
         CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BusinessHourAdminDto>> GetPlatformBusinessHoursAsync(Guid businessId,
+        CancellationToken cancellationToken = default);
+    Task<ConfigurationImpactDto> SetPlatformBusinessHourAsync(Guid businessId, DayOfWeek day,
+        SaveBusinessHourRequest request, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<StaffMemberDto>> GetPlatformSchedulingStaffAsync(Guid businessId,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AvailabilityExceptionDto>> GetPlatformSchedulingExceptionsAsync(Guid businessId,
+        DateOnly? from = null, CancellationToken cancellationToken = default);
+    Task<AvailabilityExceptionDto> SavePlatformSchedulingExceptionAsync(Guid businessId,
+        SaveAvailabilityExceptionRequest request, CancellationToken cancellationToken = default);
+    Task DeletePlatformSchedulingExceptionAsync(Guid businessId, Guid exceptionId, long version,
+        CancellationToken cancellationToken = default);
     Task<IReadOnlyList<BusinessImageDto>> GetBusinessImagesAsync(Guid businessId,
         CancellationToken cancellationToken = default);
     Task<BusinessImageDto> UploadBusinessImageAsync(Guid businessId, string kind, string fileName,

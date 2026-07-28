@@ -8,7 +8,6 @@
     <ResourcePreloader />
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["UrabaConecta.Web.styles.css"]" />
-    <ImportMap />
     <HeadOutlet @rendermode="PageRenderMode" />
 </head>
 
@@ -25,6 +24,9 @@
     [CascadingParameter]
     private HttpContext HttpContext { get; set; } = default!;
 
+    // Los formularios operativos no deben exponer un DOM prerenderizado mientras
+    // WebAssembly descarga e hidrata. InteractiveServer entrega interactividad
+    // inmediatamente después de conectar el circuito y evita descartar entradas.
     private IComponentRenderMode? PageRenderMode =>
-        HttpContext.AcceptsInteractiveRouting() ? InteractiveAuto : null;
+        HttpContext.AcceptsInteractiveRouting() ? InteractiveServer : null;
 }

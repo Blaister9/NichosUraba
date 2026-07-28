@@ -1,5 +1,5 @@
 @page "/admin/negocios/nuevo"
-@rendermode InteractiveAuto
+@rendermode InteractiveServer
 @attribute [Authorize(Roles = "PlatformAdmin,PartnerOperator")]
 @inject IUrabaConectaApi Api
 @inject NavigationManager Navigation
@@ -25,6 +25,8 @@ else if (created is not null)
 else
 {
     <EditForm Model="request" OnValidSubmit="Submit" class="appointment-form">
+        @if (!interactiveReady) { <p class="notice" role="status">Activando formulario…</p> }
+        <fieldset disabled="@(!interactiveReady)">
         <DataAnnotationsValidator /><ValidationSummary />
         @if (step == 1)
         {
@@ -43,9 +45,20 @@ else
                 <label class="check"><InputCheckbox @bind-Value="request.VirtualQueues" /> Turnos virtuales</label>
                 <label class="check"><InputCheckbox @bind-Value="request.PickupOrders" /> Pedidos para recoger</label>
             </fieldset>
-            @if (request.Appointments) { <label>Servicio inicial (opcional)<InputText @bind-Value="request.InitialServiceName" /></label> }
+            @if (request.Appointments)
+            {
+                <label>Servicio inicial (opcional)<InputText @bind-Value="request.InitialServiceName" /></label>
+                <label>Duración del servicio en minutos<InputNumber @bind-Value="request.InitialServiceDurationMinutes" /></label>
+            }
             @if (request.VirtualQueues) { <label>Duración promedio por turno<InputNumber @bind-Value="request.QueueAverageMinutes" /></label><label>Cupo máximo<InputNumber @bind-Value="request.QueueMaximumWaiting" /></label> }
-            @if (request.PickupOrders) { <label>Categoría inicial (opcional)<InputText @bind-Value="request.InitialProductCategory" /></label><label>Producto inicial (opcional)<InputText @bind-Value="request.InitialProductName" /></label> }
+            @if (request.PickupOrders)
+            {
+                <label>Categoría inicial (opcional)<InputText @bind-Value="request.InitialProductCategory" /></label>
+                <label>Producto inicial (opcional)<InputText @bind-Value="request.InitialProductName" /></label>
+                <label>Preparación mínima en minutos<InputNumber @bind-Value="request.PickupPreparationMinutes" /></label>
+                <label>Intervalo de recogida en minutos<InputNumber @bind-Value="request.PickupSlotMinutes" /></label>
+                <label>Cupo por intervalo<InputNumber @bind-Value="request.PickupCapacity" /></label>
+            }
         }
         else if (step == 3)
         {
@@ -74,13 +87,20 @@ else
             @if (step < 4) { <button type="button" class="primary" @onclick="Next">Continuar</button> }
             else { <button type="submit" class="primary" disabled="@saving">Crear negocio</button> }
         </div>
+        </fieldset>
     </EditForm>
 }
 @code {
-    private int step = 1; private bool saving; private string? error;
+    private int step = 1; private bool saving, interactiveReady; private string? error;
     private PlatformBusinessListDto? catalog; private PlatformBusinessCreatedDto? created;
     private readonly CreatePlatformBusinessRequest request = new() { Appointments = true };
     protected override async Task OnInitializedAsync() => catalog = await Api.GetPlatformBusinessesAsync();
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+        interactiveReady = true;
+        StateHasChanged();
+    }
     private void Next() { error = null; if (step == 2 && !request.Appointments && !request.VirtualQueues && !request.PickupOrders) { error = "Selecciona al menos una función."; return; } step++; }
     private void Previous() { error = null; step--; }
     private async Task Submit()

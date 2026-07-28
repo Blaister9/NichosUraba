@@ -331,6 +331,30 @@ platformApi.MapPut("/businesses/{businessId:guid}/modules",
 platformApi.MapGet("/businesses/{businessId:guid}/images",
     (Guid businessId, HttpContext http, IBusinessImageUseCases images, CancellationToken ct) =>
         images.ListAsync(Actor(http), businessId, ct));
+platformApi.MapGet("/businesses/{businessId:guid}/hours",
+    (Guid businessId, HttpContext http, IPlatformAdministrationUseCases useCases, CancellationToken ct) =>
+        useCases.ListHoursAsync(Actor(http), businessId, ct));
+platformApi.MapPut("/businesses/{businessId:guid}/hours/{day}",
+    (Guid businessId, DayOfWeek day, SaveBusinessHourRequest request, HttpContext http,
+        IPlatformAdministrationUseCases useCases, CancellationToken ct) =>
+        useCases.SetHourAsync(Actor(http), businessId, day, request, ct));
+platformApi.MapGet("/businesses/{businessId:guid}/scheduling-staff",
+    (Guid businessId, HttpContext http, IPlatformAdministrationUseCases useCases, CancellationToken ct) =>
+        useCases.ListSchedulingStaffAsync(Actor(http), businessId, ct));
+platformApi.MapGet("/businesses/{businessId:guid}/scheduling-exceptions",
+    (Guid businessId, DateOnly? from, HttpContext http, IPlatformAdministrationUseCases useCases,
+        CancellationToken ct) => useCases.ListSchedulingExceptionsAsync(Actor(http), businessId, from, ct));
+platformApi.MapPost("/businesses/{businessId:guid}/scheduling-exceptions",
+    async (Guid businessId, SaveAvailabilityExceptionRequest request, HttpContext http,
+        IPlatformAdministrationUseCases useCases, CancellationToken ct) =>
+        Results.Created("", await useCases.SaveSchedulingExceptionAsync(Actor(http), businessId, request, ct)));
+platformApi.MapDelete("/businesses/{businessId:guid}/scheduling-exceptions/{exceptionId:guid}",
+    async (Guid businessId, Guid exceptionId, long version, HttpContext http,
+        IPlatformAdministrationUseCases useCases, CancellationToken ct) =>
+    {
+        await useCases.DeleteSchedulingExceptionAsync(Actor(http), businessId, exceptionId, version, ct);
+        return Results.NoContent();
+    });
 platformApi.MapPost("/businesses/{businessId:guid}/images",
     async (Guid businessId, HttpRequest request, HttpContext http, IBusinessImageUseCases images,
         CancellationToken ct) =>

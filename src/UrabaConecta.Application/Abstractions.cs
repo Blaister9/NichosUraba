@@ -150,6 +150,18 @@ public interface IPlatformAdministrationUseCases
         CancellationToken cancellationToken = default);
     Task<IReadOnlyList<PlatformAuditEntryDto>> ListAuditAsync(PlatformActor actor, Guid businessId,
         CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BusinessHourAdminDto>> ListHoursAsync(PlatformActor actor, Guid businessId,
+        CancellationToken cancellationToken = default);
+    Task<ConfigurationImpactDto> SetHourAsync(PlatformActor actor, Guid businessId, DayOfWeek day,
+        SaveBusinessHourRequest request, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<StaffMemberDto>> ListSchedulingStaffAsync(PlatformActor actor, Guid businessId,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AvailabilityExceptionDto>> ListSchedulingExceptionsAsync(PlatformActor actor,
+        Guid businessId, DateOnly? from = null, CancellationToken cancellationToken = default);
+    Task<AvailabilityExceptionDto> SaveSchedulingExceptionAsync(PlatformActor actor, Guid businessId,
+        SaveAvailabilityExceptionRequest request, CancellationToken cancellationToken = default);
+    Task DeleteSchedulingExceptionAsync(PlatformActor actor, Guid businessId, Guid exceptionId, long version,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IMembershipAdministrationStore

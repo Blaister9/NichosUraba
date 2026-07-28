@@ -263,6 +263,29 @@ public sealed class HttpUrabaConectaApi(HttpClient http) : IUrabaConectaApi
     public Task<IReadOnlyList<PlatformAuditEntryDto>> GetBusinessAuditAsync(Guid businessId,
         CancellationToken cancellationToken = default)
         => Get<IReadOnlyList<PlatformAuditEntryDto>>($"api/v1/admin/businesses/{businessId}/audit", cancellationToken);
+    public Task<IReadOnlyList<BusinessHourAdminDto>> GetPlatformBusinessHoursAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => Get<IReadOnlyList<BusinessHourAdminDto>>($"api/v1/admin/businesses/{businessId}/hours", cancellationToken);
+    public async Task<ConfigurationImpactDto> SetPlatformBusinessHourAsync(Guid businessId, DayOfWeek day,
+        SaveBusinessHourRequest request, CancellationToken cancellationToken = default)
+        => await Read<ConfigurationImpactDto>(await http.PutAsJsonAsync(
+            $"api/v1/admin/businesses/{businessId}/hours/{day}", request, Json, cancellationToken), cancellationToken);
+    public Task<IReadOnlyList<StaffMemberDto>> GetPlatformSchedulingStaffAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => Get<IReadOnlyList<StaffMemberDto>>($"api/v1/admin/businesses/{businessId}/scheduling-staff", cancellationToken);
+    public Task<IReadOnlyList<AvailabilityExceptionDto>> GetPlatformSchedulingExceptionsAsync(Guid businessId,
+        DateOnly? from = null, CancellationToken cancellationToken = default)
+        => Get<IReadOnlyList<AvailabilityExceptionDto>>(
+            $"api/v1/admin/businesses/{businessId}/scheduling-exceptions?from={from:yyyy-MM-dd}", cancellationToken);
+    public async Task<AvailabilityExceptionDto> SavePlatformSchedulingExceptionAsync(Guid businessId,
+        SaveAvailabilityExceptionRequest request, CancellationToken cancellationToken = default)
+        => await Read<AvailabilityExceptionDto>(await http.PostAsJsonAsync(
+            $"api/v1/admin/businesses/{businessId}/scheduling-exceptions", request, Json, cancellationToken), cancellationToken);
+    public async Task DeletePlatformSchedulingExceptionAsync(Guid businessId, Guid exceptionId, long version,
+        CancellationToken cancellationToken = default)
+        => await Ensure(await http.DeleteAsync(
+            $"api/v1/admin/businesses/{businessId}/scheduling-exceptions/{exceptionId}?version={version}",
+            cancellationToken), cancellationToken);
 
     public Task<IReadOnlyList<BusinessImageDto>> GetBusinessImagesAsync(Guid businessId,
         CancellationToken cancellationToken = default)

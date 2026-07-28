@@ -1,15 +1,15 @@
 @page "/panel/{BusinessId:guid}/citas"
-@rendermode InteractiveAuto
+@rendermode InteractiveServer
 @attribute [Authorize]
 @inject IUrabaConectaApi Api
 
 <PageTitle>Citas | Panel UrabáConecta</PageTitle>
 <a class="back-link" href="/panel">← Mis establecimientos</a><p class="eyebrow">Panel del negocio</p><h1>Citas</h1>
-<section class="search-panel">
+<fieldset class="search-panel" disabled="@(!interactiveReady)">
     <label>Fecha<InputDate @bind-Value="date" /></label>
     <label>Estado<InputSelect @bind-Value="status"><option value="">Todos</option><option>Pending</option><option>Confirmed</option><option>Rejected</option><option>Cancelled</option><option>Completed</option><option>NoShow</option></InputSelect></label>
     <button class="primary" @onclick="Load" disabled="@(!interactiveReady || working)">Filtrar</button>
-</section>
+</fieldset>
 @if (loading) { <p class="notice">Cargando citas…</p> }
 else if (error is not null) { <p class="error" role="alert">@error</p> }
 else if (appointments.Count == 0) { <div class="empty"><h2>No hay citas con estos filtros</h2></div> }

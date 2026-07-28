@@ -280,6 +280,106 @@ public sealed class PlatformAdministrationUseCases(
         return ToDto((await store.GetAsync(businessId, cancellationToken))!);
     }
 
+    public async Task<IReadOnlyList<BusinessHourAdminDto>> ListHoursAsync(PlatformActor actor, Guid businessId,
+        CancellationToken cancellationToken = default)
+    {
+        await RequireScopedAsync(actor, businessId, cancellationToken);
+        var existing = await directory.GetBusinessHoursAsync(businessId, cancellationToken);
+        return Enum.GetValues<DayOfWeek>().Select(day =>
+        {
+            var hour = existing.SingleOrDefault(x => x.Day == day);
+            return new BusinessHourAdminDto(day, hour is null, hour?.OpensAt, hour?.ClosesAt, hour?.Version ?? 0);
+        }).ToArray();
+    }
+
+    public async Task<ConfigurationImpactDto> SetHourAsync(PlatformActor actor, Guid businessId, DayOfWeek day,
+        SaveBusinessHourRequest request, CancellationToken cancellationToken = default)
+    {
+        await RequireScopedAsync(actor, businessId, cancellationToken);
+        if (!request.IsClosed && (request.OpensAt is null || request.ClosesAt is null ||
+                                  request.OpensAt >= request.ClosesAt))
+            throw new ApiException("INVALID_HOURS", "La apertura debe ser anterior al cierre.");
+        var existing = await directory.GetBusinessHourAsync(businessId, day, cancellationToken);
+        if (request.IsClosed)
+        {
+            if (existing is not null)
+            {
+                EnsureVersion(existing.Version, request.Version, "El horario cambió. Recargue.");
+                directory.RemoveBusinessHour(existing);
+            }
+        }
+        else if (existing is null)
+            directory.AddBusinessHour(new BusinessHour(Guid.NewGuid(), businessId, day,
+                request.OpensAt!.Value, request.ClosesAt!.Value));
+        else
+        {
+            EnsureVersion(existing.Version, request.Version, "El horario cambió. Recargue.");
+            TryDomain(() => { existing.Update(request.OpensAt!.Value, request.ClosesAt!.Value, request.Version); return true; });
+        }
+        await directory.SaveChangesAsync(cancellationToken);
+        var conflicts = await directory.CountFutureAppointmentConflictsAsync(businessId, null, NextDate(day),
+            request.IsClosed ? null : request.OpensAt, request.IsClosed ? null : request.ClosesAt, true,
+            cancellationToken);
+        return new(conflicts);
+    }
+
+    public async Task<IReadOnlyList<StaffMemberDto>> ListSchedulingStaffAsync(PlatformActor actor, Guid businessId,
+        CancellationToken cancellationToken = default)
+    {
+        await RequireScopedAsync(actor, businessId, cancellationToken);
+        return await directory.GetStaffAsync(businessId, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<AvailabilityExceptionDto>> ListSchedulingExceptionsAsync(PlatformActor actor,
+        Guid businessId, DateOnly? from = null, CancellationToken cancellationToken = default)
+    {
+        await RequireScopedAsync(actor, businessId, cancellationToken);
+        var items = await directory.GetAvailabilityExceptionsAsync(businessId, cancellationToken);
+        var result = new List<AvailabilityExceptionDto>();
+        foreach (var item in from.HasValue ? items.Where(x => x.Date >= from.Value) : items)
+            result.Add(await ToSchedulingExceptionDto(item, cancellationToken));
+        return result;
+    }
+
+    public async Task<AvailabilityExceptionDto> SaveSchedulingExceptionAsync(PlatformActor actor, Guid businessId,
+        SaveAvailabilityExceptionRequest request, CancellationToken cancellationToken = default)
+    {
+        await RequireScopedAsync(actor, businessId, cancellationToken);
+        if (!await directory.StaffBelongsToBusinessAsync(businessId, request.StaffMemberId, cancellationToken))
+            throw new ApiException("CROSS_BUSINESS_REFERENCE", "La persona no pertenece al negocio.", 409);
+        if (!Enum.TryParse<AvailabilityExceptionType>(request.Type, true, out var type))
+            throw new ApiException("INVALID_EXCEPTION", "Seleccione una excepción válida.");
+        if (type != AvailabilityExceptionType.ClosedAllDay &&
+            (request.OpensAt is null || request.ClosesAt is null || request.OpensAt >= request.ClosesAt))
+            throw new ApiException("INVALID_HOURS", "La hora inicial debe ser anterior a la hora final.");
+        var item = (await directory.GetAvailabilityExceptionsAsync(businessId, cancellationToken))
+            .SingleOrDefault(x => x.StaffMemberId == request.StaffMemberId && x.Date == request.Date);
+        if (item is null)
+        {
+            item = new AvailabilityException(Guid.NewGuid(), businessId, request.StaffMemberId, request.Date,
+                type, request.OpensAt, request.ClosesAt, request.Reason);
+            directory.AddAvailabilityException(item);
+        }
+        else
+        {
+            EnsureVersion(item.Version, request.Version, "La excepción cambió. Recargue.");
+            TryDomain(() => { item.Update(type, request.OpensAt, request.ClosesAt, request.Reason, request.Version); return true; });
+        }
+        await directory.SaveChangesAsync(cancellationToken);
+        return await ToSchedulingExceptionDto(item, cancellationToken);
+    }
+
+    public async Task DeleteSchedulingExceptionAsync(PlatformActor actor, Guid businessId, Guid exceptionId,
+        long version, CancellationToken cancellationToken = default)
+    {
+        await RequireScopedAsync(actor, businessId, cancellationToken);
+        var item = await directory.GetAvailabilityExceptionAsync(businessId, exceptionId, cancellationToken)
+            ?? throw new ApiException("EXCEPTION_NOT_FOUND", "No encontramos la excepción.", 404);
+        EnsureVersion(item.Version, version, "La excepción cambió. Recargue.");
+        directory.RemoveAvailabilityException(item);
+        await directory.SaveChangesAsync(cancellationToken);
+    }
+
     // -----------------------------------------------------------------------
 
     private async Task<PlatformBusinessRecord> RequireScopedAsync(PlatformActor actor, Guid businessId,
@@ -396,6 +496,26 @@ public sealed class PlatformAdministrationUseCases(
         DateTimeOffset now) => store.AddAudit(new PlatformAuditEntry(Guid.NewGuid(), businessId, actor.UserId, action,
             before is string s ? s : JsonSerializer.Serialize(before),
             after is string t ? t : JsonSerializer.Serialize(after), now, actor.CorrelationId));
+    private async Task<AvailabilityExceptionDto> ToSchedulingExceptionDto(AvailabilityException item,
+        CancellationToken cancellationToken)
+    {
+        var conflicts = await directory.CountFutureAppointmentConflictsAsync(item.BusinessId, item.StaffMemberId,
+            item.Date, item.Type == AvailabilityExceptionType.ClosedAllDay ? null : item.OpensAt,
+            item.Type == AvailabilityExceptionType.ClosedAllDay ? null : item.ClosesAt,
+            item.Type == AvailabilityExceptionType.ExtraordinaryOpening, cancellationToken);
+        return new(item.Id, item.StaffMemberId, item.Date, item.Type.ToString(),
+            item.OpensAt, item.ClosesAt, item.Reason, conflicts, item.Version);
+    }
+    private DateOnly NextDate(DayOfWeek day)
+    {
+        var date = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+        do { date = date.AddDays(1); } while (date.DayOfWeek != day);
+        return date;
+    }
+    private static void EnsureVersion(long actual, long expected, string message)
+    {
+        if (actual != expected) throw new ApiException("CONCURRENCY_CONFLICT", message, 409);
+    }
     private static object Snapshot(Business b) => new { b.Status, b.IsPublished, b.Version };
     private static T TryDomain<T>(Func<T> action)
     {

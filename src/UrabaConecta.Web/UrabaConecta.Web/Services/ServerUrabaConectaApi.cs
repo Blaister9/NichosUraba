@@ -10,7 +10,7 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
     IPlatformAdministrationUseCases platform, IAccessInvitationUseCases invitations,
     IBusinessImageUseCases images, IPlatformHealthProvider health, IOptions<LegalOptions> legal,
     IConsentPolicyProvider consentPolicy, IHttpContextAccessor httpContext,
-    AuthenticationStateProvider authentication) : IUrabaConectaApi
+    AuthenticationStateProvider authentication, IServiceScopeFactory scopeFactory) : IUrabaConectaApi
 {
     public Task<IReadOnlyList<BusinessCardDto>> GetBusinessesAsync(string? search = null, string? municipality = null,
         string? category = null, CancellationToken cancellationToken = default)
@@ -199,6 +199,59 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
     public async Task<IReadOnlyList<PlatformAuditEntryDto>> GetBusinessAuditAsync(Guid businessId,
         CancellationToken cancellationToken = default)
         => await platform.ListAuditAsync(await Actor(), businessId, cancellationToken);
+    public async Task<IReadOnlyList<BusinessHourAdminDto>> GetPlatformBusinessHoursAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+    {
+        var actor = await Actor();
+        await using var scope = scopeFactory.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<IPlatformAdministrationUseCases>()
+            .ListHoursAsync(actor, businessId, cancellationToken);
+    }
+
+    public async Task<ConfigurationImpactDto> SetPlatformBusinessHourAsync(Guid businessId, DayOfWeek day,
+        SaveBusinessHourRequest request, CancellationToken cancellationToken = default)
+    {
+        var actor = await Actor();
+        await using var scope = scopeFactory.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<IPlatformAdministrationUseCases>()
+            .SetHourAsync(actor, businessId, day, request, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<StaffMemberDto>> GetPlatformSchedulingStaffAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+    {
+        var actor = await Actor();
+        await using var scope = scopeFactory.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<IPlatformAdministrationUseCases>()
+            .ListSchedulingStaffAsync(actor, businessId, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<AvailabilityExceptionDto>> GetPlatformSchedulingExceptionsAsync(Guid businessId,
+        DateOnly? from = null, CancellationToken cancellationToken = default)
+    {
+        var actor = await Actor();
+        await using var scope = scopeFactory.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<IPlatformAdministrationUseCases>()
+            .ListSchedulingExceptionsAsync(actor, businessId, from, cancellationToken);
+    }
+
+    public async Task<AvailabilityExceptionDto> SavePlatformSchedulingExceptionAsync(Guid businessId,
+        SaveAvailabilityExceptionRequest request, CancellationToken cancellationToken = default)
+    {
+        var actor = await Actor();
+        await using var scope = scopeFactory.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<IPlatformAdministrationUseCases>()
+            .SaveSchedulingExceptionAsync(actor, businessId, request, cancellationToken);
+    }
+
+    public async Task DeletePlatformSchedulingExceptionAsync(Guid businessId, Guid exceptionId, long version,
+        CancellationToken cancellationToken = default)
+    {
+        var actor = await Actor();
+        await using var scope = scopeFactory.CreateAsyncScope();
+        await scope.ServiceProvider.GetRequiredService<IPlatformAdministrationUseCases>()
+            .DeleteSchedulingExceptionAsync(actor, businessId, exceptionId, version, cancellationToken);
+    }
 
     public async Task<IReadOnlyList<BusinessImageDto>> GetBusinessImagesAsync(Guid businessId,
         CancellationToken cancellationToken = default)

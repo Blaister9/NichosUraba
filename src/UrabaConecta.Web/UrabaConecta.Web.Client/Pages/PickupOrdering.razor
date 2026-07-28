@@ -1,5 +1,5 @@
 @page "/negocios/{Slug}/pedidos"
-@rendermode InteractiveAuto
+@rendermode InteractiveServer
 @inject IUrabaConectaApi Api
 @inject NavigationManager Navigation
 
@@ -30,6 +30,7 @@ else if (menu is not null && created is null)
         <h2>Tu pedido</h2>
         <p><strong>@CartCount unidades · @CartTotal.ToString("C0", Colombia)</strong></p>
         <EditForm Model="request" OnValidSubmit="Submit" FormName="pickup-order">
+            <fieldset disabled="@(!interactiveReady)">
             <DataAnnotationsValidator /><ValidationSummary />
             <label>Hora para recoger
                 <InputSelect @bind-Value="selectedSlot">
@@ -49,6 +50,7 @@ else if (menu is not null && created is null)
             </p>
             <p class="meta">El pago se realiza directamente en el establecimiento. UrabáConecta no procesa pagos.</p>
             <button class="primary" disabled="@(!interactiveReady || busy || CartCount == 0 || string.IsNullOrEmpty(selectedSlot))">Confirmar pedido</button>
+            </fieldset>
         </EditForm>
     </section>
 }

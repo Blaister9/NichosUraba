@@ -1,5 +1,5 @@
 @page "/negocios/{Slug}/turnos"
-@rendermode InteractiveAuto
+@rendermode InteractiveServer
 @implements IAsyncDisposable
 @inject IUrabaConectaApi Api
 @inject NavigationManager Navigation
@@ -23,6 +23,7 @@ else if (status is not null)
     @if (created is null)
     {
         <EditForm Model="request" OnValidSubmit="Join" FormName="join-queue" class="config-form narrow">
+            <fieldset disabled="@(!interactiveReady)">
             <DataAnnotationsValidator /><ValidationSummary />
             <h2>Tomar un turno</h2>
             <label>Alias corto (opcional) <InputText @bind-Value="request.Alias" maxlength="40" /></label>
@@ -36,7 +37,8 @@ else if (status is not null)
                 y el <a href="/legal/aviso-de-privacidad" target="_blank">aviso de privacidad</a>.
                 Se registra la versión @request.ConsentNoticeVersion y la fecha de tu aceptación.
             </p>
-            <button class="primary" disabled="@(!status.CanJoin || busy)">Tomar turno</button>
+            <button class="primary" disabled="@(!interactiveReady || !status.CanJoin || busy)">Tomar turno</button>
+            </fieldset>
         </EditForm>
     }
     else
@@ -56,7 +58,13 @@ else if (status is not null)
     private CreateQueueTicketRequest request = new();
     private Microsoft.AspNetCore.SignalR.Client.HubConnection? hub;
     private string? error;
-    private bool busy;
+    private bool busy, interactiveReady;
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+        interactiveReady = true;
+        StateHasChanged();
+    }
 
     protected override async Task OnParametersSetAsync()
     {

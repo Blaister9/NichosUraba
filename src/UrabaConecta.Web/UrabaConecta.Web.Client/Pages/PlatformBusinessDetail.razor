@@ -1,5 +1,5 @@
 @page "/admin/negocios/{BusinessId:guid}"
-@rendermode InteractiveAuto
+@rendermode InteractiveServer
 @attribute [Authorize(Roles = "PlatformAdmin,PartnerOperator")]
 @using Microsoft.AspNetCore.Components.Forms
 @inject IUrabaConectaApi Api
@@ -23,6 +23,8 @@ else
     {
         <div class="notice"><strong>Observaciones de la revisión:</strong> @notes</div>
     }
+    @if (!interactiveReady) { <p class="notice" role="status">Activando controles del negocio…</p> }
+    <fieldset disabled="@(!interactiveReady)">
 
     <section class="panel-card">
         <h2>Avance de la configuración</h2>
@@ -102,6 +104,8 @@ else
             </div>
         </section>
     </div>
+
+    <PlatformBusinessSchedule BusinessId="BusinessId" ReadOnly="readOnly" />
 
     <section class="panel-card"><h2>Personas con acceso</h2>
         <p><strong>Propietario:</strong> @(business.OwnerName ?? "Sin asignar") @business.OwnerEmail</p>
@@ -193,6 +197,7 @@ else
             </table>
         </section>
     }
+    </fieldset>
 }
 
 @code {
@@ -203,7 +208,7 @@ else
     private IReadOnlyList<BusinessImageDto> images = [];
     private IReadOnlyList<InvitationDto> invitations = [];
     private IReadOnlyList<BusinessStatusChangeDto> history = [];
-    private bool appointments, queues, orders, uploading, isPlatformAdmin, readOnly;
+    private bool appointments, queues, orders, uploading, isPlatformAdmin, readOnly, interactiveReady;
     private string uploadKind = "Logo", inviteGrant = "BusinessOwner";
     private string? uploadAltText, inviteEmail, inviteName, issuedLink, reason, reviewNotes, message;
 
@@ -212,7 +217,12 @@ else
         isPlatformAdmin = (await AuthenticationState.GetAuthenticationStateAsync()).User.IsInRole("PlatformAdmin");
         await Reload();
     }
-
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+        interactiveReady = true;
+        StateHasChanged();
+    }
     private async Task Reload()
     {
         catalog ??= await Api.GetPlatformBusinessesAsync();

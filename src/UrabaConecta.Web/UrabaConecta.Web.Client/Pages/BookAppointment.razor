@@ -1,5 +1,5 @@
 @page "/negocios/{Slug}/citas"
-@rendermode InteractiveAuto
+@rendermode InteractiveServer
 @inject IUrabaConectaApi Api
 @inject NavigationManager Navigation
 
@@ -9,6 +9,7 @@
 else
 {
     <EditForm Model="request" OnValidSubmit="Submit" FormName="appointment-request" class="appointment-form">
+        <fieldset disabled="@(!interactiveReady)">
         <DataAnnotationsValidator /><ValidationSummary />
         <fieldset><legend>1. Servicio y horario</legend>
             <label>Servicio<InputSelect @bind-Value="request.ServiceId">
@@ -41,6 +42,7 @@ else
         </fieldset>
         @if (error is not null) { <p class="error" role="alert">@error</p> }
         <button class="primary" disabled="@(!interactiveReady || submitting)">@(submitting ? "Enviando…" : "Enviar solicitud")</button>
+        </fieldset>
     </EditForm>
 }
 @code {

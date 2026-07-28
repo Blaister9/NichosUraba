@@ -68,7 +68,25 @@ public sealed class FounderProductionJourneyTests(BrowserFixture fixture) : ICla
         foreach (var kind in new[] { "Logo", "Cover", "Gallery" })
             Assert.Equal(201, await UploadImage(partner, businessId, kind));
 
-        // 8. Invita a la persona propietaria y copia su enlace.
+        // 8. Configura horarios y una excepción desde el onboarding de la socia.
+        var schedule = partner.GetByTestId("platform-schedule");
+        await Expect(schedule).ToBeVisibleAsync();
+        var monday = schedule.GetByTestId("platform-hour-row").Filter(new() { HasText = "Lunes" });
+        var mondayOpening = monday.GetByLabel("Apertura Lunes");
+        await Expect(mondayOpening).ToBeEnabledAsync();
+        await mondayOpening.FillAsync("18:00");
+        await monday.GetByLabel("Cierre Lunes").FillAsync("08:00");
+        await monday.GetByRole(AriaRole.Button, new() { Name = "Guardar Lunes" }).ClickAsync();
+        await Expect(schedule.GetByText("La apertura debe ser anterior al cierre.")).ToBeVisibleAsync();
+        await monday.GetByLabel("Apertura Lunes").FillAsync("09:00");
+        await monday.GetByLabel("Cierre Lunes").FillAsync("17:00");
+        await monday.GetByRole(AriaRole.Button, new() { Name = "Guardar Lunes" }).ClickAsync();
+        await Expect(schedule.GetByText("Horario guardado.")).ToBeVisibleAsync();
+        await schedule.GetByRole(AriaRole.Button, new() { Name = "Guardar excepción" }).ClickAsync();
+        await Expect(schedule.GetByText("Excepción guardada.")).ToBeVisibleAsync();
+        await Expect(schedule.GetByTestId("platform-exception-row")).ToBeVisibleAsync();
+
+        // 9. Invita a la persona propietaria y copia su enlace.
         await partner.GotoAsync($"{fixture.BaseUrl}/admin/negocios/{businessId}");
         await WaitForSection(partner, "Personas con acceso");
         await SubmitUntilNotice(partner, async () =>
@@ -83,7 +101,7 @@ public sealed class FounderProductionJourneyTests(BrowserFixture fixture) : ICla
         var owner = await ownerContext.NewPageAsync();
         await AcceptInvitation(owner, ownerLink, ownerPassword);
 
-        // 9. Previsualiza la ficha antes de publicar.
+        // 10. Previsualiza la ficha antes de publicar.
         await partner.GotoAsync($"{fixture.BaseUrl}/admin/negocios/{businessId}/vista-previa");
         await Expect(partner.GetByRole(AriaRole.Heading, new() { Name = $"Piloto {slug}" })).ToBeVisibleAsync();
         await Expect(partner.GetByText("Salón ficticio del recorrido de producción fundadora."))
@@ -239,41 +257,28 @@ public sealed class FounderProductionJourneyTests(BrowserFixture fixture) : ICla
     }
 
     /// <summary>
-    /// Llena el formulario, pulsa el botón y comprueba el aviso resultante.
-    ///
-    /// El render es <c>InteractiveAuto</c>: hasta que Blazor termina de montarse —en WebAssembly
-    /// puede tardar bastante en una máquina cargada— escribir en un campo sólo toca el DOM
-    /// prerenderizado y el clic no dispara nada; al montarse, el re-render descarta lo escrito.
-    /// Por eso no se espera un tiempo fijo sino que se reintenta la secuencia completa hasta que
-    /// produzca su efecto observable. Si el servidor responde otra cosa, el fallo muestra el
-    /// mensaje real en vez de un tiempo de espera agotado.
+    /// Espera a que el circuito interactivo habilite la acción, la ejecuta una sola vez y comprueba
+    /// su efecto observable. Repetir clics ocultaría regresiones reales y no representa al usuario.
     /// </summary>
-    private static async Task<string> SubmitUntilNotice(IPage page, Func<Task> fill, string button,
+    private async Task<string> SubmitUntilNotice(IPage page, Func<Task> fill, string button,
         string expectedPrefix)
     {
         var notice = page.Locator("p.notice[role=alert]");
-        for (var attempt = 1; attempt <= 6; attempt++)
+        var action = page.GetByRole(AriaRole.Button, new() { Name = button });
+        await Assertions.Expect(action).ToBeEnabledAsync();
+        await fill();
+        await action.ClickAsync();
+        try { await Assertions.Expect(notice).ToBeVisibleAsync(); }
+        catch (PlaywrightException)
         {
-            await fill();
-            await page.GetByRole(AriaRole.Button, new() { Name = button }).ClickAsync();
-            try
-            {
-                await Assertions.Expect(notice).ToContainTextAsync(expectedPrefix, new() { Timeout = 5000 });
-            }
-            catch (PlaywrightException)
-            {
-                // Todavía no era interactivo: se vuelve a intentar la secuencia completa.
-                continue;
-            }
-            var text = (await notice.TextContentAsync())!.Trim();
-            Assert.StartsWith(expectedPrefix, text);
-            return text;
+            Assert.Fail($"La acción «{button}» no produjo aviso.{Environment.NewLine}{fixture.RecentLog}");
         }
-        Assert.Fail($"«{button}» no produjo respuesta tras varios intentos.");
-        throw new InvalidOperationException();
+        var text = (await notice.TextContentAsync())!.Trim();
+        Assert.StartsWith(expectedPrefix, text);
+        return text;
     }
 
-    private static Task<string> ClickUntilNotice(IPage page, string button, string expectedPrefix)
+    private Task<string> ClickUntilNotice(IPage page, string button, string expectedPrefix)
         => SubmitUntilNotice(page, () => Task.CompletedTask, button, expectedPrefix);
 
     /// <summary>Espera a que la sección esté renderizada antes de interactuar con ella.</summary>
