@@ -1,5 +1,7 @@
 # Rendimiento y carga
 
+Para el rendimiento percibido de la Demo pública medido contra Railway el 29 de julio de 2026, con causas, mediciones antes y después y la recomendación sobre las regiones, ver [HOTFIX_RENDIMIENTO_DEMO.md](HOTFIX_RENDIMIENTO_DEMO.md).
+
 Los listados privados de citas y pedidos se limitan a 200 registros para impedir respuestas sin cota. La paginación es deuda técnica.
 
 Prueba reproducible:
