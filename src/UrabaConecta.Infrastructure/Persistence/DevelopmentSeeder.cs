@@ -317,11 +317,15 @@ public static class DevelopmentSeeder
     /// <summary>
     /// Los negocios ficticios se crearon antes de V5, cuando no existía la descripción breve.
     /// Se completa aquí para que el checklist de onboarding refleje su estado real.
+    /// Los archivados se excluyen: el dominio prohíbe editarlos, así que intentarlo lanzaba una
+    /// excepción no controlada durante el arranque y el contenedor no llegaba a escuchar. Basta
+    /// un negocio archivado sin descripción breve para dejar la aplicación sin arrancar.
     /// </summary>
     private static async Task EnsureShortDescriptions(AppDbContext db)
     {
         var now = DateTimeOffset.UtcNow;
-        foreach (var business in await db.Businesses.Where(x => x.ShortDescription == "").ToListAsync())
+        foreach (var business in await db.Businesses
+            .Where(x => x.ShortDescription == "" && x.Status != BusinessStatus.Archived).ToListAsync())
             business.UpdateCommercialProfile(new BusinessProfileEdit(business.Slug, business.Name,
                 business.MunicipalityId, business.CategoryId,
                 Shorten(business.Description, business.Name), business.Description, business.Address,
