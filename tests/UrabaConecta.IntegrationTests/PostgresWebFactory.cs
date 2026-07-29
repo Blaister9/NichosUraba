@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
 
 namespace UrabaConecta.IntegrationTests;
@@ -14,6 +16,13 @@ public sealed class PostgresWebFactory : WebApplicationFactory<Program>, IAsyncL
         builder.UseEnvironment("Development");
         builder.UseSetting("ConnectionStrings:DefaultConnection", _postgres.GetConnectionString());
         builder.UseSetting("URABACONECTA_TRACKING_HMAC_KEY", "integration-test-hmac-key-at-least-32-bytes");
+        // Permite afirmar cuántas sentencias cuesta una petición, que es la regresión que
+        // provocaba catorce segundos en la consola administrativa.
+        builder.ConfigureServices(services =>
+        {
+            services.AddSingleton<QueryCounter>();
+            services.AddSingleton<IInterceptor, CountingInterceptor>();
+        });
     }
 
     public Task InitializeAsync() => _postgres.StartAsync();

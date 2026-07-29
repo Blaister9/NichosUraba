@@ -9,6 +9,7 @@ public sealed class BusinessImageUseCases(
     IPlatformAdministrationStore businesses,
     IObjectStorage storage,
     IImageProcessor processor,
+    IPublicDirectoryCache publicCache,
     TimeProvider timeProvider) : IBusinessImageUseCases
 {
     public async Task<IReadOnlyList<BusinessImageDto>> ListAsync(PlatformActor actor, Guid businessId,
@@ -30,7 +31,7 @@ public sealed class BusinessImageUseCases(
                 $"El archivo supera el máximo de {ImagePolicy.MaximumOriginalBytes / (1024 * 1024)} MB.", 413);
 
         // La firma binaria manda: no se confía ni en la extensión ni en el content type declarado.
-        var normalized = TryDomain(() => processor.Normalize(file.Content));
+        var normalized = TryDomain(() => processor.Normalize(file.Content, imageKind));
 
         var now = timeProvider.GetUtcNow();
         await using var tx = await store.BeginTransactionAsync(cancellationToken);
@@ -70,6 +71,7 @@ public sealed class BusinessImageUseCases(
         Audit(businessId, actor, PlatformAuditAction.ImageUploaded, image, "carga", now);
         await store.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
+        publicCache.Invalidate();
         return Map(image);
     }
 
@@ -84,6 +86,7 @@ public sealed class BusinessImageUseCases(
         TryDomain(() => { image.Describe(request.AltText, request.DisplayOrder, now, request.Version); return true; });
         await store.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
+        publicCache.Invalidate();
         return Map(image);
     }
 
@@ -99,6 +102,7 @@ public sealed class BusinessImageUseCases(
         Audit(businessId, actor, PlatformAuditAction.ImageRemoved, image, "eliminación", now);
         await store.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
+        publicCache.Invalidate();
     }
 
     // -----------------------------------------------------------------------

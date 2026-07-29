@@ -7,12 +7,15 @@
 <p class="eyebrow">Administración de plataforma</p>
 <div class="title-actions"><h1>Negocios piloto</h1><a class="button-link primary" href="/admin/negocios/nuevo">Crear negocio</a></div>
 <p>Alta, preparación y control del acceso público de cada piloto. Esta vista no concede membresía al administrador.</p>
-<div class="filters">
+<fieldset class="filters" disabled="@(!interactiveReady)">
     <label>Buscar<input @bind="search" /></label>
     <label>Estado<select @bind="status"><option value="">Todos</option><option>Draft</option><option>PendingConfiguration</option><option>Active</option><option>Suspended</option><option>Archived</option></select></label>
     <label>Función<select @bind="module"><option value="">Todas</option><option value="Appointments">Citas</option><option value="VirtualQueues">Turnos</option><option value="PickupOrders">Pedidos</option></select></label>
-    <button class="secondary" @onclick="Load">Filtrar</button>
-</div>
+    <button class="secondary" @onclick="Load" disabled="@(!interactiveReady || loading)">
+        @(loading ? "Filtrando…" : "Filtrar")
+    </button>
+    @if (!interactiveReady) { <p class="notice" role="status">Preparando los filtros…</p> }
+</fieldset>
 @if (data is null) { <p class="notice">Cargando…</p> }
 else if (data.Items.Count == 0) { <div class="empty">No hay negocios con estos filtros.</div> }
 else
@@ -34,8 +37,20 @@ else
 @code {
     private PlatformBusinessListDto? data;
     private string? search, status, module;
+    private bool loading, interactiveReady;
     protected override Task OnInitializedAsync() => Load();
-    private async Task Load() => data = await Api.GetPlatformBusinessesAsync(search, null, status, module);
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+        interactiveReady = true;
+        StateHasChanged();
+    }
+    private async Task Load()
+    {
+        loading = true;
+        try { data = await Api.GetPlatformBusinessesAsync(search, null, status, module); }
+        finally { loading = false; }
+    }
     private static string State(string value) => value switch
     {
         "Draft" => "Borrador", "PendingConfiguration" => "Configuración pendiente", "Active" => "Activo",

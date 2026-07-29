@@ -6,9 +6,16 @@ using UrabaConecta.Domain;
 
 namespace UrabaConecta.Infrastructure.Persistence;
 
-public sealed class UrabaStore(AppDbContext db, IObjectStorage storage) : IUrabaStore
+public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicDirectoryCache publicCache)
+    : IUrabaStore
 {
-    public async Task<IReadOnlyList<BusinessCardDto>> FindBusinessesAsync(string? search, string? municipality,
+    public Task<IReadOnlyList<BusinessCardDto>> FindBusinessesAsync(string? search, string? municipality,
+        string? category, CancellationToken cancellationToken)
+        // El directorio publicado es idéntico para todos los visitantes.
+        => publicCache.GetOrCreateAsync($"directorio|{search}|{municipality}|{category}",
+            ct => QueryBusinessesAsync(search, municipality, category, ct), cancellationToken);
+
+    private async Task<IReadOnlyList<BusinessCardDto>> QueryBusinessesAsync(string? search, string? municipality,
         string? category, CancellationToken cancellationToken)
     {
         var query = from b in db.Businesses.AsNoTracking()
@@ -44,47 +51,60 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage) : IUraba
             x.Logo?.AltText, x.Cover?.AltText, x.ShortDescription)).ToList();
     }
 
-    public async Task<BusinessProfileDto?> GetBusinessProfileAsync(string slug, bool requirePublished,
+    public Task<BusinessProfileDto?> GetBusinessProfileAsync(string slug, bool requirePublished,
+        CancellationToken cancellationToken)
+        // Sólo se cachea la ficha pública. La vista previa administrativa (requirePublished: false)
+        // debe reflejar cambios sin espera, así que siempre consulta la base.
+        => requirePublished
+            ? publicCache.GetOrCreateAsync($"ficha|{slug}",
+                ct => QueryBusinessProfileAsync(slug, true, ct), cancellationToken)
+            : QueryBusinessProfileAsync(slug, false, cancellationToken);
+
+    private async Task<BusinessProfileDto?> QueryBusinessProfileAsync(string slug, bool requirePublished,
         CancellationToken cancellationToken)
     {
+        // Una sola sentencia: la ficha pública costaba ocho idas y vueltas secuenciales y la
+        // base vive en otra región. Se proyectan valores crudos y se formatean en memoria para
+        // que todo sea traducible a SQL.
         var data = await (from b in db.Businesses.AsNoTracking()
                           join m in db.Municipalities on b.MunicipalityId equals m.Id
                           join c in db.Categories on b.CategoryId equals c.Id
                           where b.Slug == slug &&
                                 (!requirePublished || (b.Status == BusinessStatus.Active && b.IsPublished))
-                          select new { b, m, c }).SingleOrDefaultAsync(cancellationToken);
+                          select new
+                          {
+                              b,
+                              MunicipalitySlug = m.Slug, MunicipalityName = m.Name,
+                              CategorySlug = c.Slug, CategoryName = c.Name,
+                              Modules = db.BusinessModules.Where(x => x.BusinessId == b.Id && x.IsEnabled)
+                                  .Select(x => x.Module).ToList(),
+                              Hours = db.BusinessHours.Where(x => x.BusinessId == b.Id)
+                                  .OrderBy(x => x.Day)
+                                  .Select(x => new { x.Day, x.OpensAt, x.ClosesAt }).ToList(),
+                              Services = db.Services.Where(x => x.BusinessId == b.Id && x.IsActive)
+                                  .OrderBy(x => x.DisplayOrder).ThenBy(x => x.Name)
+                                  .Select(x => new ServiceDto(x.Id, x.Name, x.Description, x.DurationMinutes,
+                                      x.ReferencePrice, x.DisplayOrder, x.IsActive, 0, x.Version)).ToList(),
+                              Images = db.BusinessImages.Where(x => x.BusinessId == b.Id && !x.IsDeleted)
+                                  .OrderBy(x => x.Kind).ThenBy(x => x.DisplayOrder)
+                                  .Select(x => new { x.Id, x.Kind, x.StorageKey, x.AltText, x.Width, x.Height, x.DisplayOrder, x.Version })
+                                  .ToList(),
+                          }).SingleOrDefaultAsync(cancellationToken);
         if (data is null) return null;
-        var hasAppointments = await db.BusinessModules.AnyAsync(x => x.BusinessId == data.b.Id &&
-            x.Module == BusinessModuleKind.Appointments && x.IsEnabled, cancellationToken);
-        var hours = await db.BusinessHours.AsNoTracking().Where(x => hasAppointments && x.BusinessId == data.b.Id)
-            .OrderBy(x => x.Day).Select(x => new BusinessHourDto(x.Day, x.OpensAt.ToString("HH:mm"), x.ClosesAt.ToString("HH:mm")))
-            .ToListAsync(cancellationToken);
-        var services = await db.Services.AsNoTracking().Where(x => hasAppointments &&
-                x.BusinessId == data.b.Id && x.IsActive)
-            .OrderBy(x => x.DisplayOrder).ThenBy(x => x.Name)
-            .Select(x => new ServiceDto(x.Id, x.Name, x.Description, x.DurationMinutes, x.ReferencePrice,
-                x.DisplayOrder, x.IsActive, 0, x.Version))
-            .ToListAsync(cancellationToken);
-        var images = await db.BusinessImages.AsNoTracking()
-            .Where(x => x.BusinessId == data.b.Id && !x.IsDeleted)
-            .OrderBy(x => x.Kind).ThenBy(x => x.DisplayOrder)
-            .Select(x => new BusinessImageDto(x.Id, x.Kind.ToString(), x.StorageKey, x.AltText,
-                x.Width, x.Height, x.DisplayOrder, x.Version))
-            .ToListAsync(cancellationToken);
-        var publicHours = await db.BusinessHours.AsNoTracking().Where(x => x.BusinessId == data.b.Id)
-            .OrderBy(x => x.Day)
+        var publicHours = data.Hours
             .Select(x => new BusinessHourDto(x.Day, x.OpensAt.ToString("HH:mm"), x.ClosesAt.ToString("HH:mm")))
-            .ToListAsync(cancellationToken);
+            .ToList();
+        var hasAppointments = data.Modules.Contains(BusinessModuleKind.Appointments);
+        var images = data.Images.Select(x => new BusinessImageDto(x.Id, x.Kind.ToString(),
+            storage.PublicUrl(x.StorageKey), x.AltText, x.Width, x.Height, x.DisplayOrder, x.Version)).ToList();
         return new(data.b.Slug, data.b.Name, data.b.Description, data.b.Address, data.b.PublicPhone,
-            new(data.c.Slug, data.c.Name), new(data.m.Slug, data.m.Name),
-            hours.Count > 0 ? hours : publicHours, services,
-            await db.BusinessModules.AnyAsync(q => q.BusinessId == data.b.Id && q.Module == BusinessModuleKind.VirtualQueues && q.IsEnabled,
-                cancellationToken),
-            await db.BusinessModules.AnyAsync(s => s.BusinessId == data.b.Id && s.Module == BusinessModuleKind.PickupOrders && s.IsEnabled,
-                cancellationToken),
+            new(data.CategorySlug, data.CategoryName), new(data.MunicipalitySlug, data.MunicipalityName),
+            publicHours, hasAppointments ? data.Services : [],
+            data.Modules.Contains(BusinessModuleKind.VirtualQueues),
+            data.Modules.Contains(BusinessModuleKind.PickupOrders),
             data.b.ShortDescription, data.b.ReferencePoint, data.b.WhatsAppUrl, data.b.PublicEmail,
             data.b.InstagramUrl, data.b.FacebookUrl, data.b.LocationUrl, data.b.CustomerInstructions,
-            images.Select(x => x with { Url = storage.PublicUrl(x.Url) }).ToList(),
+            images,
             OpenStatus(data.b.TimeZoneId, publicHours));
     }
 
@@ -188,20 +208,24 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage) : IUraba
     public async Task<IReadOnlyList<AppointmentRecord>> GetAppointmentsAsync(Guid businessId, DateOnly? date,
         AppointmentStatus? status, CancellationToken cancellationToken)
     {
+        // Todas las citas del listado pertenecen al mismo negocio, así que se lee una sola vez.
+        var business = await db.Businesses.AsNoTracking().SingleAsync(x => x.Id == businessId, cancellationToken);
         var query = db.Appointments.AsNoTracking().Where(x => x.BusinessId == businessId);
         if (status.HasValue) query = query.Where(x => x.Status == status.Value);
         if (date.HasValue)
         {
-            var business = await db.Businesses.AsNoTracking().SingleAsync(x => x.Id == businessId, cancellationToken);
             var zone = TimeZoneInfo.FindSystemTimeZoneById(business.TimeZoneId);
             var start = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(date.Value.ToDateTime(TimeOnly.MinValue), zone), TimeSpan.Zero);
             var end = start.AddDays(1);
             query = query.Where(x => x.StartAtUtc >= start && x.StartAtUtc < end);
         }
         var appointments = await query.OrderByDescending(x => x.StartAtUtc).Take(200).ToListAsync(cancellationToken);
-        var records = new List<AppointmentRecord>();
-        foreach (var appointment in appointments) records.Add(await BuildRecord(appointment, cancellationToken));
-        return records;
+        if (appointments.Count == 0) return [];
+        // Los consentimientos se traen en bloque: uno por cita costaba una ida y vuelta por fila.
+        var consentIds = appointments.Select(x => x.ConsentReceiptId).Distinct().ToList();
+        var consents = await db.ConsentReceipts.AsNoTracking().Where(x => consentIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, cancellationToken);
+        return appointments.Select(x => new AppointmentRecord(x, business, consents[x.ConsentReceiptId])).ToList();
     }
 
     public async Task<AppointmentRecord?> GetAppointmentAsync(Guid businessId, Guid appointmentId,
@@ -219,6 +243,10 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage) : IUraba
             throw new ApiException("CONCURRENCY_CONFLICT",
                 "La información cambió mientras la editaba. Recargue e intente de nuevo.", 409);
         }
+        // Cualquier escritura por esta vía puede alterar lo que muestra el directorio o una ficha
+        // (servicios, horarios, personal). Invalidar aquí, y no en cada caso de uso, evita que un
+        // camino nuevo olvide hacerlo y deje información vencida a la vista del público.
+        publicCache.Invalidate();
     }
     public async Task<IReadOnlyList<ServiceDto>> GetServicesAsync(Guid businessId, DateTimeOffset nowUtc,
         CancellationToken cancellationToken)

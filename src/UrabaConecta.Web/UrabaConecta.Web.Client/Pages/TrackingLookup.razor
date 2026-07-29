@@ -7,9 +7,17 @@
     <p class="eyebrow">Seguimiento público</p><h1>Consulte su cita</h1>
     <p>Escriba el código recibido al enviar la solicitud.</p>
     <label>Código de seguimiento<InputText @bind-Value="code" autocomplete="off" /></label>
-    <button class="primary" @onclick="Open" disabled="@(code.Trim().Length < 20)">Consultar</button>
+    <button class="primary" @onclick="Open" disabled="@(!interactiveReady || code.Trim().Length < 20)">Consultar</button>
+    @if (!interactiveReady) { <p class="notice" role="status">Preparando la consulta…</p> }
 </section>
 @code {
     private string code = "";
+    private bool interactiveReady;
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+        interactiveReady = true;
+        StateHasChanged();
+    }
     private void Open() => Navigation.NavigateTo($"/seguimiento/citas/{Uri.EscapeDataString(code.Trim())}");
 }

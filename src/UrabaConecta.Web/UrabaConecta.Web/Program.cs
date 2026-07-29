@@ -1,5 +1,7 @@
+using System.IO.Compression;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -9,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using UrabaConecta.Application;
 using UrabaConecta.Contracts;
 using UrabaConecta.Infrastructure;
+using UrabaConecta.Infrastructure.Caching;
 using UrabaConecta.Infrastructure.Identity;
 using UrabaConecta.Infrastructure.Persistence;
 using UrabaConecta.Infrastructure.Security;
@@ -140,6 +143,21 @@ builder.Services.AddScoped<IPlatformAdministrationUseCases, PlatformAdministrati
 builder.Services.AddScoped<IQueueChangeNotifier, SignalRQueueChangeNotifier>();
 builder.Services.AddScoped<IUrabaConectaApi, ServerUrabaConectaApi>();
 builder.Services.AddSignalR();
+builder.Services.AddMemoryCache();
+builder.Services.Configure<PublicCacheOptions>(builder.Configuration.GetSection(PublicCacheOptions.SectionName));
+builder.Services.AddSingleton<IPublicDirectoryCache, PublicDirectoryCache>();
+// El documento HTML y las respuestas JSON se servían sin comprimir. Los activos estáticos ya
+// salen precomprimidos por MapStaticAssets, así que esta compresión sólo alcanza lo dinámico.
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+    options.MimeTypes = ["text/html", "text/css", "text/plain", "text/javascript", "application/javascript",
+        "application/json", "application/problem+json", "image/svg+xml"];
+});
+builder.Services.Configure<BrotliCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
+builder.Services.Configure<GzipCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddProblemDetails();
 builder.Services.AddHealthChecks().AddDbContextCheck<AppDbContext>("postgresql", tags: ["ready"]);
@@ -165,6 +183,7 @@ builder.Services.AddRateLimiter(options =>
 var app = builder.Build();
 var contentSecurityPolicy = ContentSecurityPolicyFactory.Create(storageOptions.PublicBaseUrl);
 app.UseForwardedHeaders();
+app.UseResponseCompression();
 if (app.Environment.IsDevelopment()) app.UseWebAssemblyDebugging();
 else { app.UseExceptionHandler(); app.UseHsts(); }
 app.UseExceptionHandler();

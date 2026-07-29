@@ -206,7 +206,7 @@ public sealed partial class PlatformAdministrationApiTests(PostgresWebFactory fa
             ExistingOwnerEmail = DevelopmentSeeder.BellaOwnerEmail, SaveAsDraft = saveAsDraft
         };
 
-    private static async Task Login(HttpClient client, string email)
+    internal static async Task Login(HttpClient client, string email)
     {
         var html = await client.GetStringAsync("/Account/Login");
         var token = AntiforgeryRegex().Match(html).Groups[1].Value.Replace("&quot;", "\"").Replace("&amp;", "&");

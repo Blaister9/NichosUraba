@@ -14,14 +14,26 @@ else
         <p>Recoger: @Local(order.PickupStart)<br />Celular: @order.PhoneMasked</p>
         @foreach (var line in order.Lines) { <p>@line.Quantity × @line.ProductName <strong>@line.LineTotal.ToString("C0", Colombia)</strong></p> }
         <p><strong>Total: @order.Total.ToString("C0", Colombia)</strong></p>
-        @if (order.CanCancel) { <button class="danger" disabled="@busy" @onclick="Cancel">Cancelar pedido</button> }
+        @if (order.CanCancel)
+        {
+            <button class="danger" disabled="@(!interactiveReady || busy)" @onclick="Cancel">
+                @(busy ? "Cancelando…" : "Cancelar pedido")
+            </button>
+            @if (!interactiveReady) { <p class="notice" role="status">Preparando la cancelación…</p> }
+        }
     </section>
 }
 @code {
     [Parameter] public string Code { get; set; } = "";
-    private PickupOrderTrackingDto? order; private string? error; private bool busy;
+    private PickupOrderTrackingDto? order; private string? error; private bool busy, interactiveReady;
     private static readonly System.Globalization.CultureInfo Colombia = new("es-CO");
     protected override async Task OnParametersSetAsync() => await Load();
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+        interactiveReady = true;
+        StateHasChanged();
+    }
     private async Task Load()
     {
         try { order = await Api.GetPickupOrderAsync(Code); if (order is null) error = "No encontramos el pedido."; }

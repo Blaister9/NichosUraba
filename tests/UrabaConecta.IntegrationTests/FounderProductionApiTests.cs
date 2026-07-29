@@ -280,14 +280,17 @@ public sealed partial class FounderProductionApiTests(PostgresWebFactory factory
             "vacaciones.jpg", "image/jpeg", original, "Fachada del local");
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var stored = (await response.Content.ReadFromJsonAsync<BusinessImageDto>(Json))!;
-        Assert.Equal(1600, stored.Width);
-        Assert.Equal(800, stored.Height);
+        // Una portada se muestra a 640 px en la tarjeta y a ancho completo en la ficha: se
+        // guarda a 1280 px, no a 1600, y siempre en WebP.
+        Assert.Equal(1280, stored.Width);
+        Assert.Equal(640, stored.Height);
         Assert.Equal("Fachada del local", stored.AltText);
+        Assert.EndsWith(".webp", stored.Url);
 
         var served = await admin.GetByteArrayAsync(stored.Url);
         using var processed = Image.Load(served);
         Assert.Null(processed.Metadata.ExifProfile);
-        Assert.Equal(1600, processed.Width);
+        Assert.Equal(1280, processed.Width);
     }
 
     [Fact]

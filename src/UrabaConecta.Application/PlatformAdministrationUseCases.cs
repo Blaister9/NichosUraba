@@ -9,6 +9,7 @@ public sealed class PlatformAdministrationUseCases(
     IIdentityAccountManager identity,
     IUrabaStore directory,
     IObjectStorage storage,
+    IPublicDirectoryCache publicCache,
     TimeProvider timeProvider) : IPlatformAdministrationUseCases
 {
     public async Task<PlatformBusinessListDto> ListAsync(PlatformActor actor, string? search, string? municipality,
@@ -79,6 +80,7 @@ public sealed class PlatformAdministrationUseCases(
             business.Status, actor.UserId, "Alta del negocio.", now));
         await store.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
+        publicCache.Invalidate();
         return new(ToDto((await store.GetAsync(business.Id, cancellationToken))!), temporaryPassword);
     }
 
@@ -138,6 +140,7 @@ public sealed class PlatformAdministrationUseCases(
         });
         Audit(businessId, actor, PlatformAuditAction.BusinessUpdated, before, Snapshot(business), now);
         await store.SaveChangesAsync(cancellationToken); await tx.CommitAsync(cancellationToken);
+        publicCache.Invalidate();
         return ToDto((await store.GetAsync(businessId, cancellationToken))!);
     }
 
@@ -175,6 +178,7 @@ public sealed class PlatformAdministrationUseCases(
                 business.Status, actor.UserId, request.Reason, now));
         }
         await store.SaveChangesAsync(cancellationToken); await tx.CommitAsync(cancellationToken);
+        publicCache.Invalidate();
         if (action.Equals("delete", StringComparison.OrdinalIgnoreCase)) return ToDto(record);
         return ToDto((await store.GetAsync(businessId, cancellationToken))!);
     }
@@ -201,6 +205,7 @@ public sealed class PlatformAdministrationUseCases(
         store.AddStatusChange(new BusinessStatusChange(Guid.NewGuid(), businessId, previous, business.Status,
             actor.UserId, "Enviado a revisión.", now));
         await store.SaveChangesAsync(cancellationToken); await tx.CommitAsync(cancellationToken);
+        publicCache.Invalidate();
         return ToDto((await store.GetAsync(businessId, cancellationToken))!);
     }
 
@@ -221,6 +226,7 @@ public sealed class PlatformAdministrationUseCases(
         store.AddStatusChange(new BusinessStatusChange(Guid.NewGuid(), businessId, previous, business.Status,
             actor.UserId, request.Notes, now));
         await store.SaveChangesAsync(cancellationToken); await tx.CommitAsync(cancellationToken);
+        publicCache.Invalidate();
         return ToDto((await store.GetAsync(businessId, cancellationToken))!);
     }
 
@@ -277,6 +283,7 @@ public sealed class PlatformAdministrationUseCases(
         Audit(businessId, actor, PlatformAuditAction.ModulesChanged, "{}",
             JsonSerializer.Serialize(selected.Select(x => x.ToString())), now);
         await store.SaveChangesAsync(cancellationToken); await tx.CommitAsync(cancellationToken);
+        publicCache.Invalidate();
         return ToDto((await store.GetAsync(businessId, cancellationToken))!);
     }
 

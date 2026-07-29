@@ -15,7 +15,13 @@
             <dt>Servicio</dt><dd>@appointment.ServiceName</dd><dt>Fecha y hora</dt><dd>@LocalDate(appointment.Start)</dd>
             <dt>Teléfono</dt><dd>@appointment.PhoneMasked</dd><dt>Última actualización</dt><dd>@appointment.UpdatedAt.ToString("dd/MM/yyyy HH:mm") UTC</dd>
         </dl>
-        @if (appointment.CanCancel) { <button class="danger" @onclick="Cancel" disabled="@working">@(working ? "Cancelando…" : "Cancelar cita")</button> }
+        @if (appointment.CanCancel)
+        {
+            <button class="danger" @onclick="Cancel" disabled="@(!interactiveReady || working)">
+                @(working ? "Cancelando…" : "Cancelar cita")
+            </button>
+            @if (!interactiveReady) { <p class="notice" role="status">Preparando la cancelación…</p> }
+        }
         @if (error is not null) { <p class="error">@error</p> }
     }
 </section>
@@ -23,9 +29,15 @@
     [Parameter] public string Code { get; set; } = "";
     [SupplyParameterFromQuery(Name = "new")] public bool IsNew { get; set; }
     private AppointmentTrackingDto? appointment;
-    private bool loading = true, working;
+    private bool loading = true, working, interactiveReady;
     private string? error;
     protected override async Task OnParametersSetAsync() => await Load();
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+        interactiveReady = true;
+        StateHasChanged();
+    }
     private async Task Load() { loading = true; appointment = await Api.GetAppointmentTrackingAsync(Code); loading = false; }
     private async Task Cancel()
     {

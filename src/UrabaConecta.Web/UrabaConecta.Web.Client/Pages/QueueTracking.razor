@@ -20,7 +20,10 @@ else if (ticket is not null)
         <p class="meta">El tiempo es aproximado y puede cambiar. Esta página se actualiza en tiempo real y al reconectar.</p>
         @if (ticket.CanCancel)
         {
-            <button class="danger" @onclick="Cancel" disabled="@busy">Cancelar mi turno</button>
+            <button class="danger" @onclick="Cancel" disabled="@(!interactiveReady || busy)">
+                @(busy ? "Cancelando…" : "Cancelar mi turno")
+            </button>
+            @if (!interactiveReady) { <p class="notice" role="status">Preparando la cancelación…</p> }
         }
     </section>
 }
@@ -31,10 +34,23 @@ else if (ticket is not null)
     private Microsoft.AspNetCore.SignalR.Client.HubConnection? hub;
     private readonly CancellationTokenSource refreshCancellation = new();
     private string? error;
-    private bool busy;
+    private bool busy, interactiveReady;
+    private string? subscribedCode;
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+        interactiveReady = true;
+        StateHasChanged();
+    }
+
     protected override async Task OnParametersSetAsync()
     {
         await Load();
+        // El circuito prerenderiza y luego vuelve a fijar parámetros. Suscribirse en cada
+        // pasada abría un hub adicional y dejaba corriendo el sondeo anterior sin cancelar.
+        if (subscribedCode == Code) return;
+        subscribedCode = Code;
         if (hub is not null) await hub.DisposeAsync();
         hub = new Microsoft.AspNetCore.SignalR.Client.HubConnectionBuilder()
             .WithUrl(Navigation.ToAbsoluteUri("/hubs/queue")).WithAutomaticReconnect().Build();
@@ -59,7 +75,10 @@ else if (ticket is not null)
     }
     private async Task RefreshLoop()
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        // Red de seguridad, no el mecanismo principal: el hub empuja "TicketChanged" al
+        // instante. Sondear cada dos segundos consultaba la base treinta veces por minuto
+        // y por visitante, y la base está en otra región.
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15));
         try
         {
             while (await timer.WaitForNextTickAsync(refreshCancellation.Token))

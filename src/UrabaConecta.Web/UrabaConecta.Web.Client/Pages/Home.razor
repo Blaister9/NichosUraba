@@ -13,7 +13,9 @@
     <div><strong>Tomar turno</strong><span>Entre a una fila virtual.</span></div>
     <div><strong>Pedir para recoger</strong><span>Elija productos y una franja.</span></div>
 </section>
-<section class="search-panel" aria-label="Filtros del directorio">
+@* Los filtros permanecen deshabilitados hasta que el circuito responde: un control que
+   parece funcionar antes de conectar descarta el clic sin avisar. *@
+<fieldset class="search-panel" aria-label="Filtros del directorio" disabled="@(!interactiveReady)">
     <label>Buscar por nombre<InputText @bind-Value="search" placeholder="Ej. Bella" /></label>
     <label>Municipio<InputSelect @bind-Value="municipality">
         <option value="">Todos</option><option value="apartado">Apartadó</option><option value="carepa">Carepa</option><option value="turbo">Turbo</option><option value="chigorodo">Chigorodó</option>
@@ -21,8 +23,11 @@
     <label>Categoría<InputSelect @bind-Value="category">
         <option value="">Todas</option><option value="belleza-cuidado-personal">Belleza y cuidado personal</option><option value="barberia">Barbería</option><option value="restaurante">Restaurante</option>
     </InputSelect></label>
-    <button class="primary" @onclick="Load">Buscar</button>
-</section>
+    <button class="primary" @onclick="Load" disabled="@(!interactiveReady || loading)">
+        @(loading ? "Buscando…" : "Buscar")
+    </button>
+    @if (!interactiveReady) { <p class="notice" role="status">Preparando los filtros…</p> }
+</fieldset>
 @if (loading) { <p class="notice">Cargando establecimientos…</p> }
 else if (error is not null) { <p class="error" role="alert">@error</p> }
 else if (businesses.Count == 0)
@@ -32,14 +37,18 @@ else if (businesses.Count == 0)
 else
 {
     <section class="card-grid" aria-live="polite">
-        @foreach (var business in businesses)
+        @foreach (var (business, index) in businesses.Select((x, i) => (x, i)))
         {
             <article class="business-card">
                 @if (business.CoverUrl is { Length: > 0 } cover)
                 {
-                    @* Dimensiones fijas para reservar el espacio y evitar saltos al cargar. *@
+                    @* Dimensiones fijas para reservar el espacio y evitar saltos al cargar.
+                       La portada de la primera tarjeta es el elemento LCP: se pide con prioridad
+                       y sin diferir. Las siguientes quedan por debajo del primer viewport. *@
                     <img class="card-cover" src="@cover" alt="@(business.CoverAltText ?? $"Portada de {business.Name}")"
-                         width="640" height="360" loading="lazy" />
+                         width="640" height="360"
+                         loading="@(index == 0 ? "eager" : "lazy")"
+                         fetchpriority="@(index == 0 ? "high" : "auto")" />
                 }
                 <div class="card-identity">
                     @if (business.LogoUrl is { Length: > 0 } logo)
@@ -63,9 +72,17 @@ else
 @code {
     private string search = "", municipality = "", category = "";
     private string? error;
-    private bool loading = true;
+    private bool loading = true, interactiveReady;
     private IReadOnlyList<BusinessCardDto> businesses = [];
     protected override async Task OnInitializedAsync() => await Load();
+    protected override void OnAfterRender(bool firstRender)
+    {
+        // Sólo se ejecuta en el circuito, nunca durante el prerenderizado: es la señal
+        // fiable de que los controles ya responden.
+        if (!firstRender) return;
+        interactiveReady = true;
+        StateHasChanged();
+    }
     private async Task Load()
     {
         loading = true; error = null;

@@ -43,7 +43,8 @@ public sealed record NormalizedImage(byte[] Content, string ContentType, string 
 /// </summary>
 public interface IImageProcessor
 {
-    NormalizedImage Normalize(ReadOnlyMemory<byte> original);
+    /// <summary>El uso decide el lado mayor: un logo no necesita el tamaño de una galería.</summary>
+    NormalizedImage Normalize(ReadOnlyMemory<byte> original, BusinessImageKind kind);
 }
 
 public static class ImagePolicy
@@ -51,6 +52,23 @@ public static class ImagePolicy
     public const long MaximumOriginalBytes = 5 * 1024 * 1024;
     public const int MaximumLongestSide = 1600;
     public static readonly string[] AllowedContentTypes = ["image/jpeg", "image/png", "image/webp"];
+
+    /// <summary>Formato de salida único. WebP pesa mucho menos que PNG y admite transparencia.</summary>
+    public const string OutputContentType = "image/webp";
+    public const string OutputExtension = ".webp";
+
+    /// <summary>
+    /// Lado mayor según el uso real de la imagen. Guardar todo a 1600 px hacía que una tarjeta
+    /// mostrara a 64 px un archivo pensado para pantalla completa.
+    /// </summary>
+    public static int LongestSideFor(BusinessImageKind kind) => kind switch
+    {
+        // El logo se muestra a 64 px en la tarjeta y a unos 160 px en la ficha.
+        BusinessImageKind.Logo => 320,
+        // La portada se muestra a 640 px en la tarjeta y a ancho completo en la ficha.
+        BusinessImageKind.Cover => 1280,
+        _ => MaximumLongestSide
+    };
 }
 
 // ---------------------------------------------------------------------------

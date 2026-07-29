@@ -17,7 +17,7 @@ public sealed class ImageSharpImageProcessor : IImageProcessor
 {
     private static readonly Configuration SafeConfiguration = CreateConfiguration();
 
-    public NormalizedImage Normalize(ReadOnlyMemory<byte> original)
+    public NormalizedImage Normalize(ReadOnlyMemory<byte> original, BusinessImageKind kind)
     {
         if (original.Length == 0) throw new DomainException("EMPTY_FILE", "El archivo está vacío.");
         if (original.Length > ImagePolicy.MaximumOriginalBytes)
@@ -43,10 +43,11 @@ public sealed class ImageSharpImageProcessor : IImageProcessor
             if (!ImagePolicy.AllowedContentTypes.Contains(format.DefaultMimeType))
                 throw new DomainException("UNSUPPORTED_IMAGE", "Solo se admiten imágenes JPEG, PNG o WebP.");
 
+            var maximumSide = ImagePolicy.LongestSideFor(kind);
             var longest = Math.Max(image.Width, image.Height);
-            if (longest > ImagePolicy.MaximumLongestSide)
+            if (longest > maximumSide)
             {
-                var scale = (double)ImagePolicy.MaximumLongestSide / longest;
+                var scale = (double)maximumSide / longest;
                 image.Mutate(x => x.Resize(
                     Math.Max(1, (int)Math.Round(image.Width * scale)),
                     Math.Max(1, (int)Math.Round(image.Height * scale))));
@@ -54,21 +55,14 @@ public sealed class ImageSharpImageProcessor : IImageProcessor
 
             StripMetadata(image);
 
+            // Salida siempre WebP: un logo PNG de 1600 px pesaba cientos de kilobytes para
+            // mostrarse a 64 px. WebP conserva la transparencia del PNG.
             using var output = new MemoryStream();
-            var (encoder, contentType, extension) = EncoderFor(format);
-            image.Save(output, encoder);
-            return new(output.ToArray(), contentType, extension, image.Width, image.Height);
+            image.Save(output, new WebpEncoder { Quality = 82 });
+            return new(output.ToArray(), ImagePolicy.OutputContentType, ImagePolicy.OutputExtension,
+                image.Width, image.Height);
         }
     }
-
-    private static (IImageEncoder Encoder, string ContentType, string Extension) EncoderFor(IImageFormat format)
-        => format.DefaultMimeType switch
-        {
-            "image/png" => (new PngEncoder { CompressionLevel = PngCompressionLevel.BestCompression },
-                "image/png", ".png"),
-            "image/webp" => (new WebpEncoder { Quality = 82 }, "image/webp", ".webp"),
-            _ => (new JpegEncoder { Quality = 82 }, "image/jpeg", ".jpg")
-        };
 
     /// <summary>Elimina toda la metadata para no publicar geolocalización ni datos del dispositivo.</summary>
     private static void StripMetadata(Image image)

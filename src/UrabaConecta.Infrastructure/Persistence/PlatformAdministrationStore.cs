@@ -24,40 +24,78 @@ public sealed class PlatformAdministrationStore(AppDbContext db) : IPlatformAdmi
         if (Enum.TryParse<BusinessStatus>(status, true, out var parsedStatus)) query = query.Where(x => x.Status == parsedStatus);
         if (Enum.TryParse<BusinessModuleKind>(module, true, out var parsedModule))
             query = query.Where(x => db.BusinessModules.Any(m => m.BusinessId == x.Id && m.Module == parsedModule && m.IsEnabled));
-        var ids = await query.OrderBy(x => x.Name).Select(x => x.Id).Take(200).ToListAsync(cancellationToken);
-        var records = new List<PlatformBusinessRecord>();
-        foreach (var id in ids) if (await GetAsync(id, cancellationToken) is { } item) records.Add(item);
-        return records;
+        // El listado es de sólo lectura y se resuelve en una única consulta: recorrer los
+        // negocios llamando a GetAsync costaba dieciséis idas y vueltas por negocio, y la
+        // base está en otra región, así que cada ida y vuelta se paga en decenas de ms.
+        var rows = await Summaries(query.AsNoTracking()).OrderBy(x => x.Business.Name)
+            .Take(200).ToListAsync(cancellationToken);
+        return rows.Select(Compose).ToList();
     }
 
     public async Task<PlatformBusinessRecord?> GetAsync(Guid businessId, CancellationToken cancellationToken)
     {
-        var business = await db.Businesses.SingleOrDefaultAsync(x => x.Id == businessId, cancellationToken);
-        if (business is null) return null;
-        var municipality = await db.Municipalities.Where(x => x.Id == business.MunicipalityId)
-            .Select(x => x.Name).SingleAsync(cancellationToken);
-        var category = await db.Categories.Where(x => x.Id == business.CategoryId)
-            .Select(x => x.Name).SingleAsync(cancellationToken);
-        var modules = await db.BusinessModules.Where(x => x.BusinessId == businessId).ToListAsync(cancellationToken);
-        var owner = await (from membership in db.BusinessMemberships
-                           join user in db.Users on membership.UserId equals user.Id
-                           where membership.BusinessId == businessId && membership.IsActive &&
-                                 membership.Role == MembershipRole.Owner
-                           orderby membership.CreatedAtUtc
-                           select new IdentityAccount(user.Id, user.Email ?? "", user.DisplayName,
-                               user.MustChangePassword)).FirstOrDefaultAsync(cancellationToken);
-        var operations = await db.Appointments.CountAsync(x => x.BusinessId == businessId, cancellationToken) +
-                         await db.QueueSessions.CountAsync(x => x.BusinessId == businessId, cancellationToken) +
-                         await db.QueueTickets.CountAsync(x => x.BusinessId == businessId, cancellationToken) +
-                         await db.PickupOrders.CountAsync(x => x.BusinessId == businessId, cancellationToken);
-        return new(business, municipality, category, modules, owner,
-            await db.BusinessHours.AnyAsync(x => x.BusinessId == businessId, cancellationToken),
-            await db.Services.AnyAsync(x => x.BusinessId == businessId && x.IsActive, cancellationToken),
-            await db.QueueDefinitions.AnyAsync(x => x.BusinessId == businessId && x.IsActive && x.IsEnabled, cancellationToken),
-            await db.PickupOrderSettings.AnyAsync(x => x.BusinessId == businessId && x.IsEnabled, cancellationToken),
-            await db.ProductCategories.AnyAsync(x => x.BusinessId == businessId && x.IsActive, cancellationToken),
-            await db.Products.AnyAsync(x => x.BusinessId == businessId && x.IsActive, cancellationToken), operations,
-            await db.BusinessImages.Where(x => x.BusinessId == businessId && !x.IsDeleted).ToListAsync(cancellationToken));
+        // Se mantiene el rastreo: UpdateModulesAsync muta los módulos de este registro.
+        var row = await Summaries(db.Businesses.Where(x => x.Id == businessId))
+            .SingleOrDefaultAsync(cancellationToken);
+        return row is null ? null : Compose(row);
+    }
+
+    /// <summary>
+    /// Proyección común del resumen administrativo de un negocio. Reúne catálogos, propietario,
+    /// banderas de preparación y conteos de operación en una sola sentencia.
+    /// </summary>
+    private IQueryable<BusinessSummaryRow> Summaries(IQueryable<Business> source)
+        => source.Select(b => new BusinessSummaryRow
+        {
+            Business = b,
+            Municipality = db.Municipalities.Where(x => x.Id == b.MunicipalityId).Select(x => x.Name).First(),
+            Category = db.Categories.Where(x => x.Id == b.CategoryId).Select(x => x.Name).First(),
+            Modules = db.BusinessModules.Where(x => x.BusinessId == b.Id).ToList(),
+            Images = db.BusinessImages.Where(x => x.BusinessId == b.Id && !x.IsDeleted).ToList(),
+            Owner = (from membership in db.BusinessMemberships
+                     join user in db.Users on membership.UserId equals user.Id
+                     where membership.BusinessId == b.Id && membership.IsActive &&
+                           membership.Role == MembershipRole.Owner
+                     orderby membership.CreatedAtUtc
+                     select new IdentityAccount(user.Id, user.Email ?? "", user.DisplayName,
+                         user.MustChangePassword)).FirstOrDefault(),
+            HasHours = db.BusinessHours.Any(x => x.BusinessId == b.Id),
+            HasService = db.Services.Any(x => x.BusinessId == b.Id && x.IsActive),
+            HasQueueDefinition = db.QueueDefinitions.Any(x => x.BusinessId == b.Id && x.IsActive && x.IsEnabled),
+            HasPickupSettings = db.PickupOrderSettings.Any(x => x.BusinessId == b.Id && x.IsEnabled),
+            HasProductCategory = db.ProductCategories.Any(x => x.BusinessId == b.Id && x.IsActive),
+            HasProduct = db.Products.Any(x => x.BusinessId == b.Id && x.IsActive),
+            Appointments = db.Appointments.Count(x => x.BusinessId == b.Id),
+            QueueSessions = db.QueueSessions.Count(x => x.BusinessId == b.Id),
+            QueueTickets = db.QueueTickets.Count(x => x.BusinessId == b.Id),
+            PickupOrders = db.PickupOrders.Count(x => x.BusinessId == b.Id),
+        });
+
+    private static PlatformBusinessRecord Compose(BusinessSummaryRow row)
+        => new(row.Business, row.Municipality, row.Category, row.Modules, row.Owner,
+            row.HasHours, row.HasService, row.HasQueueDefinition, row.HasPickupSettings,
+            row.HasProductCategory, row.HasProduct,
+            row.Appointments + row.QueueSessions + row.QueueTickets + row.PickupOrders,
+            row.Images);
+
+    private sealed class BusinessSummaryRow
+    {
+        public Business Business { get; init; } = null!;
+        public string Municipality { get; init; } = "";
+        public string Category { get; init; } = "";
+        public List<BusinessModule> Modules { get; init; } = [];
+        public List<BusinessImage> Images { get; init; } = [];
+        public IdentityAccount? Owner { get; init; }
+        public bool HasHours { get; init; }
+        public bool HasService { get; init; }
+        public bool HasQueueDefinition { get; init; }
+        public bool HasPickupSettings { get; init; }
+        public bool HasProductCategory { get; init; }
+        public bool HasProduct { get; init; }
+        public int Appointments { get; init; }
+        public int QueueSessions { get; init; }
+        public int QueueTickets { get; init; }
+        public int PickupOrders { get; init; }
     }
 
     public void AddStatusChange(BusinessStatusChange change) => db.Add(change);
