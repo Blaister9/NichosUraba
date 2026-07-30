@@ -35,10 +35,22 @@ public sealed record AppointmentCreatedDto(string TrackingCode, string Status, s
 public sealed record AppointmentTrackingDto(string Status, string StatusLabel, string BusinessName, string ServiceName,
     DateTimeOffset Start, string PhoneMasked, bool CanCancel, DateTimeOffset UpdatedAt);
 
+/// <summary>
+/// Un permiso no basta para mostrar una acción: el módulo también tiene que estar habilitado en
+/// ese negocio. Sin las banderas de módulo, una propietaria veía las tres operaciones aunque su
+/// establecimiento sólo tuviera una activa.
+/// </summary>
 public sealed record MyBusinessDto(Guid Id, string Name, string Slug, string MembershipRole,
     bool CanManageConfiguration = false, bool CanManageAppointments = true, bool CanManageMembers = false,
     bool CanManageQueues = false, bool CanManageOrders = false, bool SupportsPickupOrdering = false,
-    string BusinessStatus = "Active");
+    string BusinessStatus = "Active",
+    bool HasAppointments = false, bool HasVirtualQueues = false, bool HasPickupOrders = false)
+{
+    /// <summary>Mostrar acción = módulo habilitado en el negocio Y permiso del usuario.</summary>
+    public bool ShowAppointments => HasAppointments && CanManageAppointments;
+    public bool ShowQueues => HasVirtualQueues && CanManageQueues;
+    public bool ShowOrders => HasPickupOrders && CanManageOrders;
+}
 public sealed record MembershipPermissionsDto(bool CanManageAppointments, bool CanManageConfiguration,
     bool CanManageMembers, bool CanManageQueues = false, bool CanManageOrders = false);
 public sealed record BusinessMemberDto(Guid Id, string DisplayName, string Email, bool IsActive, bool IsOwner,

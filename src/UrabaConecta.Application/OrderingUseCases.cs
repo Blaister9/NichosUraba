@@ -232,11 +232,20 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
     {
         if (!await store.CanManageOrdersAsync(userId, businessId, ct))
             throw new ApiException("MEMBERSHIP_FORBIDDEN", "No tiene permiso para administrar pedidos.", 403);
+        await DemandModule(businessId, ct);
     }
     private async Task DemandConfiguration(Guid userId, Guid businessId, CancellationToken ct)
     {
         if (!await store.CanManageConfigurationAsync(userId, businessId, ct))
             throw new ApiException("MEMBERSHIP_FORBIDDEN", "No tiene permiso para configurar el catálogo.", 403);
+        // El catálogo pertenece a pedidos: sin el módulo no hay nada que configurar.
+        await DemandModule(businessId, ct);
+    }
+    /// <summary>Ocultar el botón no basta: una URL directa llegaba igual al módulo no habilitado.</summary>
+    private async Task DemandModule(Guid businessId, CancellationToken ct)
+    {
+        if (!await store.IsModuleEnabledAsync(businessId, BusinessModuleKind.PickupOrders, ct))
+            throw new ApiException("MODULE_DISABLED", "Este establecimiento no tiene pedidos habilitados.", 403);
     }
     private static ProductCategoryDto CategoryDto(ProductCategory x) => new(x.Id, x.Name, x.DisplayOrder, x.IsActive, x.Version);
     private static ProductDto ProductDto(Product x) => new(x.Id, x.ProductCategoryId, x.Name, x.Description, x.ReferencePrice, x.DisplayOrder, x.IsActive, x.Version);

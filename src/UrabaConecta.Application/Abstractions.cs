@@ -36,6 +36,7 @@ public interface IOrderingStore
         CancellationToken cancellationToken);
     Task<bool> CanManageOrdersAsync(Guid userId, Guid businessId, CancellationToken cancellationToken);
     Task<bool> CanManageConfigurationAsync(Guid userId, Guid businessId, CancellationToken cancellationToken);
+    Task<bool> IsModuleEnabledAsync(Guid businessId, BusinessModuleKind module, CancellationToken cancellationToken);
     void AddCategory(ProductCategory category);
     void AddProduct(Product product);
     void AddSettings(PickupOrderSettings settings);
@@ -197,6 +198,8 @@ public interface IUrabaStore
     Task<bool> IsMemberAsync(Guid userId, Guid businessId, CancellationToken cancellationToken);
     Task<bool> CanManageAppointmentsAsync(Guid userId, Guid businessId, CancellationToken cancellationToken);
     Task<bool> CanManageConfigurationAsync(Guid userId, Guid businessId, CancellationToken cancellationToken);
+    /// <summary>Un permiso no habilita un módulo que el negocio no tiene contratado.</summary>
+    Task<bool> IsModuleEnabledAsync(Guid businessId, BusinessModuleKind module, CancellationToken cancellationToken);
     Task<IReadOnlyList<MyBusinessDto>> GetMembershipsAsync(Guid userId, CancellationToken cancellationToken);
     Task<IReadOnlyList<AppointmentRecord>> GetAppointmentsAsync(Guid businessId, DateOnly? date,
         AppointmentStatus? status, CancellationToken cancellationToken);
@@ -253,6 +256,7 @@ public interface IQueueStore
     Task<int> CountActiveAsync(Guid businessId, Guid sessionId, CancellationToken cancellationToken);
     Task<QueueTicket?> GetNextWaitingAsync(Guid businessId, Guid sessionId, CancellationToken cancellationToken);
     Task<bool> CanManageQueuesAsync(Guid userId, Guid businessId, CancellationToken cancellationToken);
+    Task<bool> IsModuleEnabledAsync(Guid businessId, BusinessModuleKind module, CancellationToken cancellationToken);
     Task<bool> IsBusinessActiveAsync(Guid businessId, CancellationToken cancellationToken);
     Task<(string BusinessName, string BusinessSlug)?> GetBusinessNameAsync(Guid businessId, CancellationToken cancellationToken);
     void AddDefinition(QueueDefinition definition);

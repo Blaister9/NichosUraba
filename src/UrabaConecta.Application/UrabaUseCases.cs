@@ -321,6 +321,9 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
         await DemandMembership(userId, businessId, cancellationToken);
         if (!await store.CanManageAppointmentsAsync(userId, businessId, cancellationToken))
             throw new ApiException("APPOINTMENTS_FORBIDDEN", "No tiene permiso para administrar citas.", 403);
+        // Ocultar el botón no basta: una URL directa llegaba igual al módulo no habilitado.
+        if (!await store.IsModuleEnabledAsync(businessId, BusinessModuleKind.Appointments, cancellationToken))
+            throw new ApiException("MODULE_DISABLED", "Este establecimiento no tiene citas habilitadas.", 403);
     }
 
     private async Task DemandConfigurationAccess(Guid userId, Guid businessId, CancellationToken cancellationToken)

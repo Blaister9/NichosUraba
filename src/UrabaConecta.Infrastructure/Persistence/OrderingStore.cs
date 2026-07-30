@@ -72,6 +72,9 @@ public sealed class OrderingStore(AppDbContext db) : IOrderingStore
     public Task<bool> CanManageOrdersAsync(Guid userId, Guid businessId, CancellationToken ct)
         => db.BusinessMemberships.AnyAsync(x => x.UserId == userId && x.BusinessId == businessId &&
             x.IsActive && (x.Role == MembershipRole.Owner || x.CanManageOrders), ct);
+    public Task<bool> IsModuleEnabledAsync(Guid businessId, BusinessModuleKind module, CancellationToken ct)
+        => db.BusinessModules.AsNoTracking()
+            .AnyAsync(x => x.BusinessId == businessId && x.Module == module && x.IsEnabled, ct);
     public Task<bool> CanManageConfigurationAsync(Guid userId, Guid businessId, CancellationToken ct)
         => db.BusinessMemberships.AnyAsync(x => x.UserId == userId && x.BusinessId == businessId &&
             x.IsActive && (x.Role == MembershipRole.Owner || x.CanManageConfiguration), ct);

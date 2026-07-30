@@ -268,6 +268,9 @@ public sealed class QueueUseCases(IQueueStore store, IPublicCodeService codes, I
     {
         if (!await store.CanManageQueuesAsync(userId, businessId, ct))
             throw new ApiException("MEMBERSHIP_FORBIDDEN", "No tiene permiso para administrar turnos.", 403);
+        // Ocultar el botón no basta: una URL directa llegaba igual al módulo no habilitado.
+        if (!await store.IsModuleEnabledAsync(businessId, BusinessModuleKind.VirtualQueues, ct))
+            throw new ApiException("MODULE_DISABLED", "Este establecimiento no tiene turnos habilitados.", 403);
     }
     private async Task DemandActiveBusiness(Guid businessId, CancellationToken ct)
     {

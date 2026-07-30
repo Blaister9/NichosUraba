@@ -189,11 +189,19 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
     public Task<bool> CanManageAppointmentsAsync(Guid userId, Guid businessId, CancellationToken cancellationToken)
         => db.BusinessMemberships.AsNoTracking().AnyAsync(x => x.UserId == userId && x.BusinessId == businessId &&
             x.IsActive && (x.Role == MembershipRole.Owner || x.CanManageAppointments), cancellationToken);
+    public Task<bool> IsModuleEnabledAsync(Guid businessId, BusinessModuleKind module,
+        CancellationToken cancellationToken)
+        => db.BusinessModules.AsNoTracking()
+            .AnyAsync(x => x.BusinessId == businessId && x.Module == module && x.IsEnabled, cancellationToken);
 
     public async Task<IReadOnlyList<MyBusinessDto>> GetMembershipsAsync(Guid userId, CancellationToken cancellationToken)
+        // Un negocio archivado ya no se opera: listarlo en "Mis establecimientos" ofrecía accesos
+        // que no conducen a nada. Se excluye aquí y no en la vista, para que ninguna otra pantalla
+        // lo herede.
         => await (from membership in db.BusinessMemberships.AsNoTracking()
                   join business in db.Businesses.AsNoTracking() on membership.BusinessId equals business.Id
-                  where membership.UserId == userId && membership.IsActive
+                  where membership.UserId == userId && membership.IsActive &&
+                        business.Status != BusinessStatus.Archived
                   orderby business.Name
                   select new MyBusinessDto(business.Id, business.Name, business.Slug, membership.Role.ToString(),
                       membership.Role == MembershipRole.Owner || membership.CanManageConfiguration,
@@ -202,7 +210,13 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
                       membership.Role == MembershipRole.Owner || membership.CanManageQueues,
                       membership.Role == MembershipRole.Owner || membership.CanManageOrders,
                       db.PickupOrderSettings.Any(s => s.BusinessId == business.Id),
-                      business.Status.ToString()))
+                      business.Status.ToString(),
+                      db.BusinessModules.Any(m => m.BusinessId == business.Id &&
+                          m.Module == BusinessModuleKind.Appointments && m.IsEnabled),
+                      db.BusinessModules.Any(m => m.BusinessId == business.Id &&
+                          m.Module == BusinessModuleKind.VirtualQueues && m.IsEnabled),
+                      db.BusinessModules.Any(m => m.BusinessId == business.Id &&
+                          m.Module == BusinessModuleKind.PickupOrders && m.IsEnabled)))
             .ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<AppointmentRecord>> GetAppointmentsAsync(Guid businessId, DateOnly? date,

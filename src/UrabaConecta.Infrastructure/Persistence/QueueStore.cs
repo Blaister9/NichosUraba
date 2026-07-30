@@ -68,6 +68,9 @@ public sealed class QueueStore(AppDbContext db) : IQueueStore
     public Task<bool> CanManageQueuesAsync(Guid userId, Guid businessId, CancellationToken ct)
         => db.BusinessMemberships.AnyAsync(x => x.UserId == userId && x.BusinessId == businessId && x.IsActive &&
             (x.Role == MembershipRole.Owner || x.CanManageQueues), ct);
+    public Task<bool> IsModuleEnabledAsync(Guid businessId, BusinessModuleKind module, CancellationToken ct)
+        => db.BusinessModules.AsNoTracking()
+            .AnyAsync(x => x.BusinessId == businessId && x.Module == module && x.IsEnabled, ct);
     public Task<bool> IsBusinessActiveAsync(Guid businessId, CancellationToken ct)
         => db.Businesses.AnyAsync(x => x.Id == businessId &&
             x.Status == BusinessStatus.Active && x.IsPublished, ct);
