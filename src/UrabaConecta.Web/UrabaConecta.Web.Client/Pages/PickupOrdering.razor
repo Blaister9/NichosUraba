@@ -19,9 +19,9 @@ else if (menu is not null && created is null)
                 <h3>@product.Name</h3><p>@product.Description</p>
                 <strong>@product.ReferencePrice.ToString("C0", Colombia)</strong>
                 <div class="actions">
-                    <button class="secondary" type="button" disabled="@(!interactiveReady)" @onclick="() => Change(product.Id, -1)">−</button>
+                    <button class="secondary" type="button" disabled="@(!Ready)" @onclick="() => Change(product.Id, -1)">−</button>
                     <span data-testid="quantity">@Quantity(product.Id)</span>
-                    <button class="secondary" type="button" disabled="@(!interactiveReady)" @onclick="() => Change(product.Id, 1)">+</button>
+                    <button class="secondary" type="button" disabled="@(!Ready)" @onclick="() => Change(product.Id, 1)">+</button>
                 </div>
             </article>
         }</div></section>
@@ -29,8 +29,13 @@ else if (menu is not null && created is null)
     <section class="config-form">
         <h2>Tu pedido</h2>
         <p><strong>@CartCount unidades · @CartTotal.ToString("C0", Colombia)</strong></p>
+        @* Al hidratar, el circuito crea una instancia nueva y vuelve a pedir menú y franjas: la
+           lista prerenderizada desaparece durante ese segundo. Antes el formulario ya estaba
+           habilitado en esa ventana, así que quien llegaba rápido encontraba el selector de hora
+           vacío y parecía que el pedido no funcionaba. Ahora se espera a tener los datos. *@
+        @if (loadingData) { <p class="notice" role="status">Cargando horarios disponibles…</p> }
         <EditForm Model="request" OnValidSubmit="Submit" FormName="pickup-order">
-            <fieldset disabled="@(!interactiveReady)">
+            <fieldset disabled="@(!Ready)">
             <DataAnnotationsValidator /><ValidationSummary />
             <label>Hora para recoger
                 <InputSelect @bind-Value="selectedSlot">
@@ -49,7 +54,8 @@ else if (menu is not null && created is null)
                 Se registra la versión @request.ConsentNoticeVersion y la fecha de tu aceptación.
             </p>
             <p class="meta">El pago se realiza directamente en el establecimiento. UrabáConecta no procesa pagos.</p>
-            <button class="primary" disabled="@(!interactiveReady || busy || CartCount == 0 || string.IsNullOrEmpty(selectedSlot))">Confirmar pedido</button>
+            @if (!Ready) { <p class="notice" role="status">Preparando el formulario…</p> }
+            <button class="primary" disabled="@(!Ready || busy || CartCount == 0 || string.IsNullOrEmpty(selectedSlot))">@(busy ? "Enviando pedido…" : "Confirmar pedido")</button>
             </fieldset>
         </EditForm>
     </section>
@@ -69,15 +75,22 @@ else if (created is not null)
     private readonly Dictionary<Guid, int> quantities = [];
     private CreatePickupOrderRequest request = new();
     private PickupOrderCreatedDto? created; private string selectedSlot = ""; private string? error; private bool busy;
-    private bool interactiveReady;
+    private bool interactiveReady, loadingData = true;
+    /// <summary>El formulario sólo acepta interacción con el circuito vivo y los datos ya cargados.</summary>
+    private bool Ready => interactiveReady && !loadingData;
     private static readonly System.Globalization.CultureInfo Colombia = new("es-CO");
     protected override async Task OnParametersSetAsync()
     {
         // El formulario declara la versión que mostró; el servidor rechaza cualquier otra.
         try { request.ConsentNoticeVersion = (await Api.GetLegalInfoAsync()).PolicyVersion; }
         catch (ApiException) { }
+        // Secuencial a propósito: con InteractiveServer ambas llamadas comparten el AppDbContext
+        // del circuito y lanzarlas en paralelo lo rompería.
+        loadingData = true;
         try { menu = await Api.GetPickupMenuAsync(Slug); slots = (await Api.GetPickupSlotsAsync(Slug)).Slots; }
         catch (ApiException ex) { error = ex.Message; }
+        catch (Exception) { error = "No pudimos cargar el menú. Recargue la página."; }
+        finally { loadingData = false; }
     }
     protected override void OnAfterRender(bool firstRender)
     {
@@ -91,13 +104,22 @@ else if (created is not null)
     private decimal CartTotal => menu?.Products.Sum(x => x.ReferencePrice * Quantity(x.Id)) ?? 0;
     private async Task Submit()
     {
+        // Guarda de doble envío: sin ella un segundo clic creaba un pedido duplicado.
+        if (busy) return;
         if (!DateTimeOffset.TryParse(selectedSlot, out var pickup)) { error = "Selecciona una franja."; return; }
         request.PickupStart = pickup;
         request.Lines = quantities.Where(x => x.Value > 0)
             .Select(x => new CreatePickupOrderLineRequest { ProductId = x.Key, Quantity = x.Value }).ToList();
         busy = true; error = null;
         try { created = await Api.CreatePickupOrderAsync(Slug, request); }
-        catch (ApiException ex) { error = ex.Message; slots = (await Api.GetPickupSlotsAsync(Slug)).Slots; }
+        catch (ApiException ex)
+        {
+            // Si la franja se llenó mientras el cliente escribía, se recargan las disponibles
+            // para que pueda elegir otra sin perder el carrito.
+            error = ex.Message;
+            try { slots = (await Api.GetPickupSlotsAsync(Slug)).Slots; } catch (ApiException) { }
+        }
+        catch (Exception) { error = "No pudimos crear el pedido. Intente de nuevo."; }
         finally { busy = false; }
     }
     private static string Local(DateTimeOffset value) =>

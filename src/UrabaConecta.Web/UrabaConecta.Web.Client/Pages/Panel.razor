@@ -17,8 +17,14 @@ else
                 { <p class="notice"><strong>Establecimiento suspendido.</strong> Puede consultar el historial, pero no iniciar operaciones nuevas.</p> }
                 @* Cada operación exige el módulo habilitado en ESTE negocio y además el permiso
                    de la persona. Antes bastaba el permiso, y una propietaria veía las tres
-                   operaciones aunque su establecimiento sólo tuviera una activa. *@
-                <div class="actions">
+                   operaciones aunque su establecimiento sólo tuviera una activa.
+
+                   data-enhance-nav="false": al salir de este componente interactivo, la navegación
+                   mejorada cambiaba la dirección pero dejaba en pantalla "Mis establecimientos".
+                   Quien pulsaba "Operar pedidos" seguía viendo la misma página y parecía que la
+                   operación no funcionaba. Con la navegación normal la página destino se carga
+                   completa. *@
+                <div class="actions" data-enhance-nav="false">
                 @if (business.ShowAppointments)
                 {
                     <a class="button-link" href="/panel/@business.Id/citas">Administrar citas</a>

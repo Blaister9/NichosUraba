@@ -7,10 +7,13 @@
 <a class="back-link" href="/panel">← Establecimientos</a>
 <p class="eyebrow">Operación</p><h1>Pedidos para recoger</h1>
 <div class="actions">
-    <button class="secondary" @onclick="Load">Actualizar</button>
+    <button class="secondary" @onclick="Load" disabled="@(!interactiveReady || busy || loading)">@(loading ? "Actualizando…" : "Actualizar")</button>
     <a class="button-link secondary" href="/panel/@BusinessId/configuracion/pedidos">Configurar catálogo</a>
 </div>
+@if (!interactiveReady) { <p class="notice" role="status">Preparando el panel…</p> }
 @if (error is not null) { <div class="error" role="alert">@error</div> }
+@if (message is not null) { <p class="success" role="status">@message</p> }
+@if (loading) { <p class="notice" role="status">Cargando pedidos…</p> }
 @foreach (var order in orders)
 {
     <article class="queue-row" data-testid="admin-order">
@@ -20,19 +23,25 @@
             @foreach (var line in order.Lines) { <div>@line.Quantity × @line.ProductName</div> }
         </div>
         <div class="actions">
-            @if (order.Status == "Pending") { <button class="primary" disabled="@(!interactiveReady)" @onclick="() => Accept(order)">Aceptar</button><button class="danger" disabled="@(!interactiveReady)" @onclick="() => Reject(order)">Rechazar</button> }
-            @if (order.Status == "Accepted") { <button class="primary" disabled="@(!interactiveReady)" @onclick="() => Prepare(order)">Preparar</button> }
-            @if (order.Status == "Preparing") { <button class="primary" disabled="@(!interactiveReady)" @onclick="() => Ready(order)">Listo</button> }
-            @if (order.Status == "ReadyForPickup") { <button class="primary" disabled="@(!interactiveReady)" @onclick="() => Deliver(order)">Entregado</button> }
+            @* busy además de interactiveReady: mientras una transición está en vuelo ningún botón
+               de la pantalla acepta un segundo clic. *@
+            @if (order.Status == "Pending") { <button class="primary" disabled="@Blocked" @onclick="() => Accept(order)">Aceptar</button><button class="danger" disabled="@Blocked" @onclick="() => Reject(order)">Rechazar</button> }
+            @if (order.Status == "Accepted") { <button class="primary" disabled="@Blocked" @onclick="() => Prepare(order)">Preparar</button> }
+            @if (order.Status == "Preparing") { <button class="primary" disabled="@Blocked" @onclick="() => Ready(order)">Listo</button> }
+            @if (order.Status == "ReadyForPickup") { <button class="primary" disabled="@Blocked" @onclick="() => Deliver(order)">Entregado</button> }
             @if (order.Status is "Pending" or "Accepted" or "Preparing" or "ReadyForPickup")
-            { <button class="danger" disabled="@(!interactiveReady)" @onclick="() => Cancel(order)">Cancelar</button> }
+            { <button class="danger" disabled="@Blocked" @onclick="() => Cancel(order)">Cancelar</button> }
         </div>
     </article>
 }
-@if (orders.Count == 0 && error is null) { <div class="empty"><p>No hay pedidos todavía.</p></div> }
+@* El vacío sólo es real cuando ya se terminó de cargar: antes decía "no hay pedidos" mientras
+   la consulta seguía en curso. *@
+@if (orders.Count == 0 && error is null && !loading) { <div class="empty"><p>No hay pedidos todavía.</p></div> }
 @code {
     [Parameter] public Guid BusinessId { get; set; }
-    private IReadOnlyList<PickupOrderAdminDto> orders = []; private string? error; private bool interactiveReady;
+    private IReadOnlyList<PickupOrderAdminDto> orders = []; private string? error, message;
+    private bool interactiveReady, busy, loading = true;
+    private bool Blocked => !interactiveReady || busy || loading;
     private static readonly System.Globalization.CultureInfo Colombia = new("es-CO");
     protected override async Task OnParametersSetAsync() => await Load();
     protected override void OnAfterRender(bool firstRender)
@@ -40,18 +49,37 @@
         if (!firstRender) return;
         interactiveReady = true; StateHasChanged();
     }
-    private async Task Load() { try { error = null; orders = await Api.GetPickupOrdersAsync(BusinessId); } catch (ApiException ex) { error = ex.Message; } }
-    private async Task Act(PickupOrderAdminDto order, string action, string? reason = null)
+    private async Task Load()
     {
-        try { await Api.ChangePickupOrderAsync(BusinessId, order.Id, action, new() { Version = order.Version, Reason = reason }); await Load(); }
-        catch (ApiException ex) { error = ex.Message; await Load(); }
+        loading = true;
+        try { error = null; orders = await Api.GetPickupOrdersAsync(BusinessId); }
+        catch (ApiException ex) { error = ex.Message; }
+        catch (Exception) { error = "No pudimos cargar los pedidos. Intente de nuevo."; }
+        finally { loading = false; }
     }
-    private Task Accept(PickupOrderAdminDto o) => Act(o, "accept");
-    private Task Reject(PickupOrderAdminDto o) => Act(o, "reject", "No disponible");
-    private Task Prepare(PickupOrderAdminDto o) => Act(o, "prepare");
-    private Task Ready(PickupOrderAdminDto o) => Act(o, "ready");
-    private Task Deliver(PickupOrderAdminDto o) => Act(o, "deliver");
-    private Task Cancel(PickupOrderAdminDto o) => Act(o, "cancel", "Cancelado por el establecimiento");
+    private async Task Act(PickupOrderAdminDto order, string action, string exito, string? reason = null)
+    {
+        // Sin esta guarda, un segundo clic repetía la orden con una versión ya consumida y el
+        // establecimiento veía un conflicto de concurrencia como si la aplicación estuviera rota.
+        if (busy) return;
+        busy = true; error = null; message = null;
+        try
+        {
+            await Api.ChangePickupOrderAsync(BusinessId, order.Id, action,
+                new() { Version = order.Version, Reason = reason });
+            await Load();
+            message = $"Pedido #{order.OrderNumber}: {exito}";
+        }
+        catch (ApiException ex) { error = ex.Message; await Load(); }
+        catch (Exception) { error = "No pudimos aplicar el cambio. Intente de nuevo."; await Load(); }
+        finally { busy = false; }
+    }
+    private Task Accept(PickupOrderAdminDto o) => Act(o, "accept", "aceptado.");
+    private Task Reject(PickupOrderAdminDto o) => Act(o, "reject", "rechazado.", "No disponible");
+    private Task Prepare(PickupOrderAdminDto o) => Act(o, "prepare", "en preparación.");
+    private Task Ready(PickupOrderAdminDto o) => Act(o, "ready", "listo para recoger.");
+    private Task Deliver(PickupOrderAdminDto o) => Act(o, "deliver", "entregado.");
+    private Task Cancel(PickupOrderAdminDto o) => Act(o, "cancel", "cancelado.", "Cancelado por el establecimiento");
     private static string Label(string s) => s switch { "Pending" => "Pendiente", "Accepted" => "Aceptado",
         "Preparing" => "En preparación", "ReadyForPickup" => "Listo para recoger", "Delivered" => "Entregado",
         "Rejected" => "Rechazado", _ => "Cancelado" };

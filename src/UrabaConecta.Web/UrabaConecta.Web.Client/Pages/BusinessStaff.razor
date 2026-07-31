@@ -71,16 +71,19 @@ else
         loading = true; error = null;
         try
         {
-            var calls = await Task.WhenAll(
-                Wrap(Api.GetStaffAsync(BusinessId)),
-                Wrap(Api.GetServicesAsync(BusinessId)));
-            staff = (IReadOnlyList<StaffMemberDto>)calls[0];
-            services = (IReadOnlyList<ServiceDto>)calls[1];
+            // Secuencial y no en paralelo: con InteractiveServer estas llamadas van contra el
+            // mismo AppDbContext del circuito, y dos operaciones a la vez lanzaban
+            // InvalidOperationException. Eso no era ApiException, así que no se capturaba: la
+            // página respondía 500 al prerenderizar y terminaba el circuito al hidratar.
+            staff = await Api.GetStaffAsync(BusinessId);
+            services = await Api.GetServicesAsync(BusinessId);
         }
         catch (ApiException ex) { error = Friendly(ex); }
+        // Red de seguridad: cualquier fallo inesperado se muestra como aviso controlado en vez
+        // de derribar el circuito y dejar al usuario ante una pantalla de error del servidor.
+        catch (Exception) { error = "No pudimos cargar el personal. Intente de nuevo."; }
         finally { loading = false; }
     }
-    private static async Task<object> Wrap<T>(Task<T> task) => (object)(await task)!;
     private void SelectService(Guid id, bool value) { if (value) selected.Add(id); else selected.Remove(id); }
     private void Edit(StaffMemberDto person)
     {
