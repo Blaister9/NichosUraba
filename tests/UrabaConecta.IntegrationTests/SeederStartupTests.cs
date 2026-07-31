@@ -47,6 +47,32 @@ public sealed class SeederStartupTests(PostgresWebFactory factory) : IClassFixtu
             .AnyAsync(x => x.ShortDescription == "" && x.Status != BusinessStatus.Archived));
     }
 
+    [Fact]
+    public async Task Seeding_survives_a_live_business_whose_legacy_data_fails_todays_validation()
+    {
+        _ = factory.CreateClient();
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        // Reproduce el segundo 502: un negocio vivo, sin descripción breve, cuyo teléfono ya no
+        // pasaría la validación actual. Rellenar la descripción no debe revalidar el resto.
+        var municipalityId = await db.Municipalities.Select(x => x.Id).FirstAsync();
+        var categoryId = await db.Categories.Select(x => x.Id).FirstAsync();
+        var heredado = new Business(Guid.NewGuid(), $"heredado-{Guid.NewGuid():N}", "Piloto heredado",
+            municipalityId, categoryId, "Descripción completa del piloto heredado.",
+            "Calle 2 # 2-2", "1234");
+        db.Add(heredado);
+        await db.SaveChangesAsync();
+        Assert.Equal("", heredado.ShortDescription);
+
+        await factory.Services.SeedDevelopmentAsync(new TestEnvironment("Development"));
+
+        // Recibe su descripción breve y conserva intacto el teléfono heredado.
+        var reloaded = await db.Businesses.AsNoTracking().SingleAsync(x => x.Id == heredado.Id);
+        Assert.NotEqual("", reloaded.ShortDescription);
+        Assert.Equal("1234", reloaded.PublicPhone);
+    }
+
     private sealed class TestEnvironment(string name) : IHostEnvironment
     {
         public string EnvironmentName { get; set; } = name;

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using UrabaConecta.Application;
 using UrabaConecta.Domain;
 using UrabaConecta.Infrastructure.Identity;
@@ -91,10 +92,23 @@ public static class DevelopmentSeeder
             await EnsureQueueDemo(db, corteOwner.Id, queueWorker.Id, noPermission.Id);
             await EnsureOrderingDemo(db, sazonOwner.Id, ordersWorker.Id, noOrdersPermission.Id);
             await db.SaveChangesAsync();
-            await EnsureModules(db);
-            await EnsureShortDescriptions(db);
-            await EnsureHistoricalDemo(db, codes, protector);
-            await db.SaveChangesAsync();
+            // Enriquecimientos de la demostración sobre una base que ya existe. Son accesorios:
+            // si uno falla conviene una demostración incompleta y no un contenedor que no arranca.
+            // Este bloque ya dejó el despliegue en 502 dos veces, así que se registra y se sigue.
+            try
+            {
+                await EnsureModules(db);
+                await EnsureShortDescriptions(db);
+                await EnsureHistoricalDemo(db, codes, protector);
+                await db.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("UrabaConecta.DemoSeed")
+                    .LogError(ex, "No se pudo completar el sembrado accesorio de la demostración. " +
+                                  "La aplicación arranca igualmente y los datos existentes no se alteran.");
+            }
             return;
         }
         var apartado = new Municipality(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), "apartado", "Apartadó");
@@ -317,21 +331,18 @@ public static class DevelopmentSeeder
     /// <summary>
     /// Los negocios ficticios se crearon antes de V5, cuando no existía la descripción breve.
     /// Se completa aquí para que el checklist de onboarding refleje su estado real.
-    /// Los archivados se excluyen: el dominio prohíbe editarlos, así que intentarlo lanzaba una
-    /// excepción no controlada durante el arranque y el contenedor no llegaba a escuchar. Basta
-    /// un negocio archivado sin descripción breve para dejar la aplicación sin arrancar.
+    ///
+    /// Rellena únicamente ese campo. Antes usaba UpdateCommercialProfile, que revalida el perfil
+    /// entero, de modo que cualquier dato heredado que hoy no pasaría la validación tumbaba el
+    /// arranque: primero un negocio archivado, después uno con teléfono en formato antiguo. Esto
+    /// corre antes de que la aplicación escuche, así que un fallo aquí deja el despliegue en 502.
     /// </summary>
     private static async Task EnsureShortDescriptions(AppDbContext db)
     {
         var now = DateTimeOffset.UtcNow;
         foreach (var business in await db.Businesses
             .Where(x => x.ShortDescription == "" && x.Status != BusinessStatus.Archived).ToListAsync())
-            business.UpdateCommercialProfile(new BusinessProfileEdit(business.Slug, business.Name,
-                business.MunicipalityId, business.CategoryId,
-                Shorten(business.Description, business.Name), business.Description, business.Address,
-                business.ReferencePoint, business.PublicPhone, business.WhatsAppUrl, business.PublicEmail,
-                business.InstagramUrl, business.FacebookUrl, business.LocationUrl,
-                business.CustomerInstructions), now, business.Version);
+            business.BackfillShortDescription(Shorten(business.Description, business.Name), now);
     }
 
     private static string Shorten(string description, string name)

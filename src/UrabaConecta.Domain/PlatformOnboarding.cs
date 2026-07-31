@@ -196,6 +196,22 @@ public sealed partial class Business
             x?.Contains('<') == true || x?.Contains('>') == true))
             throw new DomainException("INVALID_BUSINESS_PROFILE", "No se admite HTML en la información pública.");
     }
+    /// <summary>
+    /// Rellena sólo la descripción breve de un negocio anterior a V5, sin revalidar el resto del
+    /// perfil. Se separa de <see cref="UpdateCommercialProfile"/> a propósito: aquel revalida el
+    /// perfil completo, así que un dato heredado que hoy no pasaría la validación —un teléfono con
+    /// formato antiguo, por ejemplo— hacía fallar un relleno que no lo tocaba, y como esto corre
+    /// durante el arranque el contenedor entero se quedaba sin levantar.
+    /// </summary>
+    public void BackfillShortDescription(string shortDescription, DateTimeOffset now)
+    {
+        if (string.IsNullOrWhiteSpace(shortDescription))
+            throw new DomainException("INVALID_SHORT_DESCRIPTION", "La descripción breve es obligatoria.");
+        ShortDescription = shortDescription.Trim().Length > 160
+            ? shortDescription.Trim()[..160] : shortDescription.Trim();
+        Touch(now);
+    }
+
     private static void ValidateExtendedProfile(BusinessProfileEdit edit)
     {
         if (string.IsNullOrWhiteSpace(edit.ShortDescription) || edit.ShortDescription.Trim().Length > 160)
