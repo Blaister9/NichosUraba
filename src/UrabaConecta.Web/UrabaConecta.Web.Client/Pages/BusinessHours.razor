@@ -7,7 +7,7 @@
 <a class="back-link" href="/panel/@BusinessId/configuracion">← Configuración</a>
 <p class="eyebrow">Configuración del negocio</p><h1>Horarios habituales</h1>
 <ConfigurationNav BusinessId="BusinessId" />
-<div class="notice"><strong>Zona horaria: America/Bogota.</strong> Los cambios ajustan nuevas franjas; nunca modifican ni cancelan citas existentes. El modelo actual admite un intervalo por día.</div>
+<div class="notice"><strong>Zona horaria: America/Bogota.</strong> Los cambios ajustan nuevas franjas; nunca modifican ni cancelan citas existentes. Un día admite varios intervalos, por ejemplo 08:00–12:00 y 14:00–18:00 para dejar la pausa del almuerzo.</div>
 
 @if (loading) { <p class="notice">Cargando horarios…</p> }
 else if (error is not null) { <p class="error" role="alert">@error <button class="inline-button" @onclick="Load">Recargar</button></p> }
@@ -20,15 +20,29 @@ else
             <section class="hour-row" data-testid="hour-row">
                 <div class="row-title"><h2>@DayLabel(row.Day)</h2><span class="status @(row.IsClosed ? "cancelled" : "confirmed")">@(row.IsClosed ? "Cerrado" : "Abierto")</span></div>
                 <label class="switch-row"><input type="checkbox" @bind="row.IsClosed" /> Día cerrado</label>
-                <div class="time-grid">
-                    <label>Apertura<input type="time" value="@row.OpensAtText" @oninput="e => row.OpensAtText = e.Value?.ToString() ?? string.Empty" disabled="@row.IsClosed" aria-label="@($"Apertura {DayLabel(row.Day)}")" /></label>
-                    <label>Cierre<input type="time" value="@row.ClosesAtText" @oninput="e => row.ClosesAtText = e.Value?.ToString() ?? string.Empty" disabled="@row.IsClosed" aria-label="@($"Cierre {DayLabel(row.Day)}")" /></label>
-                </div>
+                @if (!row.IsClosed)
+                {
+                    @foreach (var interval in row.Intervals)
+                    {
+                        var actual = interval;
+                        <div class="time-grid" data-testid="interval-row">
+                            <label>Apertura<input type="time" value="@actual.OpensAtText" @oninput="e => actual.OpensAtText = e.Value?.ToString() ?? string.Empty" aria-label="@($"Apertura {DayLabel(row.Day)} {actual.Position}")" /></label>
+                            <label>Cierre<input type="time" value="@actual.ClosesAtText" @oninput="e => actual.ClosesAtText = e.Value?.ToString() ?? string.Empty" aria-label="@($"Cierre {DayLabel(row.Day)} {actual.Position}")" /></label>
+                            @if (row.Intervals.Count > 1)
+                            {
+                                <button class="danger" type="button" data-testid="remove-interval"
+                                        @onclick="() => row.Intervals.Remove(actual)" disabled="@Blocked">Eliminar</button>
+                            }
+                        </div>
+                    }
+                    <button class="secondary" type="button" data-testid="add-interval"
+                            @onclick="() => row.AddInterval()" disabled="@(Blocked || row.Intervals.Count >= 6)">+ Agregar intervalo</button>
+                }
                 <div class="actions">
-                    <button class="primary" type="button" @onclick="() => Save(row)" disabled="@(!interactiveReady || saving)">Guardar @DayLabel(row.Day)</button>
+                    <button class="primary" type="button" data-testid="save-day" @onclick="() => Save(row)" disabled="@Blocked">@(savingDay == row.Day ? "Guardando…" : $"Guardar {DayLabel(row.Day)}")</button>
                     @if (!row.IsClosed)
                     {
-                        <button class="secondary" type="button" @onclick="() => CopyWeekdays(row)" disabled="@saving">Copiar a lunes–viernes</button>
+                        <button class="secondary" type="button" @onclick="() => CopyWeekdays(row)" disabled="@Blocked">Copiar a lunes–viernes</button>
                     }
                 </div>
             </section>
@@ -40,7 +54,10 @@ else
     [Parameter] public Guid BusinessId { get; set; }
     private List<HourForm> rows = [];
     private bool loading = true, saving, interactiveReady;
+    private DayOfWeek? savingDay;
     private string? error, message;
+    /// <summary>Nada es pulsable sin circuito, ni mientras una jornada se está guardando.</summary>
+    private bool Blocked => !interactiveReady || saving || loading;
 
     protected override async Task OnParametersSetAsync() => await Load();
     protected override void OnAfterRender(bool firstRender) { if (firstRender) { interactiveReady = true; StateHasChanged(); } }
@@ -51,20 +68,20 @@ else
         {
             rows = (await Api.GetBusinessHoursAsync(BusinessId))
                 .OrderBy(x => SortDay(x.Day))
-                .Select(x => new HourForm { Day = x.Day, IsClosed = x.IsClosed,
-                    OpensAtText = (x.OpensAt ?? new TimeOnly(8, 0)).ToString("HH:mm"),
-                    ClosesAtText = (x.ClosesAt ?? new TimeOnly(18, 0)).ToString("HH:mm"),
-                    Version = x.Version }).ToList();
+                .Select(HourForm.From).ToList();
         }
         catch (ApiException ex) { error = Friendly(ex); }
+        catch (Exception) { error = "No pudimos cargar los horarios. Intente de nuevo."; }
         finally { loading = false; }
     }
     private async Task Save(HourForm row)
     {
+        // Guarda de doble clic: sin ella, el segundo envío llega con una versión ya consumida.
+        if (saving) return;
         error = message = null;
-        if (!row.IsClosed && (!row.TryTimes(out var opens, out var closes) || closes <= opens))
-        { error = $"En {DayLabel(row.Day)}, la apertura debe ser anterior al cierre."; return; }
-        saving = true;
+        if (!row.IsClosed && row.Validate() is { } problema)
+        { error = $"En {DayLabel(row.Day)}: {problema}"; return; }
+        saving = true; savingDay = row.Day;
         try
         {
             var impact = await Api.SetBusinessHourAsync(BusinessId, row.Day, row.ToRequest());
@@ -74,19 +91,28 @@ else
             await Load();
         }
         catch (ApiException ex) { error = ex.Code == "CONCURRENCY_CONFLICT" ? $"{ex.Message} Use Recargar." : ex.Message; }
-        finally { saving = false; }
+        catch (Exception) { error = "No pudimos guardar el horario. Intente de nuevo."; }
+        finally { saving = false; savingDay = null; }
     }
     private async Task CopyWeekdays(HourForm source)
     {
-        saving = true; error = message = null;
+        if (saving) return;
+        error = message = null;
+        if (source.Validate() is { } problema) { error = $"En {DayLabel(source.Day)}: {problema}"; return; }
+        saving = true;
         try
         {
             var conflicts = 0;
+            // Se copia la jornada completa, con sus pausas, no sólo el primer tramo.
+            var plantilla = source.ToRequest();
             foreach (var day in new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday })
             {
                 var target = rows.Single(x => x.Day == day);
                 var impact = await Api.SetBusinessHourAsync(BusinessId, day, new()
-                { OpensAt = source.OpensAt, ClosesAt = source.ClosesAt, IsClosed = false, Version = target.Version });
+                {
+                    IsClosed = false, Version = target.Version, Intervals = plantilla.Intervals,
+                    OpensAt = plantilla.OpensAt, ClosesAt = plantilla.ClosesAt,
+                });
                 conflicts += impact.FutureAppointmentConflicts;
             }
             message = conflicts > 0
@@ -106,22 +132,94 @@ else
     };
     private static string Friendly(ApiException ex) => ex.StatusCode is 401 or 403 or 404
         ? "No tiene acceso a este establecimiento." : ex.Message;
+    private sealed class IntervalForm
+    {
+        public string OpensAtText { get; set; } = "08:00";
+        public string ClosesAtText { get; set; } = "12:00";
+        public int Position { get; set; }
+        public bool TryTimes(out TimeOnly opens, out TimeOnly closes)
+            => TimeOnly.TryParse(OpensAtText, out opens) & TimeOnly.TryParse(ClosesAtText, out closes);
+    }
+
     private sealed class HourForm
     {
         public DayOfWeek Day { get; set; }
         public bool IsClosed { get; set; }
-        public string OpensAtText { get; set; } = "08:00";
-        public string ClosesAtText { get; set; } = "18:00";
-        public TimeOnly OpensAt => TimeOnly.Parse(OpensAtText);
-        public TimeOnly ClosesAt => TimeOnly.Parse(ClosesAtText);
+        public List<IntervalForm> Intervals { get; set; } = [];
         public long Version { get; set; }
-        public bool TryTimes(out TimeOnly opens, out TimeOnly closes)
+
+        public static HourForm From(BusinessHourAdminDto dto)
         {
-            var first = TimeOnly.TryParse(OpensAtText, out opens);
-            var second = TimeOnly.TryParse(ClosesAtText, out closes);
-            return first && second;
+            var form = new HourForm { Day = dto.Day, IsClosed = dto.IsClosed, Version = dto.Version };
+            form.Intervals = dto.Schedule
+                .Select((x, i) => new IntervalForm
+                {
+                    OpensAtText = x.OpensAt.ToString("HH:mm"),
+                    ClosesAtText = x.ClosesAt.ToString("HH:mm"),
+                    Position = i + 1,
+                }).ToList();
+            // Un día cerrado conserva una fila de partida para cuando se decida abrirlo.
+            if (form.Intervals.Count == 0)
+                form.Intervals.Add(new IntervalForm { OpensAtText = "08:00", ClosesAtText = "18:00", Position = 1 });
+            return form;
         }
-        public SaveBusinessHourRequest ToRequest() => new()
-        { IsClosed = IsClosed, OpensAt = IsClosed ? null : OpensAt, ClosesAt = IsClosed ? null : ClosesAt, Version = Version };
+
+        /// <summary>
+        /// Propone el siguiente tramo después del último. Se calcula en minutos y se recorta a las
+        /// 23:59 porque TimeOnly.AddHours da la vuelta al día en silencio: encadenando desde las
+        /// 23:59 proponía un tramo de 01:59 a 05:59, que no es una jornada sino un error.
+        /// </summary>
+        public void AddInterval()
+        {
+            const int finDelDia = 23 * 60 + 59;
+            var inicio = 14 * 60;
+            if (Intervals.LastOrDefault() is { } last && TimeOnly.TryParse(last.ClosesAtText, out var fin))
+            {
+                var cierre = fin.Hour * 60 + fin.Minute;
+                // Sin al menos un minuto libre antes de medianoche no se propone ningún tramo.
+                if (cierre >= finDelDia) return;
+                inicio = Math.Min(cierre + 120, finDelDia - 1);
+                if (inicio <= cierre) inicio = cierre;
+            }
+            var final = Math.Min(inicio + 240, finDelDia);
+            if (final <= inicio) return;
+            Intervals.Add(new IntervalForm
+            {
+                OpensAtText = new TimeOnly(inicio / 60, inicio % 60).ToString("HH:mm"),
+                ClosesAtText = new TimeOnly(final / 60, final % 60).ToString("HH:mm"),
+                Position = Intervals.Count + 1,
+            });
+        }
+
+        /// <summary>Mensaje del primer problema encontrado, o null si la jornada es válida.</summary>
+        public string? Validate()
+        {
+            if (Intervals.Count == 0) return "agregue al menos un intervalo o marque el día como cerrado.";
+            var parsed = new List<(TimeOnly Opens, TimeOnly Closes)>();
+            foreach (var interval in Intervals)
+            {
+                if (!interval.TryTimes(out var opens, out var closes)) return "revise las horas indicadas.";
+                if (closes <= opens) return "la apertura debe ser anterior al cierre.";
+                parsed.Add((opens, closes));
+            }
+            var ordered = parsed.OrderBy(x => x.Opens).ToList();
+            for (var i = 1; i < ordered.Count; i++)
+                if (ordered[i].Opens < ordered[i - 1].Closes)
+                    return "los intervalos no pueden solaparse.";
+            return null;
+        }
+
+        public SaveBusinessHourRequest ToRequest()
+        {
+            if (IsClosed) return new() { IsClosed = true, Version = Version };
+            var ordered = Intervals
+                .Select(x => { x.TryTimes(out var o, out var c); return new ScheduleIntervalDto(o, c); })
+                .OrderBy(x => x.OpensAt).ToList();
+            return new()
+            {
+                IsClosed = false, Version = Version, Intervals = ordered,
+                OpensAt = ordered[0].OpensAt, ClosesAt = ordered[0].ClosesAt,
+            };
+        }
     }
 }

@@ -294,8 +294,13 @@ public sealed class PlatformAdministrationUseCases(
         var existing = await directory.GetBusinessHoursAsync(businessId, cancellationToken);
         return Enum.GetValues<DayOfWeek>().Select(day =>
         {
-            var hour = existing.SingleOrDefault(x => x.Day == day);
-            return new BusinessHourAdminDto(day, hour is null, hour?.OpensAt, hour?.ClosesAt, hour?.Version ?? 0);
+            // Un día son cero, uno o varios tramos. SingleOrDefault lanzaba con jornada partida.
+            var tramos = existing.Where(x => x.Day == day)
+                .OrderBy(x => x.SortOrder).ThenBy(x => x.OpensAt).ToList();
+            var first = tramos.FirstOrDefault();
+            return new BusinessHourAdminDto(day, tramos.Count == 0, first?.OpensAt, first?.ClosesAt,
+                first?.Version ?? 0,
+                tramos.Select(x => new ScheduleIntervalDto(x.OpensAt, x.ClosesAt)).ToList());
         }).ToArray();
     }
 
@@ -303,17 +308,31 @@ public sealed class PlatformAdministrationUseCases(
         SaveBusinessHourRequest request, CancellationToken cancellationToken = default)
     {
         await RequireScopedAsync(actor, businessId, cancellationToken);
-        if (!request.IsClosed && (request.OpensAt is null || request.ClosesAt is null ||
+        var conIntervalos = request.Intervals is { Count: > 0 } && !request.IsClosed;
+        if (!request.IsClosed && !conIntervalos && (request.OpensAt is null || request.ClosesAt is null ||
                                   request.OpensAt >= request.ClosesAt))
             throw new ApiException("INVALID_HOURS", "La apertura debe ser anterior al cierre.");
-        var existing = await directory.GetBusinessHourAsync(businessId, day, cancellationToken);
-        if (request.IsClosed)
+        var current = (await directory.GetBusinessHoursAsync(businessId, cancellationToken))
+            .Where(x => x.Day == day).OrderBy(x => x.SortOrder).ThenBy(x => x.OpensAt).ToList();
+        var existing = current.FirstOrDefault();
+        if (conIntervalos)
+        {
+            // La jornada del día se reemplaza entera, igual que en la configuración del negocio.
+            if (existing is not null)
+                EnsureVersion(existing.Version, request.Version, "El horario cambió. Recargue.");
+            var normalized = TryDomain(() => BusinessSchedule.Normalize(
+                request.Intervals!.Select(x => new ScheduleInterval(x.OpensAt, x.ClosesAt))));
+            foreach (var stale in current) directory.RemoveBusinessHour(stale);
+            var order = 0;
+            foreach (var interval in normalized)
+                directory.AddBusinessHour(new BusinessHour(Guid.NewGuid(), businessId, day,
+                    interval.OpensAt, interval.ClosesAt, order++));
+        }
+        else if (request.IsClosed)
         {
             if (existing is not null)
-            {
                 EnsureVersion(existing.Version, request.Version, "El horario cambió. Recargue.");
-                directory.RemoveBusinessHour(existing);
-            }
+            foreach (var stale in current) directory.RemoveBusinessHour(stale);
         }
         else if (existing is null)
             directory.AddBusinessHour(new BusinessHour(Guid.NewGuid(), businessId, day,
@@ -321,7 +340,8 @@ public sealed class PlatformAdministrationUseCases(
         else
         {
             EnsureVersion(existing.Version, request.Version, "El horario cambió. Recargue.");
-            TryDomain(() => { existing.Update(request.OpensAt!.Value, request.ClosesAt!.Value, request.Version); return true; });
+            foreach (var stale in current.Skip(1)) directory.RemoveBusinessHour(stale);
+            TryDomain(() => { existing.Update(request.OpensAt!.Value, request.ClosesAt!.Value, request.Version, 0); return true; });
         }
         await directory.SaveChangesAsync(cancellationToken);
         var conflicts = await directory.CountFutureAppointmentConflictsAsync(businessId, null, NextDate(day),

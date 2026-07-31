@@ -161,14 +161,29 @@ public sealed class SaveStaffMemberRequest
     [MinLength(1)] public List<Guid> ServiceIds { get; set; } = [];
     public long Version { get; set; }
 }
+public sealed record ScheduleIntervalDto(TimeOnly OpensAt, TimeOnly ClosesAt);
+/// <summary>
+/// La jornada de un día. <see cref="Intervals"/> la describe completa; <see cref="OpensAt"/> y
+/// <see cref="ClosesAt"/> siguen exponiendo el primer tramo para no romper a quien ya los leía.
+/// </summary>
 public sealed record BusinessHourAdminDto(DayOfWeek Day, bool IsClosed, TimeOnly? OpensAt, TimeOnly? ClosesAt,
-    long Version = 0);
+    long Version = 0, IReadOnlyList<ScheduleIntervalDto>? Intervals = null)
+{
+    public IReadOnlyList<ScheduleIntervalDto> Schedule => Intervals ??
+        (OpensAt is not null && ClosesAt is not null
+            ? [new ScheduleIntervalDto(OpensAt.Value, ClosesAt.Value)] : []);
+}
 public sealed class SaveBusinessHourRequest
 {
     public bool IsClosed { get; set; }
     public TimeOnly? OpensAt { get; set; }
     public TimeOnly? ClosesAt { get; set; }
     public long Version { get; set; }
+    /// <summary>
+    /// Cuando llega, reemplaza la jornada completa de ese día y admite pausas. Si no llega, se
+    /// conserva el comportamiento anterior de un único tramo.
+    /// </summary>
+    public List<ScheduleIntervalDto>? Intervals { get; set; }
 }
 public sealed record ConfigurationImpactDto(int FutureAppointmentConflicts);
 public sealed record AvailabilityExceptionDto(Guid Id, Guid StaffMemberId, DateOnly Date, string Type,

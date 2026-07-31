@@ -91,7 +91,10 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
                                   .ToList(),
                           }).SingleOrDefaultAsync(cancellationToken);
         if (data is null) return null;
+        // Ordenado por día y hora de apertura: una jornada partida se lee en el orden en que
+        // ocurre, y quien consuma la API no depende del orden en que se guardaron los tramos.
         var publicHours = data.Hours
+            .OrderBy(x => x.Day).ThenBy(x => x.OpensAt)
             .Select(x => new BusinessHourDto(x.Day, x.OpensAt.ToString("HH:mm"), x.ClosesAt.ToString("HH:mm")))
             .ToList();
         var hasAppointments = data.Modules.Contains(BusinessModuleKind.Appointments);
@@ -109,8 +112,10 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
     }
 
     /// <summary>
-    /// "Abierto" o "Cerrado" según el horario publicado y la zona del negocio. Devuelve null
-    /// cuando no hay horario cargado, para no mostrar un estado que no se puede calcular.
+    /// Estado según el horario publicado y la zona del negocio. Devuelve null cuando no hay horario
+    /// cargado, para no mostrar un estado que no se puede calcular. Con jornada partida distingue
+    /// la pausa del cierre del día: a las 13:00, entre 08:00–12:00 y 14:00–18:00, el negocio no
+    /// está simplemente "Cerrado", sino cerrado hasta que reabre por la tarde.
     /// </summary>
     private static string? OpenStatus(string timeZoneId, IReadOnlyList<BusinessHourDto> hours)
     {
@@ -119,11 +124,19 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
         try { zone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId); }
         catch (TimeZoneNotFoundException) { return null; }
         var local = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, zone);
-        var today = hours.FirstOrDefault(x => x.Day == local.DayOfWeek);
-        if (today is null) return "Cerrado";
+        var today = hours.Where(x => x.Day == local.DayOfWeek)
+            .Select(x => new ScheduleInterval(TimeOnly.Parse(x.OpensAt), TimeOnly.Parse(x.ClosesAt)))
+            .OrderBy(x => x.OpensAt).ToList();
+        if (today.Count == 0) return "Cerrado";
         var now = TimeOnly.FromDateTime(local.DateTime);
-        return now >= TimeOnly.Parse(today.OpensAt) && now < TimeOnly.Parse(today.ClosesAt) ? "Abierto" : "Cerrado";
+        if (BusinessSchedule.IntervalAt(today, now) is not null) return "Abierto";
+        var next = BusinessSchedule.NextInterval(today, now);
+        return next is null ? "Cerrado" : $"Cerrado temporalmente · abre a las {Display(next.Value.OpensAt)}";
     }
+
+    /// <summary>Hora en el formato coloquial colombiano: "2:00 p. m.".</summary>
+    private static string Display(TimeOnly value)
+        => value.ToString("h:mm tt", System.Globalization.CultureInfo.GetCultureInfo("es-CO"));
 
     public async Task<SchedulingContext?> GetSchedulingContextAsync(string slug, Guid serviceId, DateOnly date,
         CancellationToken cancellationToken)

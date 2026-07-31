@@ -114,8 +114,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         builder.Entity<ApplicationUser>().Property(e => e.DisplayName).HasMaxLength(100);
         builder.Entity<BusinessHour>(x =>
         {
+            // El check sigue garantizando que un tramo no cruce la medianoche y dure al menos un
+            // minuto. El índice deja de ser único porque un día admite varios tramos: una jornada
+            // partida son dos filas del mismo día.
             x.ToTable("business_hours", t => t.HasCheckConstraint("ck_business_hours_range", "\"OpensAt\" < \"ClosesAt\""));
-            x.HasKey(e => e.Id); x.HasIndex(e => new { e.BusinessId, e.Day }).IsUnique();
+            x.HasKey(e => e.Id); x.HasIndex(e => new { e.BusinessId, e.Day, e.SortOrder });
             x.Property(e => e.Version).IsConcurrencyToken();
             x.HasOne<Business>().WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Cascade);
         });

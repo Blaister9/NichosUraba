@@ -94,9 +94,19 @@
     @if (Profile.Hours.Count == 0) { <p>Este establecimiento aún no publicó su horario.</p> }
     else
     {
-        @foreach (var hour in Profile.Hours)
+        @* Un día puede tener varios tramos: se agrupan bajo una sola etiqueta para que una
+           jornada partida se lea como tal y no como dos días repetidos. *@
+        @foreach (var day in Semana)
         {
-            <p><span>@Day(hour.Day)</span><strong>@hour.OpensAt – @hour.ClosesAt</strong></p>
+            var tramos = Profile.Hours.Where(x => x.Day == day)
+                .OrderBy(x => x.OpensAt, StringComparer.Ordinal).ToList();
+            <p data-testid="hour-line"><span>@Day(day)</span>
+                @if (tramos.Count == 0) { <strong>Cerrado</strong> }
+                else
+                {
+                    <strong>@string.Join(" · ", tramos.Select(x => $"{Hora(x.OpensAt)}–{Hora(x.ClosesAt)}"))</strong>
+                }
+            </p>
         }
     }
 </section>
@@ -118,4 +128,15 @@
         DayOfWeek.Thursday => "Jueves", DayOfWeek.Friday => "Viernes", DayOfWeek.Saturday => "Sábado",
         _ => "Domingo"
     };
+
+    /// <summary>La semana empieza en lunes, como se lee un horario colgado en la puerta.</summary>
+    private static readonly DayOfWeek[] Semana =
+    [
+        DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday,
+        DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday,
+    ];
+
+    /// <summary>"14:00" se muestra como "2:00 p. m.", que es como se dice la hora aquí.</summary>
+    private static string Hora(string value)
+        => TimeOnly.TryParse(value, out var hora) ? hora.ToString("h:mm tt", Colombia) : value;
 }

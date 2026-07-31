@@ -26,8 +26,10 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
         if (date > DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime).AddDays(60))
             throw new ApiException("DATE_OUT_OF_RANGE", "Solo puede consultar los próximos 60 días.");
 
-        var businessHour = context.Hours.FirstOrDefault(x => x.Day == date.DayOfWeek);
-        if (businessHour is null || context.EligibleStaff.Count == 0)
+        // Un día puede tener varios tramos: sin filas está cerrado, con varias es jornada partida.
+        var dayIntervals = context.Hours.Where(x => x.Day == date.DayOfWeek)
+            .Select(x => new ScheduleInterval(x.OpensAt, x.ClosesAt)).ToList();
+        if (dayIntervals.Count == 0 || context.EligibleStaff.Count == 0)
             return new(context.Business.TimeZoneId, date, []);
 
         var zone = TimeZoneInfo.FindSystemTimeZoneById(context.Business.TimeZoneId);
@@ -36,9 +38,11 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
             {
                 var exception = context.Exceptions.FirstOrDefault(x => x.StaffMemberId == staff.Id && x.Date == date);
                 if (exception?.Type == AvailabilityExceptionType.ClosedAllDay) return [];
+                // Una apertura extraordinaria reemplaza la jornada de esa fecha por su propio tramo.
                 var extraordinary = exception?.Type == AvailabilityExceptionType.ExtraordinaryOpening;
-                var opensAt = extraordinary ? exception!.OpensAt!.Value : businessHour.OpensAt;
-                var closesAt = extraordinary ? exception!.ClosesAt!.Value : businessHour.ClosesAt;
+                var intervals = extraordinary
+                    ? [new ScheduleInterval(exception!.OpensAt!.Value, exception.ClosesAt!.Value)]
+                    : dayIntervals;
                 var occupied = context.Occupied.Where(x => x.StaffId == staff.Id).Select(x => (x.Start, x.End)).ToList();
                 if (exception?.Type == AvailabilityExceptionType.ClosedInterval)
                 {
@@ -48,7 +52,7 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
                         date.ToDateTime(exception.ClosesAt!.Value), zone), TimeSpan.Zero);
                     occupied.Add((startUtc, endUtc));
                 }
-                return AppointmentSlotCalculator.Calculate(date, opensAt, closesAt,
+                return AppointmentSlotCalculator.Calculate(date, intervals,
                     context.Service.DurationMinutes, zone, timeProvider.GetUtcNow(),
                     occupied)
                     .Select(x => new SlotDto(x.Start, x.End));
@@ -221,8 +225,13 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
         var existing = await store.GetBusinessHoursAsync(businessId, cancellationToken);
         return Enum.GetValues<DayOfWeek>().Select(day =>
         {
-            var hour = existing.SingleOrDefault(x => x.Day == day);
-            return new BusinessHourAdminDto(day, hour is null, hour?.OpensAt, hour?.ClosesAt, hour?.Version ?? 0);
+            // Un día son ahora cero, uno o varios tramos. Sin tramos, está cerrado.
+            var tramos = existing.Where(x => x.Day == day)
+                .OrderBy(x => x.SortOrder).ThenBy(x => x.OpensAt).ToList();
+            var first = tramos.FirstOrDefault();
+            return new BusinessHourAdminDto(day, tramos.Count == 0, first?.OpensAt, first?.ClosesAt,
+                first?.Version ?? 0,
+                tramos.Select(x => new ScheduleIntervalDto(x.OpensAt, x.ClosesAt)).ToList());
         }).ToArray();
     }
 
@@ -230,14 +239,32 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
         SaveBusinessHourRequest request, CancellationToken cancellationToken = default)
     {
         await DemandConfigurationAccess(userId, businessId, cancellationToken);
-        var existing = await store.GetBusinessHourAsync(businessId, day, cancellationToken);
-        if (request.IsClosed)
+        var current = (await store.GetBusinessHoursAsync(businessId, cancellationToken))
+            .Where(x => x.Day == day).OrderBy(x => x.SortOrder).ThenBy(x => x.OpensAt).ToList();
+        var existing = current.FirstOrDefault();
+
+        // Con Intervals la jornada del día se reemplaza entera, que es lo que permite las pausas.
+        // Sin Intervals se conserva el comportamiento anterior de un solo tramo.
+        if (request.Intervals is not null && !request.IsClosed)
+        {
+            if (request.Intervals.Count == 0)
+                throw new ApiException("INVALID_HOURS", "Indique al menos un intervalo o marque el día como cerrado.");
+            if (existing is not null)
+                EnsureVersion(existing.Version, request.Version, "El horario cambió. Recargue la información.");
+            var normalized = TryDomain(() => BusinessSchedule.Normalize(
+                request.Intervals.Select(x => new ScheduleInterval(x.OpensAt, x.ClosesAt))));
+            foreach (var stale in current) store.RemoveBusinessHour(stale);
+            var order = 0;
+            foreach (var interval in normalized)
+                store.AddBusinessHour(new BusinessHour(Guid.NewGuid(), businessId, day,
+                    interval.OpensAt, interval.ClosesAt, order++));
+        }
+        else if (request.IsClosed)
         {
             if (existing is not null)
-            {
                 EnsureVersion(existing.Version, request.Version, "El horario cambió. Recargue la información.");
-                store.RemoveBusinessHour(existing);
-            }
+            // Un día cerrado no conserva ningún tramo, ni siquiera los de una jornada partida.
+            foreach (var stale in current) store.RemoveBusinessHour(stale);
         }
         else if (existing is null)
         {
@@ -250,7 +277,9 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
         {
             if (request.OpensAt is null || request.ClosesAt is null)
                 throw new ApiException("INVALID_HOURS", "Indique hora de apertura y cierre.");
-            TryDomain(() => existing.Update(request.OpensAt.Value, request.ClosesAt.Value, request.Version));
+            // Guardar un tramo único sustituye una jornada partida previa, para no dejar restos.
+            foreach (var stale in current.Skip(1)) store.RemoveBusinessHour(stale);
+            TryDomain(() => existing.Update(request.OpensAt.Value, request.ClosesAt.Value, request.Version, 0));
         }
         await store.SaveChangesAsync(cancellationToken);
         var nextDate = NextDate(day);
@@ -373,6 +402,16 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
     {
         try { action(); }
         catch (DomainException ex) { throw new ApiException(ex.Code, ex.Message, 409); }
+    }
+
+    /// <summary>
+    /// Los intervalos mal formados son un error de la petición, no un conflicto de concurrencia:
+    /// se devuelven como 400 para que la pantalla los muestre como error de validación.
+    /// </summary>
+    private static T TryDomain<T>(Func<T> action)
+    {
+        try { return action(); }
+        catch (DomainException ex) { throw new ApiException(ex.Code, ex.Message, 400); }
     }
 
     private static void EnsureServiceActive(Service service)

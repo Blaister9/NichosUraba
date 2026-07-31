@@ -173,25 +173,34 @@ public sealed class MembershipAuditEntry : IBusinessOwned
     public DateTimeOffset OccurredAtUtc { get; private set; }
 }
 
+/// <summary>
+/// Un intervalo de atención de un día. Un día admite varios, de modo que una jornada partida
+/// —08:00–12:00 y 14:00–18:00— son dos filas del mismo día. Un día sin filas está cerrado, que es
+/// como ya se representaba antes de admitir jornadas partidas.
+/// </summary>
 public sealed class BusinessHour : IBusinessOwned
 {
     private BusinessHour() { }
-    public BusinessHour(Guid id, Guid businessId, DayOfWeek day, TimeOnly opensAt, TimeOnly closesAt)
+    public BusinessHour(Guid id, Guid businessId, DayOfWeek day, TimeOnly opensAt, TimeOnly closesAt,
+        int sortOrder = 0)
     {
         if (closesAt <= opensAt) throw new DomainException("INVALID_HOURS", "La hora de cierre debe ser posterior.");
-        (Id, BusinessId, Day, OpensAt, ClosesAt) = (id, businessId, day, opensAt, closesAt);
+        (Id, BusinessId, Day, OpensAt, ClosesAt, SortOrder) = (id, businessId, day, opensAt, closesAt, sortOrder);
     }
     public Guid Id { get; private set; }
     public Guid BusinessId { get; private set; }
     public DayOfWeek Day { get; private set; }
     public TimeOnly OpensAt { get; private set; }
     public TimeOnly ClosesAt { get; private set; }
+    /// <summary>Orden dentro del día. Se recalcula al guardar, así que nunca queda desordenado.</summary>
+    public int SortOrder { get; private set; }
     public long Version { get; private set; }
-    public void Update(TimeOnly opensAt, TimeOnly closesAt, long? expectedVersion = null)
+    public void Update(TimeOnly opensAt, TimeOnly closesAt, long? expectedVersion = null, int? sortOrder = null)
     {
         EnsureVersion(expectedVersion);
         if (closesAt <= opensAt) throw new DomainException("INVALID_HOURS", "La hora de cierre debe ser posterior.");
         OpensAt = opensAt; ClosesAt = closesAt;
+        if (sortOrder.HasValue) SortOrder = sortOrder.Value;
         Version++;
     }
     private void EnsureVersion(long? expectedVersion)

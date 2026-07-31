@@ -33,18 +33,24 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
         var result = new List<PickupSlotDto>();
         foreach (var day in dates)
         {
-            var hour = hours.SingleOrDefault(x => x.Day == day.DayOfWeek);
-            if (hour is null) continue;
-            var from = hour.OpensAt > settings.ReceivesFrom ? hour.OpensAt : settings.ReceivesFrom;
-            var until = hour.ClosesAt < settings.ReceivesUntil ? hour.ClosesAt : settings.ReceivesUntil;
-            for (var local = day.ToDateTime(from); local.AddMinutes(settings.SlotIntervalMinutes) <= day.ToDateTime(until);
-                 local = local.AddMinutes(settings.SlotIntervalMinutes))
+            // Un día puede tener varios tramos. Se recorre cada uno por separado, así que entre
+            // 14:00 y 17:00 —la pausa— no se genera ninguna franja.
+            var intervals = BusinessSchedule.Normalize(hours.Where(x => x.Day == day.DayOfWeek)
+                .Select(x => new ScheduleInterval(x.OpensAt, x.ClosesAt)));
+            foreach (var interval in intervals)
             {
-                var start = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(local, DateTimeKind.Unspecified), zone));
-                if (start < earliest) continue;
-                var count = await store.CountActiveInSlotAsync(business.Id, start, ct);
-                if (count < settings.MaximumActivePerSlot)
-                    result.Add(new(start, start.AddMinutes(settings.SlotIntervalMinutes), settings.MaximumActivePerSlot - count));
+                var from = interval.OpensAt > settings.ReceivesFrom ? interval.OpensAt : settings.ReceivesFrom;
+                var until = interval.ClosesAt < settings.ReceivesUntil ? interval.ClosesAt : settings.ReceivesUntil;
+                if (until <= from) continue;
+                for (var local = day.ToDateTime(from); local.AddMinutes(settings.SlotIntervalMinutes) <= day.ToDateTime(until);
+                     local = local.AddMinutes(settings.SlotIntervalMinutes))
+                {
+                    var start = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(local, DateTimeKind.Unspecified), zone));
+                    if (start < earliest) continue;
+                    var count = await store.CountActiveInSlotAsync(business.Id, start, ct);
+                    if (count < settings.MaximumActivePerSlot)
+                        result.Add(new(start, start.AddMinutes(settings.SlotIntervalMinutes), settings.MaximumActivePerSlot - count));
+                }
             }
         }
         return new(business.TimeZoneId, result);
