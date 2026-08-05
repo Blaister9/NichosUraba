@@ -40,12 +40,39 @@ else
                 Se registra la versión @request.ConsentNoticeVersion y la fecha de tu aceptación.
             </p>
         </fieldset>
+        <fieldset><legend>4. Valor y adelanto</legend>
+            @if (Selected is null) { <p class="notice" role="status">Calculando adelanto… seleccione un servicio.</p> }
+            else
+            {
+                <dl class="details" data-testid="deposit-summary">
+                    <dt>Precio total</dt><dd>@Selected.ReferencePrice.ToString("C0", Colombia)</dd>
+                    <dt>¿Requiere adelanto?</dt><dd>@(Selected.RequiresDeposit ? "Sí" : "No")</dd>
+                    @if (Selected.RequiresDeposit)
+                    {
+                        <dt>Tipo</dt>
+                        <dd>@(Selected.DepositType == "Percentage" ? $"Porcentaje ({Selected.DepositValue:0.##} %)" : "Valor fijo")</dd>
+                        <dt>Valor del adelanto</dt><dd data-testid="deposit-amount">@Selected.DepositAmount.ToString("C0", Colombia)</dd>
+                        <dt>Cómo pagarlo</dt><dd>@Selected.DepositInstructions</dd>
+                    }
+                </dl>
+                @if (Selected.RequiresDeposit)
+                {
+                    <p class="notice">
+                        El pago se hace <strong>directamente al negocio</strong>. UrabáConecta no recibe dinero
+                        ni procesa pagos: al terminar le damos un enlace de WhatsApp para enviarle el comprobante.
+                    </p>
+                }
+            }
+        </fieldset>
         @if (error is not null) { <p class="error" role="alert">@error</p> }
-        <button class="primary" disabled="@(!interactiveReady || loadingSlots || submitting)">@(submitting ? "Enviando…" : "Enviar solicitud")</button>
+        <button class="primary" disabled="@(!interactiveReady || loadingSlots || submitting)">@(submitting ? "Creando cita…" : "Enviar solicitud")</button>
         </fieldset>
     </EditForm>
 }
 @code {
+    private static readonly System.Globalization.CultureInfo Colombia = new("es-CO");
+    /// <summary>El servicio elegido, para mostrar precio y adelanto antes de confirmar.</summary>
+    private ServiceDto? Selected => business?.Services.FirstOrDefault(x => x.Id == request.ServiceId);
     [Parameter] public string Slug { get; set; } = "";
     [SupplyParameterFromQuery] public Guid? ServiceId { get; set; }
     private BusinessProfileDto? business;

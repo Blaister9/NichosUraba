@@ -214,7 +214,7 @@ public sealed class Service : IBusinessOwned
 {
     private Service() { }
     public Service(Guid id, Guid businessId, string name, int durationMinutes, decimal referencePrice,
-        string? description = null, int displayOrder = 0)
+        string? description = null, int displayOrder = 0, DepositPolicy? deposit = null)
     {
         if (string.IsNullOrWhiteSpace(name)) throw new DomainException("INVALID_SERVICE", "El nombre es obligatorio.");
         if (durationMinutes is < 5 or > 480) throw new DomainException("INVALID_DURATION", "Duración inválida.");
@@ -223,6 +223,7 @@ public sealed class Service : IBusinessOwned
         if (displayOrder < 0) throw new DomainException("INVALID_SERVICE", "El orden no puede ser negativo.");
         (Id, BusinessId, Name, Description, DurationMinutes, ReferencePrice, DisplayOrder) =
             (id, businessId, name.Trim(), description?.Trim() ?? "", durationMinutes, referencePrice, displayOrder);
+        if (deposit is not null) ConfigureDeposit(deposit);
     }
     public Guid Id { get; private set; }
     public Guid BusinessId { get; private set; }
@@ -232,22 +233,52 @@ public sealed class Service : IBusinessOwned
     public decimal ReferencePrice { get; private set; }
     public int DisplayOrder { get; private set; }
     public bool IsActive { get; private set; } = true;
+    /// <summary>
+    /// Configuración del adelanto manual. Se guarda desarmada en columnas para que la migración sea
+    /// aditiva y los servicios anteriores sigan siendo válidos sin adelanto.
+    /// </summary>
+    public bool RequiresDeposit { get; private set; }
+    public DepositType DepositType { get; private set; } = DepositType.None;
+    public decimal DepositValue { get; private set; }
+    public string DepositInstructions { get; private set; } = "";
+    public string DepositWhatsAppNumber { get; private set; } = "";
     public long Version { get; private set; }
+    public DepositPolicy Deposit =>
+        RequiresDeposit ? new(true, DepositType, DepositValue, DepositInstructions, DepositWhatsAppNumber)
+            : DepositPolicy.None;
     public void EnsureActive()
     {
         if (!IsActive) throw new DomainException("SERVICE_INACTIVE", "El servicio no está disponible.");
     }
+    /// <summary>
+    /// <paramref name="deposit"/> nulo conserva la política vigente. Así desactivar un servicio o
+    /// cualquier otra edición que no hable de adelantos no lo borra por descuido.
+    /// </summary>
     public void Update(string name, int durationMinutes, decimal referencePrice, bool active,
-        string? description = null, int displayOrder = 0, long? expectedVersion = null)
+        string? description = null, int displayOrder = 0, long? expectedVersion = null,
+        DepositPolicy? deposit = null)
     {
         if (expectedVersion.HasValue && expectedVersion.Value != Version)
             throw new DomainException("CONCURRENCY_CONFLICT", "El servicio cambió. Recargue la información.");
         if (string.IsNullOrWhiteSpace(name) || durationMinutes is < 5 or > 480 || referencePrice < 0 ||
             description?.Length > 500 || displayOrder < 0)
             throw new DomainException("INVALID_SERVICE", "Los datos del servicio no son válidos.");
+        // Se valida contra el precio que queda tras esta edición, no contra el anterior.
+        var policy = deposit is null
+            ? DepositPolicy.Create(RequiresDeposit, DepositType, DepositValue, DepositInstructions,
+                RequiresDeposit ? DepositWhatsAppNumber : null, referencePrice)
+            : DepositPolicy.Create(deposit.RequiresDeposit, deposit.Type, deposit.Value, deposit.Instructions,
+                deposit.WhatsAppNumber, referencePrice);
         Name = name.Trim(); Description = description?.Trim() ?? ""; DurationMinutes = durationMinutes;
-        ReferencePrice = referencePrice; DisplayOrder = displayOrder; IsActive = active; Version++;
+        ReferencePrice = referencePrice; DisplayOrder = displayOrder; IsActive = active;
+        ApplyDeposit(policy); Version++;
     }
+    public void ConfigureDeposit(DepositPolicy deposit)
+        => ApplyDeposit(DepositPolicy.Create(deposit.RequiresDeposit, deposit.Type, deposit.Value,
+            deposit.Instructions, deposit.WhatsAppNumber, ReferencePrice));
+    private void ApplyDeposit(DepositPolicy policy)
+        => (RequiresDeposit, DepositType, DepositValue, DepositInstructions, DepositWhatsAppNumber) =
+            (policy.RequiresDeposit, policy.Type, policy.Value, policy.Instructions, policy.WhatsAppNumber);
 }
 
 public sealed class StaffMember : IBusinessOwned

@@ -22,6 +22,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<StaffService> StaffServices => Set<StaffService>();
     public DbSet<AvailabilityException> AvailabilityExceptions => Set<AvailabilityException>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
+    public DbSet<AppointmentDepositAudit> AppointmentDepositAudits => Set<AppointmentDepositAudit>();
     public DbSet<ConsentReceipt> ConsentReceipts => Set<ConsentReceipt>();
     public DbSet<QueueDefinition> QueueDefinitions => Set<QueueDefinition>();
     public DbSet<QueueSession> QueueSessions => Set<QueueSession>();
@@ -134,6 +135,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             x.HasIndex(e => new { e.BusinessId, e.Id }).IsUnique();
             x.Property(e => e.Name).HasMaxLength(120); x.Property(e => e.Description).HasMaxLength(500);
             x.Property(e => e.ReferencePrice).HasPrecision(12, 2); x.Property(e => e.Version).IsConcurrencyToken();
+            x.Property(e => e.DepositType).HasConversion<string>().HasMaxLength(20)
+                .HasDefaultValue(DepositType.None);
+            x.Property(e => e.DepositValue).HasPrecision(12, 2).HasDefaultValue(0m);
+            x.Property(e => e.RequiresDeposit).HasDefaultValue(false);
+            x.Property(e => e.DepositInstructions).HasMaxLength(400).HasDefaultValue("");
+            x.Property(e => e.DepositWhatsAppNumber).HasMaxLength(20).HasDefaultValue("");
             x.HasOne<Business>().WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Cascade);
         });
         builder.Entity<StaffMember>(x =>
@@ -191,6 +198,18 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             x.Property(e => e.ProtectedPhone).HasMaxLength(1000); x.Property(e => e.PhoneLast4).HasMaxLength(4);
             x.Property(e => e.ProtectedNotes).HasMaxLength(2000); x.Property(e => e.PublicCodeHash).HasMaxLength(64);
             x.Property(e => e.RejectionReason).HasMaxLength(160);
+            // Copia congelada del adelanto. El estado por omisión deja las citas anteriores como
+            // NotRequired sin tener que tocarlas.
+            x.Property(e => e.DepositStatus).HasConversion<string>().HasMaxLength(20)
+                .HasDefaultValue(DepositStatus.NotRequired);
+            x.Property(e => e.DepositType).HasConversion<string>().HasMaxLength(20)
+                .HasDefaultValue(DepositType.None);
+            x.Property(e => e.DepositConfiguredValue).HasPrecision(12, 2).HasDefaultValue(0m);
+            x.Property(e => e.DepositAmount).HasPrecision(12, 2).HasDefaultValue(0m);
+            x.Property(e => e.DepositInstructions).HasMaxLength(400).HasDefaultValue("");
+            x.Property(e => e.DepositWhatsAppNumber).HasMaxLength(20).HasDefaultValue("");
+            x.Property(e => e.DepositRejectionReason).HasMaxLength(160);
+            x.HasIndex(e => new { e.BusinessId, e.DepositStatus });
             x.HasOne<Business>().WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Restrict);
             x.HasOne<Service>().WithMany().HasForeignKey(e => new { e.BusinessId, e.ServiceId })
                 .HasPrincipalKey(e => new { e.BusinessId, e.Id }).OnDelete(DeleteBehavior.Restrict);
@@ -198,6 +217,18 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
                 .HasPrincipalKey(e => new { e.BusinessId, e.Id }).OnDelete(DeleteBehavior.Restrict);
             x.HasOne<ConsentReceipt>().WithOne().HasForeignKey<Appointment>(e => e.ConsentReceiptId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<AppointmentDepositAudit>(x =>
+        {
+            x.ToTable("appointment_deposit_audits"); x.HasKey(e => e.Id);
+            x.HasIndex(e => new { e.AppointmentId, e.OccurredAtUtc });
+            x.HasIndex(e => new { e.BusinessId, e.OccurredAtUtc });
+            x.Property(e => e.ActorKind).HasConversion<string>().HasMaxLength(20);
+            x.Property(e => e.PreviousStatus).HasConversion<string>().HasMaxLength(20);
+            x.Property(e => e.NewStatus).HasConversion<string>().HasMaxLength(20);
+            x.Property(e => e.Reason).HasMaxLength(160);
+            x.HasOne<Business>().WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Cascade);
+            x.HasOne<Appointment>().WithMany().HasForeignKey(e => e.AppointmentId).OnDelete(DeleteBehavior.Cascade);
         });
         builder.Entity<QueueDefinition>(x =>
         {

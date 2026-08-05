@@ -25,6 +25,15 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
         => useCases.GetTrackingAsync(code, cancellationToken);
     public Task CancelAppointmentAsync(string code, CancellationToken cancellationToken = default)
         => useCases.CancelAsync(code, cancellationToken);
+    public Task<AppointmentTrackingDto> ReportAppointmentDepositAsync(string code,
+        CancellationToken cancellationToken = default) => useCases.ReportDepositAsync(code, cancellationToken);
+    public async Task<AppointmentAdminDto> ChangeAppointmentDepositAsync(Guid businessId, Guid appointmentId,
+        string action, DepositCommandRequest request, CancellationToken cancellationToken = default)
+        => await useCases.ChangeDepositAsync(await UserId(), businessId, appointmentId, action, request,
+            (await authentication.GetAuthenticationStateAsync()).User.IsInRole("PlatformAdmin"), cancellationToken);
+    public Task<IReadOnlyList<AppointmentDepositAuditDto>> GetAppointmentDepositAuditAsync(Guid appointmentId,
+        CancellationToken cancellationToken = default)
+        => useCases.GetDepositAuditAsync(appointmentId, cancellationToken);
     public async Task<IReadOnlyList<MyBusinessDto>> GetMyBusinessesAsync(CancellationToken cancellationToken = default)
         => await useCases.GetMyBusinessesAsync(await UserId(), cancellationToken);
     public async Task<IReadOnlyList<AppointmentAdminDto>> GetAppointmentsAsync(Guid businessId, DateOnly? date = null,

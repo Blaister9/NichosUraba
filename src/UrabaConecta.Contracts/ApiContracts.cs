@@ -8,8 +8,14 @@ public sealed record BusinessCardDto(string Slug, string Name, OptionDto Categor
     bool HasScheduling = false, string? LogoUrl = null, string? CoverUrl = null,
     string? LogoAltText = null, string? CoverAltText = null, string ShortDescription = "");
 public sealed record BusinessHourDto(DayOfWeek Day, string OpensAt, string ClosesAt);
+/// <summary>
+/// <paramref name="DepositAmount"/> llega ya calculado por el servidor: el cliente nunca repite la
+/// aritmética del adelanto ni el redondeo a pesos.
+/// </summary>
 public sealed record ServiceDto(Guid Id, string Name, string Description, int DurationMinutes, decimal ReferencePrice,
-    int DisplayOrder, bool IsActive, int FutureAppointmentCount = 0, long Version = 0);
+    int DisplayOrder, bool IsActive, int FutureAppointmentCount = 0, long Version = 0,
+    bool RequiresDeposit = false, string DepositType = "None", decimal DepositValue = 0,
+    decimal DepositAmount = 0, string DepositInstructions = "", string DepositWhatsAppNumber = "");
 public sealed record BusinessProfileDto(string Slug, string Name, string Description, string Address, string PublicPhone,
     OptionDto Category, OptionDto Municipality, IReadOnlyList<BusinessHourDto> Hours, IReadOnlyList<ServiceDto> Services,
     bool HasVirtualQueue = false, bool HasPickupOrdering = false,
@@ -31,9 +37,18 @@ public sealed class CreateAppointmentRequest
     [Range(typeof(bool), "true", "true", ErrorMessage = "Debe aceptar el aviso.")] public bool ConsentAccepted { get; set; }
 }
 
-public sealed record AppointmentCreatedDto(string TrackingCode, string Status, string ServiceName, DateTimeOffset Start);
+public sealed record AppointmentCreatedDto(string TrackingCode, string Status, string ServiceName, DateTimeOffset Start,
+    string DepositStatus = "NotRequired", decimal DepositAmount = 0);
+/// <summary>
+/// Estado que ve el cliente con su código. <paramref name="DepositWhatsAppUrl"/> ya viene armado y
+/// codificado: el enlace es la única forma en que UrabáConecta participa del adelanto.
+/// </summary>
 public sealed record AppointmentTrackingDto(string Status, string StatusLabel, string BusinessName, string ServiceName,
-    DateTimeOffset Start, string PhoneMasked, bool CanCancel, DateTimeOffset UpdatedAt);
+    DateTimeOffset Start, string PhoneMasked, bool CanCancel, DateTimeOffset UpdatedAt,
+    decimal ServicePrice = 0, bool RequiresDeposit = false, string DepositType = "None",
+    decimal DepositAmount = 0, string DepositStatus = "NotRequired", string DepositStatusLabel = "",
+    string DepositInstructions = "", string? DepositWhatsAppUrl = null, bool CanReportDeposit = false,
+    string? DepositRejectionReason = null);
 
 /// <summary>
 /// Un permiso no basta para mostrar una acción: el módulo también tiene que estar habilitado en
@@ -127,13 +142,38 @@ public sealed class QueueTicketCommandRequest
 }
 public sealed record AppointmentAdminDto(Guid Id, Guid BusinessId, string ServiceName, DateTimeOffset Start,
     DateTimeOffset End, string CustomerAlias, string Phone, string Notes, string Status,
-    DateTimeOffset CreatedAt, string ConsentNoticeVersion, DateTimeOffset ConsentAcceptedAt, uint Version);
+    DateTimeOffset CreatedAt, string ConsentNoticeVersion, DateTimeOffset ConsentAcceptedAt, uint Version,
+    decimal ServicePrice = 0, bool RequiresDeposit = false, string DepositType = "None",
+    decimal DepositConfiguredValue = 0, decimal DepositAmount = 0, string DepositStatus = "NotRequired",
+    string DepositStatusLabel = "", string DepositInstructions = "", string DepositWhatsAppNumber = "",
+    DateTimeOffset? DepositReportedAt = null, DateTimeOffset? DepositVerifiedAt = null,
+    string? DepositVerifiedBy = null, string? DepositRejectionReason = null);
+public sealed record AppointmentDepositAuditDto(Guid Id, Guid AppointmentId, string ActorKind,
+    Guid? ActorUserId, string PreviousStatus, string NewStatus, DateTimeOffset OccurredAtUtc, string? Reason);
 public sealed class ChangeAppointmentStatusRequest
 {
     [Required] public string TargetStatus { get; set; } = "";
     [StringLength(160)] public string? Reason { get; set; }
 }
-public sealed class UpdateServiceRequest
+/// <summary>Acciones del negocio sobre el adelanto: verificar, rechazar, reportar o reabrir.</summary>
+public sealed class DepositCommandRequest
+{
+    [StringLength(160)] public string? Reason { get; set; }
+}
+/// <summary>
+/// Configuración del adelanto. Se comparte entre crear y editar servicio para que ambas rutas
+/// exijan exactamente lo mismo.
+/// </summary>
+public abstract class ServiceDepositFields
+{
+    public bool RequiresDeposit { get; set; }
+    /// <summary>None, FixedAmount o Percentage.</summary>
+    [StringLength(20)] public string DepositType { get; set; } = "None";
+    [Range(0, 100000000)] public decimal DepositValue { get; set; }
+    [StringLength(400)] public string? DepositInstructions { get; set; }
+    [StringLength(30)] public string? DepositWhatsAppNumber { get; set; }
+}
+public sealed class UpdateServiceRequest : ServiceDepositFields
 {
     [Required, StringLength(120, MinimumLength = 2)] public string Name { get; set; } = "";
     [StringLength(500)] public string? Description { get; set; }
@@ -143,7 +183,7 @@ public sealed class UpdateServiceRequest
     public bool IsActive { get; set; }
     public long Version { get; set; }
 }
-public sealed class CreateServiceRequest
+public sealed class CreateServiceRequest : ServiceDepositFields
 {
     [Required, StringLength(120, MinimumLength = 2)] public string Name { get; set; } = "";
     [StringLength(500)] public string? Description { get; set; }
@@ -365,6 +405,14 @@ public interface IUrabaConectaApi
         CancellationToken cancellationToken = default);
     Task<AppointmentTrackingDto?> GetAppointmentTrackingAsync(string code, CancellationToken cancellationToken = default);
     Task CancelAppointmentAsync(string code, CancellationToken cancellationToken = default);
+    /// <summary>El cliente avisa que envió el comprobante. Es su única acción sobre el adelanto.</summary>
+    Task<AppointmentTrackingDto> ReportAppointmentDepositAsync(string code,
+        CancellationToken cancellationToken = default);
+    /// <summary>Acción del negocio sobre el adelanto: verify, reject, report o reopen.</summary>
+    Task<AppointmentAdminDto> ChangeAppointmentDepositAsync(Guid businessId, Guid appointmentId, string action,
+        DepositCommandRequest request, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AppointmentDepositAuditDto>> GetAppointmentDepositAuditAsync(Guid appointmentId,
+        CancellationToken cancellationToken = default);
     Task<IReadOnlyList<MyBusinessDto>> GetMyBusinessesAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AppointmentAdminDto>> GetAppointmentsAsync(Guid businessId, DateOnly? date = null,
         string? status = null, CancellationToken cancellationToken = default);

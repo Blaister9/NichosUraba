@@ -85,23 +85,79 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
         var consent = new ConsentReceipt(Guid.NewGuid(), context.Business.Id, request.ConsentNoticeVersion,
             "Gestionar la solicitud de cita y contactar al solicitante.", now);
         var digits = PhoneDigits().Replace(request.Phone, "");
+        // El adelanto se congela aquí: la cita guarda lo pactado hoy, no lo que diga el servicio mañana.
         var appointment = new Appointment(Guid.NewGuid(), context.Business.Id, context.Service.Id, staffId,
             request.Start, context.Service.DurationMinutes, context.Service.Name, context.Service.ReferencePrice,
             protector.Protect(request.CustomerAlias.Trim()), protector.Protect(digits), digits[^4..],
-            protector.Protect(request.Notes?.Trim() ?? ""), code.Hash, code.Version, consent.Id, now);
+            protector.Protect(request.Notes?.Trim() ?? ""), code.Hash, code.Version, consent.Id, now,
+            context.Service.Deposit);
         consent.LinkAppointment(appointment.Id);
 
         if (!await store.AddAppointmentAsync(appointment, consent, cancellationToken))
             throw new ApiException("SLOT_UNAVAILABLE", "Ese horario acaba de ocuparse. Elija otro.", 409);
-        return new(code.PlainText, appointment.Status.ToString(), appointment.ServiceName, appointment.StartAtUtc);
+        return new(code.PlainText, appointment.Status.ToString(), appointment.ServiceName, appointment.StartAtUtc,
+            appointment.DepositStatus.ToString(), appointment.DepositAmount);
     }
 
     public async Task<AppointmentTrackingDto?> GetTrackingAsync(string code, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(code) || code.Length is < 20 or > 128) return null;
         var record = await store.FindAppointmentByCodeHashAsync(codes.Hash(code), cancellationToken);
-        return record is null ? null : ToTracking(record);
+        return record is null ? null : ToTracking(record, code);
     }
+
+    public async Task<AppointmentTrackingDto> ReportDepositAsync(string code,
+        CancellationToken cancellationToken = default)
+    {
+        var record = await store.FindAppointmentByCodeHashAsync(codes.Hash(code), cancellationToken)
+            ?? throw new ApiException("APPOINTMENT_NOT_FOUND", "No encontramos la cita.", 404);
+        var previous = record.Appointment.DepositStatus;
+        // El cliente sólo puede llegar hasta "reportado": verificar es del negocio.
+        TryDomain(() => record.Appointment.ReportDeposit(timeProvider.GetUtcNow()));
+        Audit(record.Appointment, DepositActorKind.Customer, null, previous);
+        await store.SaveChangesAsync(cancellationToken);
+        return ToTracking(record, code);
+    }
+
+    public async Task<AppointmentAdminDto> ChangeDepositAsync(Guid userId, Guid businessId, Guid appointmentId,
+        string action, DepositCommandRequest request, bool isPlatformAdmin = false,
+        CancellationToken cancellationToken = default)
+    {
+        await DemandAppointmentAccess(userId, businessId, cancellationToken);
+        var record = await store.GetAppointmentAsync(businessId, appointmentId, cancellationToken)
+            ?? throw new ApiException("APPOINTMENT_NOT_FOUND", "No encontramos la cita.", 404);
+        var appointment = record.Appointment;
+        var previous = appointment.DepositStatus;
+        var now = timeProvider.GetUtcNow();
+        switch (action.ToLowerInvariant())
+        {
+            case "report": TryDomain(() => appointment.ReportDeposit(now)); break;
+            case "verify": TryDomain(() => appointment.VerifyDeposit(userId, now)); break;
+            case "reject": TryDomain(() => appointment.RejectDeposit(now, request.Reason)); break;
+            case "reopen": TryDomain(() => appointment.ReopenDeposit(now)); break;
+            case "revert":
+                // Deshacer una verificación no es una corrección cotidiana del negocio.
+                if (!isPlatformAdmin)
+                    throw new ApiException("DEPOSIT_REVERT_FORBIDDEN",
+                        "Sólo la administración de la plataforma puede deshacer una verificación.", 403);
+                TryDomain(() => appointment.RevertDepositVerification(now));
+                break;
+            default: throw new ApiException("INVALID_DEPOSIT_ACTION", "La acción solicitada no existe.");
+        }
+        Audit(appointment, isPlatformAdmin ? DepositActorKind.PlatformAdmin : DepositActorKind.Business,
+            userId, previous, request.Reason);
+        await store.SaveChangesAsync(cancellationToken);
+        return ToAdmin(record);
+    }
+
+    public Task<IReadOnlyList<AppointmentDepositAuditDto>> GetDepositAuditAsync(Guid appointmentId,
+        CancellationToken cancellationToken = default)
+        => store.ListDepositAuditAsync(appointmentId, cancellationToken);
+
+    private void Audit(Appointment appointment, DepositActorKind actorKind, Guid? actorUserId,
+        DepositStatus previous, string? reason = null)
+        => store.AddDepositAudit(new(Guid.NewGuid(), appointment.BusinessId, appointment.Id, actorKind,
+            actorUserId, previous, appointment.DepositStatus, timeProvider.GetUtcNow(), reason));
 
     public async Task CancelAsync(string code, CancellationToken cancellationToken = default)
     {
@@ -142,8 +198,9 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
         await DemandConfigurationAccess(userId, businessId, cancellationToken);
         var service = await store.GetServiceAsync(businessId, serviceId, cancellationToken)
             ?? throw new ApiException("SERVICE_NOT_FOUND", "No encontramos el servicio.", 404);
+        var policy = ToPolicy(request, request.ReferencePrice);
         TryDomain(() => service.Update(request.Name, request.DurationMinutes, request.ReferencePrice, request.IsActive,
-            request.Description, request.DisplayOrder, request.Version));
+            request.Description, request.DisplayOrder, request.Version, policy));
         await store.SaveChangesAsync(cancellationToken);
         return ToServiceDto(service);
     }
@@ -163,7 +220,8 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
         try
         {
             service = new Service(Guid.NewGuid(), businessId, request.Name, request.DurationMinutes,
-                request.ReferencePrice, request.Description, request.DisplayOrder);
+                request.ReferencePrice, request.Description, request.DisplayOrder,
+                ToPolicy(request, request.ReferencePrice));
         }
         catch (DomainException ex) { throw new ApiException(ex.Code, ex.Message); }
         store.AddService(service);
@@ -377,25 +435,60 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
             throw new ApiException("INVALID_NOTES", "La observación puede tener máximo 300 caracteres.");
     }
 
-    private AppointmentAdminDto ToAdmin(AppointmentRecord record) => new(record.Appointment.Id,
-        record.Appointment.BusinessId, record.Appointment.ServiceName, record.Appointment.StartAtUtc,
-        record.Appointment.EndAtUtc, protector.Unprotect(record.Appointment.ProtectedCustomerAlias),
-        protector.Unprotect(record.Appointment.ProtectedPhone), protector.Unprotect(record.Appointment.ProtectedNotes),
-        record.Appointment.Status.ToString(), record.Appointment.CreatedAtUtc, record.Consent.NoticeVersion,
-        record.Consent.AcceptedAtUtc, record.Appointment.Version);
-
-    private static AppointmentTrackingDto ToTracking(AppointmentRecord record)
+    private AppointmentAdminDto ToAdmin(AppointmentRecord record)
     {
-        var status = record.Appointment.Status;
+        var appointment = record.Appointment;
+        return new(appointment.Id, appointment.BusinessId, appointment.ServiceName, appointment.StartAtUtc,
+            appointment.EndAtUtc, protector.Unprotect(appointment.ProtectedCustomerAlias),
+            protector.Unprotect(appointment.ProtectedPhone), protector.Unprotect(appointment.ProtectedNotes),
+            appointment.Status.ToString(), appointment.CreatedAtUtc, record.Consent.NoticeVersion,
+            record.Consent.AcceptedAtUtc, appointment.Version,
+            appointment.DisplayPrice, appointment.RequiresDeposit, appointment.DepositType.ToString(),
+            appointment.DepositConfiguredValue, appointment.DepositAmount, appointment.DepositStatus.ToString(),
+            DepositLabel(appointment.DepositStatus), appointment.DepositInstructions,
+            appointment.DepositWhatsAppNumber, appointment.DepositReportedAtUtc, appointment.DepositVerifiedAtUtc,
+            record.DepositVerifiedByName, appointment.DepositRejectionReason);
+    }
+
+    /// <summary>Los rótulos visibles del adelanto, iguales en el seguimiento y en el panel.</summary>
+    public static string DepositLabel(DepositStatus status) => status switch
+    {
+        DepositStatus.Pending => "Adelanto pendiente",
+        DepositStatus.Reported => "Comprobante reportado",
+        DepositStatus.Verified => "Adelanto verificado",
+        DepositStatus.Rejected => "Comprobante rechazado",
+        _ => "No requiere adelanto"
+    };
+
+    /// <summary>
+    /// El enlace de WhatsApp sólo se puede armar aquí porque necesita el código en claro, y de ese
+    /// código la base sólo guarda el hash.
+    /// </summary>
+    private static AppointmentTrackingDto ToTracking(AppointmentRecord record, string trackingCode)
+    {
+        var appointment = record.Appointment;
+        var status = appointment.Status;
         var labels = new Dictionary<AppointmentStatus, string>
         {
             [AppointmentStatus.Pending] = "Pendiente", [AppointmentStatus.Confirmed] = "Confirmada",
             [AppointmentStatus.Rejected] = "Rechazada", [AppointmentStatus.Cancelled] = "Cancelada",
             [AppointmentStatus.Completed] = "Completada", [AppointmentStatus.NoShow] = "No asistió"
         };
-        return new(status.ToString(), labels[status], record.Business.Name, record.Appointment.ServiceName,
-            record.Appointment.StartAtUtc, $"******{record.Appointment.PhoneLast4}",
-            status is AppointmentStatus.Pending or AppointmentStatus.Confirmed, record.Appointment.UpdatedAtUtc);
+        var deposit = appointment.DepositStatus;
+        // El botón acompaña mientras haya algo que enviar: pendiente, o rechazado y hay que reintentar.
+        var canSend = deposit is DepositStatus.Pending or DepositStatus.Rejected;
+        return new(status.ToString(), labels[status], record.Business.Name, appointment.ServiceName,
+            appointment.StartAtUtc, $"******{appointment.PhoneLast4}",
+            status is AppointmentStatus.Pending or AppointmentStatus.Confirmed, appointment.UpdatedAtUtc,
+            appointment.DisplayPrice, appointment.RequiresDeposit, appointment.DepositType.ToString(),
+            appointment.DepositAmount, deposit.ToString(), DepositLabel(deposit),
+            appointment.DepositInstructions,
+            canSend
+                ? WhatsAppNumbers.BuildLink(appointment.DepositWhatsAppNumber, DepositMessage.Build(
+                    record.Business.Name, appointment.ServiceName, appointment.StartAtUtc,
+                    record.Business.TimeZoneId, trackingCode, appointment.DepositAmount, appointment.DisplayPrice))
+                : null,
+            canSend, appointment.DepositRejectionReason);
     }
 
     private static void TryDomain(Action action)
@@ -444,7 +537,24 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
     }
 
     private static ServiceDto ToServiceDto(Service service) => new(service.Id, service.Name, service.Description,
-        service.DurationMinutes, service.ReferencePrice, service.DisplayOrder, service.IsActive, 0, service.Version);
+        service.DurationMinutes, service.ReferencePrice, service.DisplayOrder, service.IsActive, 0, service.Version,
+        service.RequiresDeposit, service.DepositType.ToString(), service.DepositValue,
+        service.Deposit.CalculateFor(service.ReferencePrice), service.DepositInstructions,
+        service.DepositWhatsAppNumber);
+
+    /// <summary>Traduce la solicitud a la política del dominio, que es quien decide si es válida.</summary>
+    private static DepositPolicy ToPolicy(ServiceDepositFields fields, decimal referencePrice)
+    {
+        if (!fields.RequiresDeposit) return DepositPolicy.None;
+        if (!Enum.TryParse<DepositType>(fields.DepositType, true, out var type))
+            throw new ApiException("DEPOSIT_TYPE_REQUIRED", "Elija si el adelanto es un valor fijo o un porcentaje.");
+        try
+        {
+            return DepositPolicy.Create(true, type, fields.DepositValue, fields.DepositInstructions,
+                fields.DepositWhatsAppNumber, referencePrice);
+        }
+        catch (DomainException ex) { throw new ApiException(ex.Code, ex.Message); }
+    }
 
     [GeneratedRegex(@"\D")]
     private static partial Regex PhoneDigits();

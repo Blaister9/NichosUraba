@@ -7,17 +7,24 @@ namespace UrabaConecta.EndToEndTests;
 
 public sealed class BrowserFixture : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:17-alpine")
-        .WithDatabase("urabaconecta_e2e").WithUsername("e2e").WithPassword("e2e-only-password").Build();
+    /// <summary>
+    /// Igual que en las pruebas de integración: contenedor por omisión, o la base que indique
+    /// URABACONECTA_TEST_PG cuando Docker no está disponible en la máquina.
+    /// </summary>
+    private readonly Lazy<PostgreSqlContainer> _contenedor = new(() => new PostgreSqlBuilder("postgres:17-alpine")
+        .WithDatabase("urabaconecta_e2e").WithUsername("e2e").WithPassword("e2e-only-password").Build());
+    private PostgreSqlContainer _postgres => _contenedor.Value;
     private readonly System.Collections.Concurrent.ConcurrentQueue<string> _log = new();
     private Process? _app;
     private IPlaywright? _playwright;
     public IBrowser Browser { get; private set; } = default!;
     public string BaseUrl { get; private set; } = "";
 
+    private static readonly string? Externa = Environment.GetEnvironmentVariable("URABACONECTA_TEST_PG");
+
     public async Task InitializeAsync()
     {
-        await _postgres.StartAsync();
+        if (Externa is null) await _postgres.StartAsync();
         var root = FindRepositoryRoot();
         var configuration = AppContext.BaseDirectory.Contains(
             $"{Path.DirectorySeparatorChar}Release{Path.DirectorySeparatorChar}",
@@ -35,7 +42,7 @@ public sealed class BrowserFixture : IAsyncLifetime
         };
         start.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
         start.Environment["ASPNETCORE_URLS"] = BaseUrl;
-        start.Environment["ConnectionStrings__DefaultConnection"] = _postgres.GetConnectionString();
+        start.Environment["ConnectionStrings__DefaultConnection"] = Externa ?? _postgres.GetConnectionString();
         start.Environment["URABACONECTA_TRACKING_HMAC_KEY"] = "e2e-test-hmac-key-with-at-least-32-bytes";
         start.Environment["RateLimits__PublicWritesPerMinute"] = "200";
         _app = Process.Start(start) ?? throw new InvalidOperationException("No fue posible iniciar la aplicación.");
@@ -63,7 +70,7 @@ public sealed class BrowserFixture : IAsyncLifetime
         _playwright?.Dispose();
         if (_app is { HasExited: false }) { _app.Kill(entireProcessTree: true); await _app.WaitForExitAsync(); }
         _app?.Dispose();
-        await _postgres.DisposeAsync();
+        if (_contenedor.IsValueCreated) await _postgres.DisposeAsync();
     }
 
     private async Task WaitUntilReady()

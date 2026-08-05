@@ -254,6 +254,11 @@ publicApi.MapGet("/appointments/{code}",
 publicApi.MapPost("/appointments/{code}/cancel",
     async (string code, IUrabaUseCases useCases, CancellationToken ct) =>
     { await useCases.CancelAsync(code, ct); return Results.NoContent(); }).RequireRateLimiting("public-write");
+// El código de seguimiento es la única credencial del cliente, y sólo le alcanza para avisar que
+// envió el comprobante. Verificar no tiene ruta pública.
+publicApi.MapPost("/appointments/{code}/deposit-reported",
+    (string code, IUrabaUseCases useCases, CancellationToken ct) => useCases.ReportDepositAsync(code, ct))
+    .RequireRateLimiting("public-write");
 publicApi.MapGet("/businesses/{slug}/queue",
     async (string slug, IQueueUseCases queues, CancellationToken ct) =>
         await queues.GetPublicAsync(slug, ct) is { } result ? Results.Ok(result) : Results.NotFound());
@@ -422,6 +427,13 @@ platformApi.MapDelete("/partner-operators/{userId:guid}",
 platformApi.MapGet("/access-audit",
     (Guid? businessId, HttpContext http, IAccessInvitationUseCases invitations, CancellationToken ct) =>
         invitations.ListAuditAsync(Actor(http), businessId, ct));
+// La auditoría del adelanto la consulta la administración técnica, no las socias: deja ver quién
+// verificó qué cita y cuándo.
+platformApi.MapGet("/appointments/{appointmentId:guid}/deposit-audit",
+    async (Guid appointmentId, HttpContext http, IUrabaUseCases useCases, CancellationToken ct) =>
+        http.User.IsInRole("PlatformAdmin")
+            ? Results.Ok(await useCases.GetDepositAuditAsync(appointmentId, ct))
+            : Results.StatusCode(StatusCodes.Status403Forbidden));
 platformApi.MapGet("/health",
     async (HttpContext http, IPlatformHealthProvider health, CancellationToken ct) =>
         http.User.IsInRole("PlatformAdmin")
@@ -445,6 +457,12 @@ privateApi.MapPost("/{businessId:guid}/appointments/{appointmentId:guid}/status"
     (Guid businessId, Guid appointmentId, ChangeAppointmentStatusRequest request, ClaimsPrincipal user,
         IUrabaUseCases useCases, CancellationToken ct)
         => useCases.ChangeStatusAsync(UserId(user), businessId, appointmentId, request, ct))
+    .RequireAuthorization("Appointments.Manage");
+privateApi.MapPost("/{businessId:guid}/appointments/{appointmentId:guid}/deposit/{action}",
+    (Guid businessId, Guid appointmentId, string action, DepositCommandRequest request, ClaimsPrincipal user,
+        IUrabaUseCases useCases, CancellationToken ct)
+        => useCases.ChangeDepositAsync(UserId(user), businessId, appointmentId, action, request,
+            user.IsInRole("PlatformAdmin"), ct))
     .RequireAuthorization("Appointments.Manage");
 privateApi.MapPut("/{businessId:guid}/services/{serviceId:guid}",
     (Guid businessId, Guid serviceId, UpdateServiceRequest request, ClaimsPrincipal user,

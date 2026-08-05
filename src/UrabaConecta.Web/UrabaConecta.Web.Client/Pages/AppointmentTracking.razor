@@ -15,6 +15,47 @@
             <dt>Servicio</dt><dd>@appointment.ServiceName</dd><dt>Fecha y hora</dt><dd>@LocalDate(appointment.Start)</dd>
             <dt>Teléfono</dt><dd>@appointment.PhoneMasked</dd><dt>Última actualización</dt><dd>@appointment.UpdatedAt.ToString("dd/MM/yyyy HH:mm") UTC</dd>
         </dl>
+        @if (appointment.RequiresDeposit)
+        {
+            <section class="deposit-block" data-testid="deposit-block">
+                <h2>Adelanto <span class="status @appointment.DepositStatus.ToLowerInvariant()" data-testid="deposit-status">@appointment.DepositStatusLabel</span></h2>
+                <dl class="details">
+                    <dt>Precio total</dt><dd>@appointment.ServicePrice.ToString("C0", Colombia)</dd>
+                    <dt>Adelanto requerido</dt>
+                    <dd>@(appointment.DepositType == "Percentage" ? "Porcentaje del precio" : "Valor fijo")</dd>
+                    <dt>Valor del adelanto</dt><dd data-testid="deposit-amount">@appointment.DepositAmount.ToString("C0", Colombia)</dd>
+                    <dt>Cómo pagarlo</dt><dd>@appointment.DepositInstructions</dd>
+                </dl>
+                @if (appointment.DepositStatus == "Verified")
+                {
+                    <p class="success" role="status">El negocio verificó su adelanto. No tiene que enviar nada más.</p>
+                }
+                else if (appointment.DepositStatus == "Reported")
+                {
+                    <p class="notice" role="status">Su comprobante quedó reportado. El negocio lo revisará.</p>
+                }
+                @if (!string.IsNullOrWhiteSpace(appointment.DepositRejectionReason))
+                {
+                    <p class="error" role="alert">El negocio rechazó el comprobante: @appointment.DepositRejectionReason</p>
+                }
+                @if (appointment.DepositWhatsAppUrl is not null)
+                {
+                    <p class="notice">
+                        El pago se hace directamente al negocio. UrabáConecta no recibe dinero: sólo abre
+                        la conversación de WhatsApp con los datos de su cita.
+                    </p>
+                    <a class="primary button" href="@appointment.DepositWhatsAppUrl" target="_blank" rel="noopener"
+                       data-testid="whatsapp-link" @onclick="() => openingWhatsApp = true">
+                        Enviar comprobante por WhatsApp
+                    </a>
+                    @if (openingWhatsApp) { <p class="notice" role="status">Abriendo WhatsApp…</p> }
+                    <button class="secondary" @onclick="ReportDeposit" disabled="@(!interactiveReady || working)"
+                            data-testid="report-deposit">
+                        @(reporting ? "Guardando estado…" : "Ya envié el comprobante")
+                    </button>
+                }
+            </section>
+        }
         @if (appointment.CanCancel)
         {
             <button class="danger" @onclick="Cancel" disabled="@(!interactiveReady || working)">
@@ -28,8 +69,9 @@
 @code {
     [Parameter] public string Code { get; set; } = "";
     [SupplyParameterFromQuery(Name = "new")] public bool IsNew { get; set; }
+    private static readonly System.Globalization.CultureInfo Colombia = new("es-CO");
     private AppointmentTrackingDto? appointment;
-    private bool loading = true, working, interactiveReady;
+    private bool loading = true, working, interactiveReady, reporting, openingWhatsApp;
     private string? error;
     protected override async Task OnParametersSetAsync() => await Load();
     protected override void OnAfterRender(bool firstRender)
@@ -39,6 +81,18 @@
         StateHasChanged();
     }
     private async Task Load() { loading = true; appointment = await Api.GetAppointmentTrackingAsync(Code); loading = false; }
+    /// <summary>
+    /// El botón se deshabilita durante el envío, así que un segundo clic no dispara un segundo
+    /// reporte. Si aun así llegara, el servidor rechaza la transición repetida.
+    /// </summary>
+    private async Task ReportDeposit()
+    {
+        if (working) return;
+        working = reporting = true; error = null;
+        try { appointment = await Api.ReportAppointmentDepositAsync(Code); }
+        catch (ApiException ex) { error = ex.Message; await Load(); }
+        finally { working = reporting = false; }
+    }
     private async Task Cancel()
     {
         working = true; error = null;

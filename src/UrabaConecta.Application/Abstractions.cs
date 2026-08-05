@@ -7,7 +7,12 @@ public sealed record SchedulingContext(Business Business, Service Service, IRead
     IReadOnlyList<StaffMember> EligibleStaff, IReadOnlyList<AvailabilityException> Exceptions,
     IReadOnlyList<(DateTimeOffset Start, DateTimeOffset End, Guid StaffId)> Occupied);
 
-public sealed record AppointmentRecord(Appointment Appointment, Business Business, ConsentReceipt Consent);
+/// <summary>
+/// <paramref name="DepositVerifiedByName"/> se resuelve en la consulta para no pedir el nombre de
+/// la persona verificadora una vez por fila.
+/// </summary>
+public sealed record AppointmentRecord(Appointment Appointment, Business Business, ConsentReceipt Consent,
+    string? DepositVerifiedByName = null);
 public sealed record IdentityAccount(Guid UserId, string Email, string DisplayName, bool MustChangePassword = false);
 public sealed record CreatedIdentityAccount(IdentityAccount Account, string TemporaryPassword);
 
@@ -204,6 +209,9 @@ public interface IUrabaStore
     Task<IReadOnlyList<AppointmentRecord>> GetAppointmentsAsync(Guid businessId, DateOnly? date,
         AppointmentStatus? status, CancellationToken cancellationToken);
     Task<AppointmentRecord?> GetAppointmentAsync(Guid businessId, Guid appointmentId, CancellationToken cancellationToken);
+    void AddDepositAudit(AppointmentDepositAudit entry);
+    Task<IReadOnlyList<AppointmentDepositAuditDto>> ListDepositAuditAsync(Guid appointmentId,
+        CancellationToken cancellationToken);
     Task SaveChangesAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<ServiceDto>> GetServicesAsync(Guid businessId, DateTimeOffset nowUtc,
         CancellationToken cancellationToken);
@@ -300,6 +308,12 @@ public interface IUrabaUseCases
         CancellationToken cancellationToken = default);
     Task<AppointmentTrackingDto?> GetTrackingAsync(string code, CancellationToken cancellationToken = default);
     Task CancelAsync(string code, CancellationToken cancellationToken = default);
+    /// <summary>El cliente marca "ya envié el comprobante"; se identifica sólo con su código.</summary>
+    Task<AppointmentTrackingDto> ReportDepositAsync(string code, CancellationToken cancellationToken = default);
+    Task<AppointmentAdminDto> ChangeDepositAsync(Guid userId, Guid businessId, Guid appointmentId, string action,
+        DepositCommandRequest request, bool isPlatformAdmin = false, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AppointmentDepositAuditDto>> GetDepositAuditAsync(Guid appointmentId,
+        CancellationToken cancellationToken = default);
     Task<IReadOnlyList<MyBusinessDto>> GetMyBusinessesAsync(Guid userId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AppointmentAdminDto>> GetAppointmentsAsync(Guid userId, Guid businessId, DateOnly? date,
         string? status, CancellationToken cancellationToken = default);

@@ -10,6 +10,9 @@
     <label>Estado<InputSelect @bind-Value="status"><option value="">Todos</option><option>Pending</option><option>Confirmed</option><option>Rejected</option><option>Cancelled</option><option>Completed</option><option>NoShow</option></InputSelect></label>
     <button class="primary" @onclick="Load" disabled="@(!interactiveReady || working)">Filtrar</button>
 </fieldset>
+@* El error de una acción se muestra sobre la lista: antes la reemplazaba, y quien no podía
+   confirmar por falta de adelanto se quedaba sin la cita a la vista para verificarlo. *@
+@if (actionError is not null) { <p class="error" role="alert">@actionError</p> }
 @if (loading) { <p class="notice">Cargando citas…</p> }
 else if (error is not null) { <p class="error" role="alert">@error</p> }
 else if (appointments.Count == 0) { <div class="empty"><h2>No hay citas con estos filtros</h2></div> }
@@ -23,20 +26,60 @@ else
                 <dl class="details"><dt>Solicitante</dt><dd>@item.CustomerAlias</dd><dt>Teléfono</dt><dd>@item.Phone</dd>
                     <dt>Observación</dt><dd>@(string.IsNullOrWhiteSpace(item.Notes) ? "Sin observación" : item.Notes)</dd>
                     <dt>Consentimiento</dt><dd>@item.ConsentNoticeVersion · @item.ConsentAcceptedAt.ToString("dd/MM/yyyy HH:mm") UTC</dd>
-                    <dt>Creada</dt><dd>@item.CreatedAt.ToString("dd/MM/yyyy HH:mm") UTC</dd></dl>
+                    <dt>Creada</dt><dd>@item.CreatedAt.ToString("dd/MM/yyyy HH:mm") UTC</dd>
+                    <dt>Precio</dt><dd>@item.ServicePrice.ToString("C0", Colombia)</dd>
+                    <dt>Adelanto</dt>
+                    <dd data-testid="deposit-amount">
+                        @if (item.RequiresDeposit)
+                        {
+                            <text>@item.DepositAmount.ToString("C0", Colombia)
+                                (@(item.DepositType == "Percentage" ? $"{item.DepositConfiguredValue:0.##} %" : "valor fijo"))</text>
+                        }
+                        else { <text>No requiere adelanto</text> }
+                    </dd>
+                    @if (item.RequiresDeposit)
+                    {
+                        <dt>Estado del adelanto</dt>
+                        <dd><span class="status @item.DepositStatus.ToLowerInvariant()" data-testid="deposit-status">@item.DepositStatusLabel</span></dd>
+                        <dt>Comprobante reportado</dt>
+                        <dd>@(item.DepositReportedAt?.ToString("dd/MM/yyyy HH:mm") is { } reported ? $"{reported} UTC" : "Sin reportar")</dd>
+                        <dt>Verificado</dt>
+                        <dd>@(item.DepositVerifiedAt?.ToString("dd/MM/yyyy HH:mm") is { } verified ? $"{verified} UTC" : "Sin verificar")</dd>
+                        <dt>Verificado por</dt><dd>@(item.DepositVerifiedBy ?? "—")</dd>
+                        @if (!string.IsNullOrWhiteSpace(item.DepositRejectionReason))
+                        {
+                            <dt>Motivo del rechazo</dt><dd>@item.DepositRejectionReason</dd>
+                        }
+                    }
+                </dl>
                 <div class="actions">
                     @foreach (var action in Actions(item.Status))
                     { <button class="secondary" @onclick="() => Change(item, action.Value)" disabled="@(!interactiveReady || working)">@action.Label</button> }
+                    @if (item.Status == "Pending" && item.RequiresDeposit && item.DepositStatus != "Verified")
+                    { <p class="meta">Confirme la cita después de verificar el adelanto.</p> }
                 </div>
+                @if (item.RequiresDeposit)
+                {
+                    <div class="actions" data-testid="deposit-actions">
+                        @foreach (var action in DepositActions(item.DepositStatus))
+                        {
+                            <button class="secondary" @onclick="() => ChangeDeposit(item, action.Value)"
+                                    disabled="@(!interactiveReady || working)" data-testid="deposit-@action.Value">
+                                @(busyAction == $"{item.Id}:{action.Value}" ? "Guardando estado…" : action.Label)
+                            </button>
+                        }
+                    </div>
+                }
             </article>
         }
     </div>
 }
 @code {
+    private static readonly System.Globalization.CultureInfo Colombia = new("es-CO");
     [Parameter] public Guid BusinessId { get; set; }
     private DateOnly? date;
     private string status = "";
-    private string? error;
+    private string? error, actionError, busyAction;
     private bool loading = true, working, interactiveReady;
     private IReadOnlyList<AppointmentAdminDto> appointments = [];
     protected override async Task OnParametersSetAsync() => await Load();
@@ -55,15 +98,36 @@ else
     }
     private async Task Change(AppointmentAdminDto item, string target)
     {
-        working = true; error = null;
+        if (working) return;
+        working = true; actionError = null;
         try { await Api.ChangeAppointmentStatusAsync(BusinessId, item.Id, new() { TargetStatus = target }); await Load(); }
-        catch (ApiException ex) { error = ex.Message; }
+        catch (ApiException ex) { actionError = ex.Message; }
         finally { working = false; }
+    }
+    /// <summary>
+    /// Un segundo clic no repite la acción: el botón queda deshabilitado mientras dura, y el
+    /// servidor rechazaría de todos modos una transición que ya no aplica.
+    /// </summary>
+    private async Task ChangeDeposit(AppointmentAdminDto item, string action)
+    {
+        if (working) return;
+        working = true; actionError = null; busyAction = $"{item.Id}:{action}";
+        try { await Api.ChangeAppointmentDepositAsync(BusinessId, item.Id, action, new()); await Load(); }
+        catch (ApiException ex) { actionError = ex.Message; }
+        finally { working = false; busyAction = null; }
     }
     private static IEnumerable<(string Value, string Label)> Actions(string current) => current switch
     {
         "Pending" => [("Confirmed", "Confirmar"), ("Rejected", "Rechazar")],
         "Confirmed" => [("Completed", "Completar"), ("NoShow", "Marcar ausente")],
+        _ => []
+    };
+    /// <summary>Verificado es definitivo para el negocio: sólo la plataforma puede deshacerlo.</summary>
+    private static IEnumerable<(string Value, string Label)> DepositActions(string current) => current switch
+    {
+        "Pending" => [("report", "Marcar comprobante reportado"), ("verify", "Verificar adelanto"), ("reject", "Rechazar comprobante")],
+        "Reported" => [("verify", "Verificar adelanto"), ("reject", "Rechazar comprobante")],
+        "Rejected" => [("reopen", "Volver a pendiente"), ("report", "Marcar comprobante reportado"), ("verify", "Verificar adelanto")],
         _ => []
     };
     private static string Label(string value) => value switch

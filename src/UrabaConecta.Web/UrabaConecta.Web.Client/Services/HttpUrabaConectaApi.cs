@@ -31,6 +31,20 @@ public sealed class HttpUrabaConectaApi(HttpClient http) : IUrabaConectaApi
     }
     public async Task CancelAppointmentAsync(string code, CancellationToken cancellationToken = default)
         => await Ensure(await http.PostAsync($"api/v1/public/appointments/{Uri.EscapeDataString(code)}/cancel", null, cancellationToken), cancellationToken);
+    public async Task<AppointmentTrackingDto> ReportAppointmentDepositAsync(string code,
+        CancellationToken cancellationToken = default)
+        => await Read<AppointmentTrackingDto>(await http.PostAsync(
+            $"api/v1/public/appointments/{Uri.EscapeDataString(code)}/deposit-reported", null, cancellationToken),
+            cancellationToken);
+    public async Task<AppointmentAdminDto> ChangeAppointmentDepositAsync(Guid businessId, Guid appointmentId,
+        string action, DepositCommandRequest request, CancellationToken cancellationToken = default)
+        => await Read<AppointmentAdminDto>(await http.PostAsJsonAsync(
+            $"api/v1/businesses/{businessId}/appointments/{appointmentId}/deposit/{Uri.EscapeDataString(action)}",
+            request, Json, cancellationToken), cancellationToken);
+    public Task<IReadOnlyList<AppointmentDepositAuditDto>> GetAppointmentDepositAuditAsync(Guid appointmentId,
+        CancellationToken cancellationToken = default)
+        => Get<IReadOnlyList<AppointmentDepositAuditDto>>(
+            $"api/v1/admin/appointments/{appointmentId}/deposit-audit", cancellationToken);
     public Task<IReadOnlyList<MyBusinessDto>> GetMyBusinessesAsync(CancellationToken cancellationToken = default)
         => Get<IReadOnlyList<MyBusinessDto>>("api/v1/businesses/mine", cancellationToken);
     public Task<IReadOnlyList<AppointmentAdminDto>> GetAppointmentsAsync(Guid businessId, DateOnly? date = null,

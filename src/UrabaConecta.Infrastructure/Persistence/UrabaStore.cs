@@ -83,8 +83,12 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
                                   .Select(x => new { x.Day, x.OpensAt, x.ClosesAt }).ToList(),
                               Services = db.Services.Where(x => x.BusinessId == b.Id && x.IsActive)
                                   .OrderBy(x => x.DisplayOrder).ThenBy(x => x.Name)
-                                  .Select(x => new ServiceDto(x.Id, x.Name, x.Description, x.DurationMinutes,
-                                      x.ReferencePrice, x.DisplayOrder, x.IsActive, 0, x.Version)).ToList(),
+                                  .Select(x => new
+                                  {
+                                      x.Id, x.Name, x.Description, x.DurationMinutes, x.ReferencePrice,
+                                      x.DisplayOrder, x.IsActive, x.Version, x.RequiresDeposit, x.DepositType,
+                                      x.DepositValue, x.DepositInstructions
+                                  }).ToList(),
                               Images = db.BusinessImages.Where(x => x.BusinessId == b.Id && !x.IsDeleted)
                                   .OrderBy(x => x.Kind).ThenBy(x => x.DisplayOrder)
                                   .Select(x => new { x.Id, x.Kind, x.StorageKey, x.AltText, x.Width, x.Height, x.DisplayOrder, x.Version })
@@ -98,11 +102,22 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
             .Select(x => new BusinessHourDto(x.Day, x.OpensAt.ToString("HH:mm"), x.ClosesAt.ToString("HH:mm")))
             .ToList();
         var hasAppointments = data.Modules.Contains(BusinessModuleKind.Appointments);
+        // El adelanto se muestra antes de reservar, ya calculado. El WhatsApp del negocio no viaja
+        // aquí: sólo hace falta después de crear la cita, y entonces sale de la copia congelada.
+        var services = data.Services.Select(x =>
+        {
+            var policy = x.RequiresDeposit
+                ? new DepositPolicy(true, x.DepositType, x.DepositValue, x.DepositInstructions, "")
+                : DepositPolicy.None;
+            return new ServiceDto(x.Id, x.Name, x.Description, x.DurationMinutes, x.ReferencePrice,
+                x.DisplayOrder, x.IsActive, 0, x.Version, x.RequiresDeposit, x.DepositType.ToString(),
+                x.DepositValue, policy.CalculateFor(x.ReferencePrice), x.DepositInstructions, "");
+        }).ToList();
         var images = data.Images.Select(x => new BusinessImageDto(x.Id, x.Kind.ToString(),
             storage.PublicUrl(x.StorageKey), x.AltText, x.Width, x.Height, x.DisplayOrder, x.Version)).ToList();
         return new(data.b.Slug, data.b.Name, data.b.Description, data.b.Address, data.b.PublicPhone,
             new(data.CategorySlug, data.CategoryName), new(data.MunicipalitySlug, data.MunicipalityName),
-            publicHours, hasAppointments ? data.Services : [],
+            publicHours, hasAppointments ? services : [],
             data.Modules.Contains(BusinessModuleKind.VirtualQueues),
             data.Modules.Contains(BusinessModuleKind.PickupOrders),
             data.b.ShortDescription, data.b.ReferencePoint, data.b.WhatsAppUrl, data.b.PublicEmail,
@@ -252,8 +267,28 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
         var consentIds = appointments.Select(x => x.ConsentReceiptId).Distinct().ToList();
         var consents = await db.ConsentReceipts.AsNoTracking().Where(x => consentIds.Contains(x.Id))
             .ToDictionaryAsync(x => x.Id, cancellationToken);
-        return appointments.Select(x => new AppointmentRecord(x, business, consents[x.ConsentReceiptId])).ToList();
+        var verifiers = await VerifierNamesAsync(appointments, cancellationToken);
+        return appointments.Select(x => new AppointmentRecord(x, business, consents[x.ConsentReceiptId],
+            Verifier(verifiers, x))).ToList();
     }
+
+    /// <summary>
+    /// Los nombres de quienes verificaron, en una sola consulta para todo el listado. Uno por fila
+    /// era exactamente la regresión que hacía lenta la consola.
+    /// </summary>
+    private async Task<Dictionary<Guid, string>> VerifierNamesAsync(IEnumerable<Appointment> appointments,
+        CancellationToken cancellationToken)
+    {
+        var ids = appointments.Where(x => x.DepositVerifiedByUserId.HasValue)
+            .Select(x => x.DepositVerifiedByUserId!.Value).Distinct().ToList();
+        if (ids.Count == 0) return [];
+        return await db.Users.AsNoTracking().Where(x => ids.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, x => string.IsNullOrWhiteSpace(x.DisplayName) ? x.Email ?? "" : x.DisplayName,
+                cancellationToken);
+    }
+
+    private static string? Verifier(Dictionary<Guid, string> names, Appointment appointment)
+        => appointment.DepositVerifiedByUserId is { } id && names.TryGetValue(id, out var name) ? name : null;
 
     public async Task<AppointmentRecord?> GetAppointmentAsync(Guid businessId, Guid appointmentId,
         CancellationToken cancellationToken)
@@ -277,13 +312,31 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
     }
     public async Task<IReadOnlyList<ServiceDto>> GetServicesAsync(Guid businessId, DateTimeOffset nowUtc,
         CancellationToken cancellationToken)
-        => await db.Services.AsNoTracking().Where(x => x.BusinessId == businessId)
+    {
+        // El adelanto calculado se resuelve en memoria: la regla de redondeo vive en el dominio y no
+        // conviene reescribirla en SQL.
+        var rows = await db.Services.AsNoTracking().Where(x => x.BusinessId == businessId)
             .OrderBy(x => x.DisplayOrder).ThenBy(x => x.Name)
-            .Select(x => new ServiceDto(x.Id, x.Name, x.Description, x.DurationMinutes, x.ReferencePrice,
-                x.DisplayOrder, x.IsActive, db.Appointments.Count(a => a.BusinessId == businessId &&
+            .Select(x => new
+            {
+                x.Id, x.Name, x.Description, x.DurationMinutes, x.ReferencePrice, x.DisplayOrder, x.IsActive,
+                x.Version, x.RequiresDeposit, x.DepositType, x.DepositValue, x.DepositInstructions,
+                x.DepositWhatsAppNumber,
+                Future = db.Appointments.Count(a => a.BusinessId == businessId &&
                     a.ServiceId == x.Id && a.StartAtUtc > nowUtc &&
-                    (a.Status == AppointmentStatus.Pending || a.Status == AppointmentStatus.Confirmed)), x.Version))
-            .ToListAsync(cancellationToken);
+                    (a.Status == AppointmentStatus.Pending || a.Status == AppointmentStatus.Confirmed))
+            }).ToListAsync(cancellationToken);
+        return rows.Select(x =>
+        {
+            var policy = x.RequiresDeposit
+                ? new DepositPolicy(true, x.DepositType, x.DepositValue, x.DepositInstructions, x.DepositWhatsAppNumber)
+                : DepositPolicy.None;
+            return new ServiceDto(x.Id, x.Name, x.Description, x.DurationMinutes, x.ReferencePrice,
+                x.DisplayOrder, x.IsActive, x.Future, x.Version, x.RequiresDeposit, x.DepositType.ToString(),
+                x.DepositValue, policy.CalculateFor(x.ReferencePrice), x.DepositInstructions,
+                x.DepositWhatsAppNumber);
+        }).ToList();
+    }
     public Task<Service?> GetServiceAsync(Guid businessId, Guid serviceId, CancellationToken cancellationToken)
         => db.Services.SingleOrDefaultAsync(x => x.BusinessId == businessId && x.Id == serviceId, cancellationToken);
     public void AddService(Service service) => db.Services.Add(service);
@@ -360,6 +413,17 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
     {
         var business = await db.Businesses.AsNoTracking().SingleAsync(x => x.Id == appointment.BusinessId, cancellationToken);
         var consent = await db.ConsentReceipts.AsNoTracking().SingleAsync(x => x.Id == appointment.ConsentReceiptId, cancellationToken);
-        return new(appointment, business, consent);
+        var verifiers = await VerifierNamesAsync([appointment], cancellationToken);
+        return new(appointment, business, consent, Verifier(verifiers, appointment));
     }
+
+    public void AddDepositAudit(AppointmentDepositAudit entry) => db.AppointmentDepositAudits.Add(entry);
+
+    public async Task<IReadOnlyList<AppointmentDepositAuditDto>> ListDepositAuditAsync(Guid appointmentId,
+        CancellationToken cancellationToken)
+        => await db.AppointmentDepositAudits.AsNoTracking().Where(x => x.AppointmentId == appointmentId)
+            .OrderByDescending(x => x.OccurredAtUtc)
+            .Select(x => new AppointmentDepositAuditDto(x.Id, x.AppointmentId, x.ActorKind.ToString(),
+                x.ActorUserId, x.PreviousStatus.ToString(), x.NewStatus.ToString(), x.OccurredAtUtc, x.Reason))
+            .ToListAsync(cancellationToken);
 }

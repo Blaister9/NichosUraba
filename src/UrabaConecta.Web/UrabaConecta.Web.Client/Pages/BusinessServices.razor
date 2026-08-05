@@ -28,6 +28,34 @@ else
                     <label class="switch-row"><InputCheckbox @bind-Value="form.IsActive" /> Disponible para nuevas citas</label>
                 }
             </div>
+            <fieldset class="deposit-fields">
+                <legend>Adelanto</legend>
+                <p class="meta">
+                    UrabáConecta no cobra ni recibe dinero. Calcula el adelanto, se lo muestra al cliente y
+                    genera un enlace de WhatsApp para que le envíe el comprobante a usted.
+                </p>
+                <label class="switch-row">
+                    <InputCheckbox @bind-Value="form.RequiresDeposit" data-testid="requires-deposit" />
+                    Este servicio exige adelanto
+                </label>
+                @if (form.RequiresDeposit)
+                {
+                    <div class="form-grid">
+                        <label>Tipo de adelanto<InputSelect @bind-Value="form.DepositType" data-testid="deposit-type">
+                            <option value="FixedAmount">Valor fijo en pesos</option>
+                            <option value="Percentage">Porcentaje del precio</option>
+                        </InputSelect></label>
+                        <label>@(form.DepositType == "Percentage" ? "Porcentaje (1 a 100)" : "Valor del adelanto (COP)")
+                            <InputNumber @bind-Value="form.DepositValue" min="1" data-testid="deposit-value" /></label>
+                        <label>WhatsApp que recibe los comprobantes
+                            <InputText @bind-Value="form.DepositWhatsAppNumber" inputmode="tel" placeholder="573001234567" data-testid="deposit-whatsapp" />
+                            <span class="meta">Con código de país y sin signos.</span></label>
+                        <label>Instrucciones para el cliente
+                            <InputTextArea @bind-Value="form.DepositInstructions" maxlength="400" data-testid="deposit-instructions" /></label>
+                    </div>
+                    <p class="notice" role="status" data-testid="deposit-preview">@Preview()</p>
+                }
+            </fieldset>
             <div class="actions">
                 <button class="primary" type="submit" disabled="@(!interactiveReady || saving)" data-testid="save-service">
                     @(saving ? "Guardando…" : "Guardar servicio")
@@ -47,6 +75,15 @@ else
                     <div><div class="row-title"><h2>@service.Name</h2><span class="status @(service.IsActive ? "confirmed" : "cancelled")">@(service.IsActive ? "Activo" : "Inactivo")</span></div>
                         @if (!string.IsNullOrWhiteSpace(service.Description)) { <p>@service.Description</p> }
                         <p class="meta">@service.DurationMinutes min · @service.ReferencePrice.ToString("C0", Colombia) · orden @service.DisplayOrder · @service.FutureAppointmentCount cita(s) futura(s)</p>
+                        <p class="meta" data-testid="service-deposit">
+                            @if (service.RequiresDeposit)
+                            {
+                                <text>Adelanto @service.DepositAmount.ToString("C0", Colombia)
+                                    (@(service.DepositType == "Percentage" ? $"{service.DepositValue:0.##} %" : "valor fijo"))
+                                    · WhatsApp @service.DepositWhatsAppNumber</text>
+                            }
+                            else { <text>Sin adelanto</text> }
+                        </p>
                     </div>
                     <div class="actions">
                         <button class="secondary" type="button" @onclick="() => Edit(service)" disabled="@(!interactiveReady || saving)">Editar</button>
@@ -84,8 +121,27 @@ else
         editingId = service.Id;
         form = new() { Name = service.Name, Description = service.Description, DurationMinutes = service.DurationMinutes,
             ReferencePrice = service.ReferencePrice, DisplayOrder = service.DisplayOrder,
-            IsActive = service.IsActive, Version = service.Version };
+            IsActive = service.IsActive, Version = service.Version,
+            RequiresDeposit = service.RequiresDeposit,
+            DepositType = service.DepositType == "None" ? "FixedAmount" : service.DepositType,
+            DepositValue = service.DepositValue, DepositInstructions = service.DepositInstructions,
+            DepositWhatsAppNumber = service.DepositWhatsAppNumber };
         message = null;
+    }
+
+    /// <summary>Adelanto calculado mientras se escribe, con las mismas reglas que aplicará el servidor.</summary>
+    private string Preview()
+    {
+        if (form.DepositValue <= 0) return "Calculando adelanto… indique un valor mayor que cero.";
+        if (form.DepositType == "Percentage")
+        {
+            if (form.DepositValue > 100) return "El porcentaje debe estar entre 1 y 100.";
+            var amount = Math.Round(form.ReferencePrice * form.DepositValue / 100m, 0, MidpointRounding.AwayFromZero);
+            return $"Sobre {form.ReferencePrice.ToString("C0", Colombia)} el cliente adelantará {amount.ToString("C0", Colombia)}.";
+        }
+        if (form.DepositValue > form.ReferencePrice) return "El adelanto no puede superar el precio del servicio.";
+        return $"El cliente adelantará {Math.Round(form.DepositValue, 0, MidpointRounding.AwayFromZero).ToString("C0", Colombia)} " +
+               $"de {form.ReferencePrice.ToString("C0", Colombia)}.";
     }
     private void Reset() { editingId = null; form = new(); }
     private async Task Save()
@@ -108,11 +164,15 @@ else
         saving = true; error = message = null;
         try
         {
+            // Activar o desactivar no toca el adelanto: se reenvía tal cual está configurado.
             await Api.UpdateServiceAsync(BusinessId, service.Id, new()
             {
                 Name = service.Name, Description = service.Description, DurationMinutes = service.DurationMinutes,
                 ReferencePrice = service.ReferencePrice, DisplayOrder = service.DisplayOrder,
-                IsActive = !service.IsActive, Version = service.Version
+                IsActive = !service.IsActive, Version = service.Version,
+                RequiresDeposit = service.RequiresDeposit, DepositType = service.DepositType,
+                DepositValue = service.DepositValue, DepositInstructions = service.DepositInstructions,
+                DepositWhatsAppNumber = service.DepositWhatsAppNumber
             });
             message = service.IsActive
                 ? "Servicio desactivado. Las citas existentes se conservan."
@@ -134,10 +194,25 @@ else
         [Range(0, 10000)] public int DisplayOrder { get; set; }
         public bool IsActive { get; set; } = true;
         public long Version { get; set; }
-        public CreateServiceRequest ToCreate() => new() { Name = Name, Description = Description,
-            DurationMinutes = DurationMinutes, ReferencePrice = ReferencePrice, DisplayOrder = DisplayOrder };
-        public UpdateServiceRequest ToUpdate() => new() { Name = Name, Description = Description,
-            DurationMinutes = DurationMinutes, ReferencePrice = ReferencePrice, DisplayOrder = DisplayOrder,
-            IsActive = IsActive, Version = Version };
+        public bool RequiresDeposit { get; set; }
+        public string DepositType { get; set; } = "FixedAmount";
+        [Range(0, 100000000)] public decimal DepositValue { get; set; }
+        [StringLength(400)] public string? DepositInstructions { get; set; }
+        [StringLength(30)] public string? DepositWhatsAppNumber { get; set; }
+        public CreateServiceRequest ToCreate() => Fill(new CreateServiceRequest { Name = Name,
+            Description = Description, DurationMinutes = DurationMinutes, ReferencePrice = ReferencePrice,
+            DisplayOrder = DisplayOrder });
+        public UpdateServiceRequest ToUpdate() => Fill(new UpdateServiceRequest { Name = Name,
+            Description = Description, DurationMinutes = DurationMinutes, ReferencePrice = ReferencePrice,
+            DisplayOrder = DisplayOrder, IsActive = IsActive, Version = Version });
+        private T Fill<T>(T request) where T : ServiceDepositFields
+        {
+            request.RequiresDeposit = RequiresDeposit;
+            request.DepositType = RequiresDeposit ? DepositType : "None";
+            request.DepositValue = RequiresDeposit ? DepositValue : 0;
+            request.DepositInstructions = DepositInstructions;
+            request.DepositWhatsAppNumber = DepositWhatsAppNumber;
+            return request;
+        }
     }
 }
