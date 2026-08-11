@@ -111,4 +111,5 @@ public sealed record LegalInfoDto(string ResponsibleName, string Identification,
 
 public sealed record PlatformHealthDto(string Environment, string Version, string Commit,
     DateTimeOffset? DeployedAtUtc, string DatabaseStatus, string ObjectStorageStatus,
-    string ObjectStorageProvider, string DataProtectionStatus, bool DemoSeedEnabled);
+    string ObjectStorageProvider, string DataProtectionStatus, bool DemoSeedEnabled,
+    TimeSpan Uptime, string MigrationStatus);

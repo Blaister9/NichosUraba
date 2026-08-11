@@ -12,7 +12,7 @@ public enum PlatformAccessAction
 {
     InvitationCreated, InvitationAccepted, InvitationRevoked, InvitationResent, InvitationExpired,
     PartnerOperatorCreated, PartnerOperatorRevoked, AdministrativeAccessReset,
-    PasswordChanged, SessionsRevoked, DemoAdministratorBootstrap
+    PasswordChanged, SessionsRevoked, DemoAdministratorBootstrap, ProductionAdministratorBootstrap
 }
 
 /// <summary>

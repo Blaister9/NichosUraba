@@ -25,6 +25,14 @@ if (int.TryParse(Environment.GetEnvironmentVariable("PORT"), out var railwayPort
     builder.WebHost.UseUrls($"http://0.0.0.0:{railwayPort}");
 builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
 builder.Logging.AddFilter("Microsoft.AspNetCore.SignalR", LogLevel.Warning);
+// Fuera de Development el registro sale en JSON con sus ámbitos: es lo que hace consultable la
+// correlación desde el visor de Railway. La consola legible se conserva en local.
+if (!builder.Environment.IsDevelopment())
+    builder.Logging.AddJsonConsole(options => options.IncludeScopes = true);
+var deployment = new DeploymentIdentity(builder.Environment.EnvironmentName,
+    typeof(Program).Assembly.GetName().Version?.ToString() ?? "desconocida",
+    builder.Configuration["Deployment:Commit"] ?? "desconocido");
+builder.Services.AddSingleton(deployment);
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Falta ConnectionStrings:DefaultConnection.");
 
@@ -43,6 +51,11 @@ builder.Services.AddAuthentication(options =>
 builder.Services.ConfigureApplicationCookie(options =>
 {
     if (!builder.Environment.IsDevelopment()) options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.Cookie.HttpOnly = true;
+    // Explícito y no heredado del marco: la subida de imágenes desactiva el antiforgery por ser
+    // multipart, así que lo único que impide un envío desde otro sitio con la cookie de la
+    // víctima es que SameSite no la acompañe en una petición cruzada.
+    options.Cookie.SameSite = SameSiteMode.Lax;
     // Las rutas de API responden con códigos de estado; sólo el sitio redirige al inicio de sesión.
     var redirectToLogin = options.Events.OnRedirectToLogin;
     var redirectToAccessDenied = options.Events.OnRedirectToAccessDenied;
@@ -160,7 +173,12 @@ builder.Services.Configure<BrotliCompressionProviderOptions>(o => o.Level = Comp
 builder.Services.Configure<GzipCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddProblemDetails();
-builder.Services.AddHealthChecks().AddDbContextCheck<AppDbContext>("postgresql", tags: ["ready"]);
+builder.Services.AddSingleton<DatabaseMigrationState>();
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<AppDbContext>("postgresql", tags: ["ready"])
+    // Una instancia con el esquema atrasado responde errores de columna inexistente. Que no pase
+    // la readiness deja el despliegue anterior sirviendo en lugar de publicar una versión rota.
+    .AddCheck<DatabaseMigrationHealthCheck>("migrations", tags: ["ready"]);
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -183,6 +201,8 @@ builder.Services.AddRateLimiter(options =>
 var app = builder.Build();
 var contentSecurityPolicy = ContentSecurityPolicyFactory.Create(storageOptions.PublicBaseUrl);
 app.UseForwardedHeaders();
+// Antes de todo lo demás: si algo falla más abajo, su registro ya sale correlacionado.
+app.UseMiddleware<RequestCorrelationMiddleware>();
 app.UseResponseCompression();
 if (app.Environment.IsDevelopment()) app.UseWebAssemblyDebugging();
 else { app.UseExceptionHandler(); app.UseHsts(); }
@@ -644,9 +664,13 @@ app.MapRazorComponents<App>()
     .AddInteractiveWebAssemblyRenderMode()
     .AddAdditionalAssemblies(typeof(UrabaConecta.Web.Client.Pages.Home).Assembly);
 app.MapAdditionalIdentityEndpoints();
+// El esquema primero, en todo ambiente: sembrar o crear cuentas contra una base sin migrar
+// falla de formas que cuesta leer. Un fallo aquí no derriba el proceso, marca la readiness.
+await app.Services.MigrateDatabaseAsync(app.Environment);
 await app.Services.SeedDevelopmentAsync(app.Environment);
 await app.Services.BootstrapDemoAdminAsync(app.Environment);
 await app.Services.NormalizeDemoAccessAsync(app.Environment);
+await app.Services.BootstrapProductionAdminAsync(app.Environment);
 await app.RunAsync();
 
 static Guid UserId(ClaimsPrincipal user)

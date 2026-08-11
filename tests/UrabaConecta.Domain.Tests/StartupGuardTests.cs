@@ -134,6 +134,41 @@ public sealed class StartupGuardTests
     }
 
     [Fact]
+    public void Production_refuses_a_bucket_that_belongs_to_the_demonstration()
+    {
+        var storage = CompleteStorage();
+        storage.Bucket = "urabaconecta-demo";
+        var problems = StartupGuard.Validate(ProductionConfiguration(), Production, CompleteLegal(), storage);
+        Assert.Contains(problems, x => x.Contains("bucket Demo"));
+    }
+
+    [Fact]
+    public void Production_refuses_a_public_image_domain_that_belongs_to_the_demonstration()
+    {
+        var storage = CompleteStorage();
+        storage.PublicBaseUrl = "https://demo-imagenes.ejemplo.co";
+        var problems = StartupGuard.Validate(ProductionConfiguration(), Production, CompleteLegal(), storage);
+        Assert.Contains(problems, x => x.Contains("bucket Demo"));
+    }
+
+    [Fact]
+    public void Production_refuses_to_serve_stack_traces()
+    {
+        var problems = StartupGuard.Validate(ProductionConfiguration(("DetailedErrors", "true")),
+            Production, CompleteLegal(), CompleteStorage());
+        Assert.Contains(problems, x => x.Contains("DetailedErrors"));
+    }
+
+    [Fact]
+    public void Production_refuses_a_known_demo_password_in_the_production_bootstrap()
+    {
+        var problems = StartupGuard.Validate(
+            ProductionConfiguration((ProductionAdminBootstrap.PasswordKey, DevelopmentSeeder.DemoPassword)),
+            Production, CompleteLegal(), CompleteStorage());
+        Assert.Contains(problems, x => x.Contains("contraseña de demostración"));
+    }
+
+    [Fact]
     public void Production_refuses_to_start_without_persistent_data_protection_keys()
     {
         var problems = StartupGuard.Validate(ProductionConfiguration(("DataProtection:KeysPath", "")),

@@ -38,7 +38,8 @@ public static class DevelopmentSeeder
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var codes = scope.ServiceProvider.GetRequiredService<IPublicCodeService>();
         var protector = scope.ServiceProvider.GetRequiredService<UrabaConecta.Application.IPersonalDataProtector>();
-        await db.Database.MigrateAsync();
+        // Las migraciones ya las aplicó DatabaseMigrator, que corre en todo ambiente y antes que
+        // esto. Sembrar no es responsable del esquema.
         var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
         if (environment.IsEnvironment("Demo") &&
             !configuration.GetValue<bool>("DemoSeed:Enabled"))
@@ -92,23 +93,7 @@ public static class DevelopmentSeeder
             await EnsureQueueDemo(db, corteOwner.Id, queueWorker.Id, noPermission.Id);
             await EnsureOrderingDemo(db, sazonOwner.Id, ordersWorker.Id, noOrdersPermission.Id);
             await db.SaveChangesAsync();
-            // Enriquecimientos de la demostración sobre una base que ya existe. Son accesorios:
-            // si uno falla conviene una demostración incompleta y no un contenedor que no arranca.
-            // Este bloque ya dejó el despliegue en 502 dos veces, así que se registra y se sigue.
-            try
-            {
-                await EnsureModules(db);
-                await EnsureShortDescriptions(db);
-                await EnsureHistoricalDemo(db, codes, protector);
-                await db.SaveChangesAsync();
-            }
-            catch (Exception ex)
-            {
-                scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
-                    .CreateLogger("UrabaConecta.DemoSeed")
-                    .LogError(ex, "No se pudo completar el sembrado accesorio de la demostración. " +
-                                  "La aplicación arranca igualmente y los datos existentes no se alteran.");
-            }
+            await EnrichDemoAsync(db, codes, protector, scope.ServiceProvider);
             return;
         }
         var apartado = new Municipality(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), "apartado", "Apartadó");
@@ -145,10 +130,30 @@ public static class DevelopmentSeeder
         await EnsureQueueDemo(db, corteOwner.Id, queueWorker.Id, noPermission.Id);
         await EnsureOrderingDemo(db, sazonOwner.Id, ordersWorker.Id, noOrdersPermission.Id);
         await db.SaveChangesAsync();
-        await EnsureModules(db);
-        await EnsureShortDescriptions(db);
-        await EnsureHistoricalDemo(db, codes, protector);
-        await db.SaveChangesAsync();
+        await EnrichDemoAsync(db, codes, protector, scope.ServiceProvider);
+    }
+
+    /// <summary>
+    /// Enriquecimientos accesorios de la demostración. Son opcionales por diseño: si uno falla
+    /// conviene una demostración incompleta y no un contenedor que no arranca. Este bloque ya dejó
+    /// el despliegue en 502 dos veces, así que se registra y se sigue, en las dos rutas de sembrado.
+    /// </summary>
+    private static async Task EnrichDemoAsync(AppDbContext db, IPublicCodeService codes,
+        UrabaConecta.Application.IPersonalDataProtector protector, IServiceProvider services)
+    {
+        try
+        {
+            await EnsureModules(db);
+            await EnsureShortDescriptions(db);
+            await EnsureHistoricalDemo(db, codes, protector);
+            await db.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            services.GetRequiredService<ILoggerFactory>().CreateLogger("UrabaConecta.DemoSeed")
+                .LogError(ex, "No se pudo completar el sembrado accesorio de la demostración. " +
+                              "La aplicación arranca igualmente y los datos existentes no se alteran.");
+        }
     }
 
     private static async Task<ApplicationUser> EnsureUser(UserManager<ApplicationUser> manager, string email,

@@ -11,7 +11,9 @@ public sealed class PlatformHealthProvider(
     AppDbContext db,
     IObjectStorage storage,
     IHostEnvironment environment,
-    IConfiguration configuration) : IPlatformHealthProvider
+    IConfiguration configuration,
+    DatabaseMigrationState migrations,
+    TimeProvider clock) : IPlatformHealthProvider
 {
     public async Task<PlatformHealthDto> GetAsync(CancellationToken cancellationToken)
     {
@@ -27,6 +29,14 @@ public sealed class PlatformHealthProvider(
                       : " (cifradas con certificado X.509)")
                 : $"No existe la ruta {keysPath}";
 
+        var migrationStatus = !migrations.Attempted
+            ? "Sin ejecutar"
+            : !migrations.Succeeded
+                ? $"Falló el arranque ({migrations.FailureKind})"
+                : migrations.Applied.Count == 0
+                    ? "Sin cambios en este arranque"
+                    : $"Aplicadas en este arranque: {string.Join(", ", migrations.Applied)}";
+
         return new(
             environment.EnvironmentName,
             Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "desconocida",
@@ -34,8 +44,15 @@ public sealed class PlatformHealthProvider(
             DateTimeOffset.TryParse(configuration["Deployment:DeployedAtUtc"], out var deployed) ? deployed : null,
             database, objectStorage.IsHealthy ? $"Disponible — {objectStorage.Detail}" : $"Error — {objectStorage.Detail}",
             storage.Provider, dataProtection,
-            configuration.GetValue<bool>("DemoSeed:Enabled"));
+            configuration.GetValue<bool>("DemoSeed:Enabled"),
+            // Tiempo del proceso, no del despliegue: delata los reinicios silenciosos que en
+            // Railway sólo se notan porque las sesiones se caen.
+            clock.GetUtcNow() - ProcessStartedAtUtc,
+            migrationStatus);
     }
+
+    private static readonly DateTimeOffset ProcessStartedAtUtc =
+        System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime();
 
     private async Task<string> CheckDatabaseAsync(CancellationToken cancellationToken)
     {

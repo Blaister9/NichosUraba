@@ -51,6 +51,15 @@ public static class StartupGuard
             problems.Add("Falta configurar el almacenamiento de objetos: " + string.Join(", ", missingStorage) + ".");
         if (!storage.UsesS3)
             problems.Add("Production exige ObjectStorage__Provider=S3; el proveedor local es efímero.");
+        // Compartir el bucket con Demo mezclaría imágenes ficticias con las de negocios reales, y
+        // un borrado de la demostración se llevaría por delante material productivo.
+        if (PointsToDemo(storage.Bucket) || PointsToDemo(storage.PublicBaseUrl))
+            problems.Add("El almacenamiento de objetos apunta a un bucket Demo.");
+
+        // Un rastro de pila en la respuesta revela rutas, versiones y consultas. En Production la
+        // aplicación responde ProblemDetails y el detalle queda sólo en el registro.
+        if (configuration.GetValue<bool>("DetailedErrors"))
+            problems.Add("DetailedErrors debe ser false en Production: expondría rastros de pila.");
 
         if (string.IsNullOrWhiteSpace(configuration["DataProtection:KeysPath"]))
             problems.Add("Falta DataProtection__KeysPath: las cookies no sobrevivirían a un reinicio.");
@@ -83,12 +92,22 @@ public static class StartupGuard
             || lowered.Contains("_demo;") || lowered.EndsWith("_demo");
     }
 
+    /// <summary>Reconoce los nombres con los que se rotuló el material de la demostración.</summary>
+    private static bool PointsToDemo(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return false;
+        var lowered = value.ToLowerInvariant();
+        return lowered.Contains("-demo") || lowered.Contains("demo-") || lowered.Contains("_demo")
+            || lowered.Contains("demo.") || lowered.Contains("/demo") || lowered == "demo";
+    }
+
     private static IEnumerable<string> DeclaredPasswords(IConfiguration configuration)
     {
         foreach (var key in new[]
                  {
                      "DemoSeed:AdminPassword", "DemoSeed:BusinessPassword",
-                     "DemoBootstrap:AdminPassword", "DemoAccess:SharedPassword"
+                     "DemoBootstrap:AdminPassword", "DemoAccess:SharedPassword",
+                     ProductionAdminBootstrap.PasswordKey
                  })
             if (configuration[key] is { Length: > 0 } value) yield return value;
     }
