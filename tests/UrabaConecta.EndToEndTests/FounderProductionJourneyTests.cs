@@ -117,7 +117,7 @@ public sealed class FounderProductionJourneyTests(BrowserFixture fixture) : ICla
         await partner.GotoAsync($"{fixture.BaseUrl}/admin/negocios/{businessId}");
         await WaitForSection(partner, "Revisión y publicación");
         await ClickUntilNotice(partner, "Enviar a revisión", "Enviado a revisión.");
-        await Expect(partner.Locator("span.tag").Filter(new() { HasText = "En revisión" })).ToBeVisibleAsync();
+        await Expect(partner.Locator("[data-testid=ficha-estado]")).ToHaveTextAsync("En revisión");
         await Expect(partner.GetByRole(AriaRole.Button, new() { Name = "Aprobar y publicar" })).ToHaveCountAsync(0);
 
         // 11. El administrador devuelve con observaciones y la socia lo reenvía.
@@ -135,13 +135,13 @@ public sealed class FounderProductionJourneyTests(BrowserFixture fixture) : ICla
         await partner.GotoAsync($"{fixture.BaseUrl}/admin/negocios/{businessId}");
         await WaitForSection(partner, "Revisión y publicación");
         await ClickUntilNotice(partner, "Enviar a revisión", "Enviado a revisión.");
-        await Expect(partner.Locator("span.tag").Filter(new() { HasText = "En revisión" })).ToBeVisibleAsync();
+        await Expect(partner.Locator("[data-testid=ficha-estado]")).ToHaveTextAsync("En revisión");
 
         // 12. El administrador aprueba y publica.
         await admin.GotoAsync($"{fixture.BaseUrl}/admin/negocios/{businessId}");
         await WaitForSection(admin, "Revisión y publicación");
         await ClickUntilNotice(admin, "Aprobar y publicar", "Negocio publicado.");
-        await Expect(admin.Locator("span.tag").Filter(new() { HasText = "Publicado" })).ToBeVisibleAsync();
+        await Expect(admin.Locator("[data-testid=ficha-estado]")).ToHaveTextAsync("Publicado");
 
         // 13. El negocio aparece públicamente, con su logo y su ficha completa.
         await visitor.GotoAsync($"{fixture.BaseUrl}/");

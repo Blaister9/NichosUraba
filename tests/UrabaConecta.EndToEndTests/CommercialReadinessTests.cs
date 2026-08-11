@@ -34,8 +34,12 @@ public sealed class CommercialReadinessTests(BrowserFixture fixture) : IClassFix
         var page = await context.NewPageAsync();
         await Login(page, DevelopmentSeeder.PartnerOperatorEmail);
         await page.GotoAsync($"{fixture.BaseUrl}/admin/negocios/nuevo");
-        await Assertions.Expect(page.GetByLabel("Nombre comercial")).ToBeEnabledAsync();
-        await page.GetByRole(AriaRole.Button, new() { Name = "Continuar" }).ClickAsync();
+        await Assertions.Expect(page.Locator("[data-testid=campo-nombre]")).ToBeEnabledAsync();
+        // El paso 1 exige identidad mínima antes de avanzar.
+        await page.Locator("[data-testid=campo-nombre]").FillAsync("Negocio de comprobación");
+        await page.Locator("[data-testid=campo-municipio]").SelectOptionAsync(new SelectOptionValue { Index = 1 });
+        await page.Locator("[data-testid=campo-categoria]").SelectOptionAsync(new SelectOptionValue { Index = 1 });
+        await page.Locator("[data-testid=continuar]").ClickAsync();
         await Assertions.Expect(page.GetByLabel("Duración del servicio en minutos")).ToBeEnabledAsync();
         await page.GetByLabel("Pedidos para recoger").CheckAsync();
         await Assertions.Expect(page.GetByLabel("Intervalo de recogida en minutos")).ToBeEnabledAsync();

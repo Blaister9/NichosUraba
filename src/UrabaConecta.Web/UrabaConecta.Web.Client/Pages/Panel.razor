@@ -2,54 +2,219 @@
 @rendermode InteractiveServer
 @attribute [Authorize]
 @inject IUrabaConectaApi Api
+@inject AuthenticationStateProvider AuthenticationState
 
 <PageTitle>Panel | UrabáConecta</PageTitle>
-<p class="eyebrow">Área privada</p><h1>Mis establecimientos</h1>
-@if (businesses is null) { <p class="notice">Cargando…</p> }
-else if (businesses.Count == 0) { <div class="empty">Su cuenta no tiene establecimientos asignados.</div> }
+<p class="eyebrow">Área privada</p>
+<div class="title-actions">
+    <h1>Mis negocios</h1>
+    @* La socia entra aquí a trabajar. Su acción principal no puede estar escondida detrás de
+       "Administración" en la barra superior: vive en su propia pantalla, siempre visible. *@
+    @if (isOperator && managed is { Count: > 0 })
+    {
+        <a class="button-link primary" href="/admin/negocios/nuevo" data-testid="crear-negocio"
+           data-enhance-nav="false">Crear negocio</a>
+    }
+</div>
+
+@if (loading)
+{
+    <p class="notice" role="status" data-testid="panel-cargando">Cargando tus negocios…</p>
+}
 else
 {
-    <div class="card-grid">
-        @foreach (var business in businesses)
-        {
-            <article class="business-card"><span class="tag">@business.MembershipRole</span><h2>@business.Name</h2>
-                @if (business.BusinessStatus == "Suspended")
-                { <p class="notice"><strong>Establecimiento suspendido.</strong> Puede consultar el historial, pero no iniciar operaciones nuevas.</p> }
-                @* Cada operación exige el módulo habilitado en ESTE negocio y además el permiso
-                   de la persona. Antes bastaba el permiso, y una propietaria veía las tres
-                   operaciones aunque su establecimiento sólo tuviera una activa.
+    @if (error is not null) { <p class="error" role="alert" data-testid="panel-error">@error</p> }
 
-                   data-enhance-nav="false": al salir de este componente interactivo, la navegación
-                   mejorada cambiaba la dirección pero dejaba en pantalla "Mis establecimientos".
-                   Quien pulsaba "Operar pedidos" seguía viendo la misma página y parecía que la
-                   operación no funcionaba. Con la navegación normal la página destino se carga
-                   completa. *@
-                <div class="actions" data-enhance-nav="false">
-                @if (business.ShowAppointments)
-                {
-                    <a class="button-link" href="/panel/@business.Id/citas">Administrar citas</a>
-                }
-                @if (business.CanManageConfiguration)
-                {
-                    <a class="secondary button-link" href="/panel/@business.Id/configuracion">Configuración del negocio</a>
-                }
-                @if (business.CanManageMembers)
-                {
-                    <a class="secondary button-link" href="/panel/@business.Id/equipo">Equipo y permisos</a>
-                }
-                @if (business.ShowQueues)
-                {
-                    <a class="button-link" href="/panel/@business.Id/turnos">Operar turnos</a>
-                }
-                @if (business.ShowOrders)
-                {
-                    <a class="button-link" href="/panel/@business.Id/pedidos">Operar pedidos</a>
-                }</div>
-            </article>
+    @* ---------------- Negocios que la socia dio de alta ---------------- *@
+    @if (isOperator)
+    {
+        @if (managed is { Count: > 0 })
+        {
+            <section aria-labelledby="titulo-administrados">
+                <h2 id="titulo-administrados">Negocios que administras</h2>
+                <p class="meta">Los diste de alta tú. Aquí ves qué le falta a cada uno para publicarse.</p>
+                <div class="card-grid" data-testid="negocios-administrados">
+                    @foreach (var business in managed)
+                    {
+                        <article class="business-card" data-testid="negocio-administrado"
+                                 data-slug="@business.Slug">
+                            <span class="status @BusinessStatusText.CssModifier(business.Status)"
+                                  data-testid="negocio-estado">@BusinessStatusText.Label(business.Status)</span>
+                            <h3>@business.Name</h3>
+                            <p class="meta">@BusinessStatusText.Description(business.Status)</p>
+
+                            @* El porcentaje y la lista de faltantes los calcula el servidor con las
+                               mismas reglas que deciden si se puede publicar. Aquí sólo se muestran. *@
+                            <progress value="@business.CompletionPercentage" max="100"
+                                      aria-label="Avance de la configuración de @business.Name"></progress>
+                            <p><strong data-testid="negocio-avance">@business.CompletionPercentage %</strong> configurado</p>
+
+                            @if (business.ReviewNotes is { Length: > 0 } notas)
+                            {
+                                <p class="warning-text" data-testid="negocio-observaciones">
+                                    <strong>La administración pidió ajustes:</strong> @notas
+                                </p>
+                            }
+                            else if (Pending(business) is { Count: > 0 } faltantes)
+                            {
+                                <p><strong>Falta:</strong></p>
+                                <ul class="pending-list" data-testid="negocio-faltantes">
+                                    @foreach (var item in faltantes) { <li>@item</li> }
+                                </ul>
+                                @if (MissingCount(business) > faltantes.Count)
+                                {
+                                    <p class="meta">y @(MissingCount(business) - faltantes.Count) requisito(s) más.</p>
+                                }
+                            }
+                            else if (business.IsReady && BusinessStatusText.IsInPreparation(business.Status))
+                            {
+                                <p class="success">Listo para enviar a revisión.</p>
+                            }
+
+                            <div class="actions" data-enhance-nav="false">
+                                <a class="button-link primary" data-testid="negocio-cta"
+                                   href="/admin/negocios/@business.Id">@ActionLabel(business)</a>
+                                @if (business.Status == BusinessStatusText.Active)
+                                {
+                                    <a class="secondary button-link" href="/negocios/@business.Slug"
+                                       data-testid="negocio-ver-publico">Ver ficha pública</a>
+                                }
+                            </div>
+                        </article>
+                    }
+                </div>
+            </section>
         }
-    </div>
+        else
+        {
+            @* Antes esta pantalla decía "Su cuenta no tiene establecimientos asignados" y ahí
+               terminaba: la socia no tenía forma de descubrir que su trabajo empieza creando
+               un negocio. *@
+            <div class="empty" data-testid="panel-vacio-socia">
+                <h2>Aún no tienes negocios</h2>
+                <p>Crea tu primer negocio para comenzar a configurarlo y prepararlo para publicación.</p>
+                <p class="meta">Podrás guardarlo como borrador y continuar cuando quieras.</p>
+                <a class="button-link primary" href="/admin/negocios/nuevo" data-testid="crear-negocio"
+                   data-enhance-nav="false">Crear negocio</a>
+            </div>
+        }
+    }
+
+    @* ---------------- Negocios donde la persona opera ---------------- *@
+    @if (memberships is { Count: > 0 })
+    {
+        <section aria-labelledby="titulo-operacion" class="@(isOperator ? "divider" : "")">
+            @if (isOperator)
+            {
+                <h2 id="titulo-operacion">Negocios donde trabajas</h2>
+            }
+            else
+            {
+                <h2 id="titulo-operacion" class="visually-hidden">Negocios donde trabajas</h2>
+            }
+            <div class="card-grid">
+                @foreach (var business in memberships)
+                {
+                    <article class="business-card"><span class="tag">@RoleLabel(business.MembershipRole)</span><h3>@business.Name</h3>
+                        @if (business.BusinessStatus == BusinessStatusText.Suspended)
+                        { <p class="notice"><strong>Negocio suspendido.</strong> Puede consultar el historial, pero no iniciar operaciones nuevas.</p> }
+                        @* Cada operación exige el módulo habilitado en ESTE negocio y además el permiso
+                           de la persona. Antes bastaba el permiso, y una propietaria veía las tres
+                           operaciones aunque su negocio sólo tuviera una activa.
+
+                           data-enhance-nav="false": al salir de este componente interactivo, la navegación
+                           mejorada cambiaba la dirección pero dejaba en pantalla el panel. Quien pulsaba
+                           "Operar pedidos" seguía viendo la misma página y parecía que la operación no
+                           funcionaba. Con la navegación normal la página destino se carga completa. *@
+                        <div class="actions" data-enhance-nav="false">
+                        @if (business.ShowAppointments)
+                        {
+                            <a class="button-link" href="/panel/@business.Id/citas">Administrar citas</a>
+                        }
+                        @if (business.CanManageConfiguration)
+                        {
+                            <a class="secondary button-link" href="/panel/@business.Id/configuracion">Configuración del negocio</a>
+                        }
+                        @if (business.CanManageMembers)
+                        {
+                            <a class="secondary button-link" href="/panel/@business.Id/equipo">Equipo y permisos</a>
+                        }
+                        @if (business.ShowQueues)
+                        {
+                            <a class="button-link" href="/panel/@business.Id/turnos">Operar turnos</a>
+                        }
+                        @if (business.ShowOrders)
+                        {
+                            <a class="button-link" href="/panel/@business.Id/pedidos">Operar pedidos</a>
+                        }</div>
+                    </article>
+                }
+            </div>
+        </section>
+    }
+    else if (!isOperator)
+    {
+        <div class="empty" data-testid="panel-vacio-miembro">
+            <h2>Todavía no tienes acceso a ningún negocio</h2>
+            <p>Cuando alguien te vincule a un negocio, aparecerá aquí.</p>
+            <p class="meta">Si esperabas ver uno, escribe a quien te envió la invitación.</p>
+        </div>
+    }
 }
+
 @code {
-    private IReadOnlyList<MyBusinessDto>? businesses;
-    protected override async Task OnInitializedAsync() => businesses = await Api.GetMyBusinessesAsync();
+    private IReadOnlyList<MyBusinessDto>? memberships;
+    private IReadOnlyList<PlatformBusinessDto>? managed;
+    private bool isOperator, loading = true;
+    private string? error;
+
+    /// <summary>Cuántos requisitos pendientes se enumeran antes de resumir el resto.</summary>
+    private const int MaximumPendingShown = 3;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthenticationState.GetAuthenticationStateAsync()).User;
+        isOperator = user.IsInRole("PartnerOperator") || user.IsInRole("PlatformAdmin");
+        try
+        {
+            memberships = await Api.GetMyBusinessesAsync();
+            // Sólo quien administra la plataforma puede pedir este listado; para el resto
+            // devolvería 403 y no aporta nada a su pantalla.
+            if (isOperator) managed = (await Api.GetPlatformBusinessesAsync()).Items;
+        }
+        catch (ApiException ex)
+        {
+            error = ex.StatusCode is 401 or 403
+                ? "Tu sesión no tiene permiso para ver estos negocios. Vuelve a ingresar."
+                : "No pudimos cargar tus negocios. Actualiza la página para intentarlo de nuevo.";
+        }
+        finally { loading = false; }
+    }
+
+    private static IReadOnlyList<string> Pending(PlatformBusinessDto business)
+        => business.MissingLabels?.Take(MaximumPendingShown).ToList() ?? [];
+
+    private static int MissingCount(PlatformBusinessDto business)
+        => business.MissingLabels?.Count ?? 0;
+
+    /// <summary>La acción cambia según lo que le toca hacer a la socia en ese estado.</summary>
+    private static string ActionLabel(PlatformBusinessDto business)
+    {
+        if (business.ReviewNotes is { Length: > 0 } && BusinessStatusText.IsInPreparation(business.Status))
+            return "Corregir pendientes";
+        return business.Status switch
+        {
+            BusinessStatusText.PendingReview => "Ver solicitud",
+            BusinessStatusText.Active => "Administrar",
+            BusinessStatusText.Suspended or BusinessStatusText.Archived => "Ver detalle",
+            _ => "Continuar configuración"
+        };
+    }
+
+    private static string RoleLabel(string? role) => role switch
+    {
+        "Owner" => "Propietario",
+        "Worker" => "Colaborador",
+        _ => "Miembro"
+    };
 }

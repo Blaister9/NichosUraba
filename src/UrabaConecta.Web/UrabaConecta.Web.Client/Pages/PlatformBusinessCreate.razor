@@ -4,14 +4,27 @@
 @inject IUrabaConectaApi Api
 @inject NavigationManager Navigation
 
-<PageTitle>Nuevo negocio piloto | UrabáConecta</PageTitle>
-<p class="eyebrow">Paso @step de 4</p><h1>Nuevo negocio piloto</h1>
-<ol class="wizard-steps"><li>Identidad</li><li>Funciones</li><li>Responsable</li><li>Revisión</li></ol>
-@if (catalog is null) { <p class="notice">Cargando catálogos…</p> }
+<PageTitle>Crear negocio | UrabáConecta</PageTitle>
+<a class="back-link" href="/panel" data-enhance-nav="false">← Mis negocios</a>
+<p class="eyebrow">Paso @step de @TotalSteps</p><h1>Crear negocio</h1>
+<ol class="wizard-steps" data-testid="pasos">
+    @foreach (var (numero, nombre) in Steps)
+    {
+        <li data-done="@((numero < step).ToString().ToLowerInvariant())"
+            aria-current="@(numero == step ? "step" : null)"
+            data-testid="paso-@numero">
+            <span class="step-mark" aria-hidden="true">@(numero < step ? "✓" : numero.ToString())</span>
+            <span>@nombre</span>
+        </li>
+    }
+</ol>
+@if (catalog is null) { <p class="notice" role="status">Cargando catálogos…</p> }
 else if (created is not null)
 {
-    <section class="success-card">
-        <h2>@created.Business.Name fue creado</h2><p>Estado: @created.Business.Status.</p>
+    <section class="success-card" data-testid="negocio-creado">
+        <h2>@created.Business.Name quedó creado</h2>
+        <p>Estado: <strong>@BusinessStatusText.Label(created.Business.Status)</strong>.
+           @BusinessStatusText.Description(created.Business.Status)</p>
         @if (created.TemporaryPassword is not null)
         {
             <div class="notice"><strong>Contraseña temporal — se muestra una sola vez</strong>
@@ -19,42 +32,88 @@ else if (created is not null)
                 <p>Entrégala por un canal acordado. No se almacenará ni volverá a mostrarse.</p>
             </div>
         }
-        <a class="button-link primary" href="/admin/negocios/@created.Business.Id">Abrir lista de preparación</a>
+        <div class="actions" data-enhance-nav="false">
+            <a class="button-link primary" href="/admin/negocios/@created.Business.Id"
+               data-testid="continuar-configuracion">Continuar configuración</a>
+            <a class="secondary button-link" href="/panel">Volver a mis negocios</a>
+        </div>
     </section>
 }
 else
 {
     <EditForm Model="request" OnValidSubmit="Submit" class="appointment-form">
         @if (!interactiveReady) { <p class="notice" role="status">Activando formulario…</p> }
-        <fieldset disabled="@(!interactiveReady)">
+        <fieldset disabled="@(!interactiveReady || saving)">
         <DataAnnotationsValidator /><ValidationSummary />
         @if (step == 1)
         {
-            <label>Nombre comercial<InputText @bind-Value="request.Name" /></label>
-            <label>Identificador público<InputText @bind-Value="request.Slug" /></label>
-            <label>Municipio<InputSelect @bind-Value="request.MunicipalityId"><option value="">Seleccione</option>@foreach (var x in catalog.Municipalities) { <option value="@x.Id">@x.Name</option> }</InputSelect></label>
-            <label>Categoría<InputSelect @bind-Value="request.CategoryId"><option value="">Seleccione</option>@foreach (var x in catalog.Categories) { <option value="@x.Id">@x.Name</option> }</InputSelect></label>
-            <label>Descripción<InputTextArea @bind-Value="request.Description" /></label>
-            <label>Dirección<InputText @bind-Value="request.Address" /></label>
-            <label>Teléfono público<InputText @bind-Value="request.PublicPhone" /></label>
+            <p class="form-legend">Los campos marcados con <span class="field-required">*</span> son
+               obligatorios. El resto puede completarse más adelante.</p>
+            <label><span class="field-label">Nombre del negocio <span class="field-required" aria-hidden="true">*</span></span>
+                <InputText @bind-Value="request.Name" @bind-Value:after="SuggestSlug"
+                           data-testid="campo-nombre" aria-required="true" />
+                <span class="field-hint">Como lo conocen tus clientes. Ej.: Salón Bella Urabá.</span>
+            </label>
+            @* "Slug" no significa nada para quien nunca ha publicado una página. Se explica con
+               el resultado visible: la dirección que verá el cliente. *@
+            <label><span class="field-label">Dirección web del negocio <span class="field-required" aria-hidden="true">*</span></span>
+                <InputText @bind-Value="request.Slug" @bind-Value:after="() => slugTouched = true"
+                           data-testid="campo-slug" aria-required="true" />
+                <span class="field-hint">
+                    Es la parte final del enlace que compartirás.
+                    Quedará así: urabaconecta.co/negocios/<strong>@(PreviewSlug())</strong>.
+                    Solo minúsculas, números y guiones. Se propone sola a partir del nombre.
+                </span>
+            </label>
+            <label><span class="field-label">Municipio <span class="field-required" aria-hidden="true">*</span></span>
+                <InputSelect @bind-Value="request.MunicipalityId" data-testid="campo-municipio" aria-required="true">
+                    <option value="">Selecciona un municipio</option>
+                    @foreach (var x in catalog.Municipalities) { <option value="@x.Id">@x.Name</option> }
+                </InputSelect>
+            </label>
+            <label><span class="field-label">Categoría <span class="field-required" aria-hidden="true">*</span></span>
+                <InputSelect @bind-Value="request.CategoryId" data-testid="campo-categoria" aria-required="true">
+                    <option value="">Selecciona una categoría</option>
+                    @foreach (var x in catalog.Categories) { <option value="@x.Id">@x.Name</option> }
+                </InputSelect>
+            </label>
+            <label>Descripción
+                <InputTextArea @bind-Value="request.Description" data-testid="campo-descripcion" />
+                <span class="field-hint">Qué hace el negocio y qué lo distingue. Puedes completarla después.</span>
+            </label>
+            <label>Dirección
+                <InputText @bind-Value="request.Address" data-testid="campo-direccion" />
+                <span class="field-hint">Dónde queda. Hace falta antes de publicar.</span>
+            </label>
+            <label>Teléfono público
+                <InputText @bind-Value="request.PublicPhone" data-testid="campo-telefono" />
+                <span class="field-hint">El número al que pueden llamar los clientes.</span>
+            </label>
         }
         else if (step == 2)
         {
-            <fieldset><legend>Funciones disponibles</legend>
-                <label class="check"><InputCheckbox @bind-Value="request.Appointments" /> Citas</label>
-                <label class="check"><InputCheckbox @bind-Value="request.VirtualQueues" /> Turnos virtuales</label>
-                <label class="check"><InputCheckbox @bind-Value="request.PickupOrders" /> Pedidos para recoger</label>
+            <fieldset><legend>¿Cómo atiende este negocio? <span class="field-required" aria-hidden="true">*</span></legend>
+                <p class="form-legend">Elige al menos una. Podrás cambiarlo después.</p>
+                <label class="check"><InputCheckbox @bind-Value="request.Appointments" data-testid="modulo-citas" /> Citas con hora reservada</label>
+                <label class="check"><InputCheckbox @bind-Value="request.VirtualQueues" data-testid="modulo-turnos" /> Turnos por orden de llegada</label>
+                <label class="check"><InputCheckbox @bind-Value="request.PickupOrders" data-testid="modulo-pedidos" /> Pedidos para recoger</label>
             </fieldset>
             @if (request.Appointments)
             {
-                <label>Servicio inicial (opcional)<InputText @bind-Value="request.InitialServiceName" /></label>
+                <label>Servicio inicial<InputText @bind-Value="request.InitialServiceName" />
+                    <span class="field-hint">Opcional. Podrás agregar todos los demás luego.</span></label>
                 <label>Duración del servicio en minutos<InputNumber @bind-Value="request.InitialServiceDurationMinutes" /></label>
             }
-            @if (request.VirtualQueues) { <label>Duración promedio por turno<InputNumber @bind-Value="request.QueueAverageMinutes" /></label><label>Cupo máximo<InputNumber @bind-Value="request.QueueMaximumWaiting" /></label> }
+            @if (request.VirtualQueues)
+            {
+                <label>Duración promedio por turno<InputNumber @bind-Value="request.QueueAverageMinutes" /></label>
+                <label>Cupo máximo<InputNumber @bind-Value="request.QueueMaximumWaiting" /></label>
+            }
             @if (request.PickupOrders)
             {
-                <label>Categoría inicial (opcional)<InputText @bind-Value="request.InitialProductCategory" /></label>
-                <label>Producto inicial (opcional)<InputText @bind-Value="request.InitialProductName" /></label>
+                <label>Categoría inicial<InputText @bind-Value="request.InitialProductCategory" />
+                    <span class="field-hint">Opcional. Por ejemplo: Hamburguesas.</span></label>
+                <label>Producto inicial<InputText @bind-Value="request.InitialProductName" /></label>
                 <label>Preparación mínima en minutos<InputNumber @bind-Value="request.PickupPreparationMinutes" /></label>
                 <label>Intervalo de recogida en minutos<InputNumber @bind-Value="request.PickupSlotMinutes" /></label>
                 <label>Cupo por intervalo<InputNumber @bind-Value="request.PickupCapacity" /></label>
@@ -62,53 +121,192 @@ else
         }
         else if (step == 3)
         {
-            <p>Vincula una cuenta existente o crea una cuenta piloto. La cuenta piloto deberá cambiar su contraseña al primer ingreso.</p>
-            <label>Correo de cuenta existente<InputText @bind-Value="request.ExistingOwnerEmail" /></label>
+            <p>Vincula la cuenta de la persona propietaria. Ella definirá su propia contraseña;
+               nunca se envía una contraseña por chat.</p>
+            <p class="form-legend">Puedes dejarlo para después: el negocio se guarda igual.</p>
+            <label>Correo de una cuenta existente<InputText @bind-Value="request.ExistingOwnerEmail" data-testid="campo-propietario" /></label>
             @if (catalog.PilotAccountCreationEnabled)
             {
-                <p class="divider">o crear cuenta piloto</p>
-                <label>Nombre de la persona<InputText @bind-Value="request.PilotDisplayName" /></label>
-                <label>Correo piloto<InputText @bind-Value="request.PilotEmail" /></label>
+                <p class="divider">o crear una cuenta nueva</p>
+                <label>Nombre de la persona<InputText @bind-Value="request.PilotDisplayName" data-testid="campo-propietario-nuevo-nombre" /></label>
+                <label>Correo de la cuenta nueva<InputText @bind-Value="request.PilotEmail" data-testid="campo-propietario-nuevo" /></label>
             }
         }
         else
         {
-            <div class="review-card"><h2>Revisión</h2>
-                <p><strong>@request.Name</strong> · @catalog.Municipalities.FirstOrDefault(x => x.Id == request.MunicipalityId)?.Name</p>
-                <p>Funciones: @SelectedModules()</p>
-                <p>Responsable: @(request.ExistingOwnerEmail ?? request.PilotEmail ?? "sin asignar")</p>
-                <label class="check"><InputCheckbox @bind-Value="request.SaveAsDraft" /> Guardar como borrador</label>
-                <p class="notice">Desmarca “borrador” para intentar activar únicamente si toda la lista de preparación queda completa.</p>
+            <div class="review-card"><h2>Revisa antes de crear</h2>
+                <dl class="details">
+                    <dt>Negocio</dt><dd data-testid="revision-nombre">@request.Name</dd>
+                    <dt>Dirección web</dt><dd>urabaconecta.co/negocios/@PreviewSlug()</dd>
+                    <dt>Municipio</dt><dd>@(catalog.Municipalities.FirstOrDefault(x => x.Id == request.MunicipalityId)?.Name ?? "sin definir")</dd>
+                    <dt>Categoría</dt><dd>@(catalog.Categories.FirstOrDefault(x => x.Id == request.CategoryId)?.Name ?? "sin definir")</dd>
+                    <dt>Atención</dt><dd>@SelectedModules()</dd>
+                    <dt>Propietario</dt><dd>@(Owner() ?? "se asigna después")</dd>
+                </dl>
+                <p class="notice">Se creará como <strong>borrador</strong>. Después completas lo que
+                   falte y lo envías a revisión desde su ficha.</p>
             </div>
         }
-        @if (error is not null) { <p class="validation-message">@error</p> }
+        @if (error is not null) { <p class="error" role="alert" data-testid="error-asistente">@error</p> }
         <div class="actions">
-            @if (step > 1) { <button type="button" class="secondary" @onclick="Previous">Atrás</button> }
-            @if (step < 4) { <button type="button" class="primary" @onclick="Next">Continuar</button> }
-            else { <button type="submit" class="primary" disabled="@saving">Crear negocio</button> }
+            @if (step > 1)
+            {
+                <button type="button" class="secondary" @onclick="Previous" disabled="@saving">Atrás</button>
+            }
+            @if (step < TotalSteps)
+            {
+                <button type="button" class="primary" @onclick="Next" disabled="@saving"
+                        data-testid="continuar">Continuar</button>
+            }
+            else
+            {
+                <button type="submit" class="primary" disabled="@saving" data-testid="crear">
+                    @(saving && !exitAfterSave ? "Creando…" : "Crear negocio")
+                </button>
+            }
+            @* Guardar y salir: crea el borrador con lo que ya hay y devuelve a la socia a su panel,
+               donde el negocio aparece con su avance y su "Continuar configuración". *@
+            <button type="submit" class="secondary" @onclick="() => exitAfterSave = true"
+                    disabled="@saving" data-testid="guardar-salir">
+                @(saving && exitAfterSave ? "Guardando…" : "Guardar y salir")
+            </button>
         </div>
         </fieldset>
     </EditForm>
 }
 @code {
-    private int step = 1; private bool saving, interactiveReady; private string? error;
-    private PlatformBusinessListDto? catalog; private PlatformBusinessCreatedDto? created;
+    private const int TotalSteps = 4;
+    private static readonly (int Numero, string Nombre)[] Steps =
+        [(1, "Identidad"), (2, "Atención"), (3, "Propietario"), (4, "Revisión")];
+
+    private int step = 1;
+    private bool saving, interactiveReady, slugTouched, exitAfterSave;
+    private string? error;
+    private PlatformBusinessListDto? catalog;
+    private PlatformBusinessCreatedDto? created;
     private readonly CreatePlatformBusinessRequest request = new() { Appointments = true };
+
     protected override async Task OnInitializedAsync() => catalog = await Api.GetPlatformBusinessesAsync();
+
     protected override void OnAfterRender(bool firstRender)
     {
         if (!firstRender) return;
         interactiveReady = true;
         StateHasChanged();
     }
-    private void Next() { error = null; if (step == 2 && !request.Appointments && !request.VirtualQueues && !request.PickupOrders) { error = "Selecciona al menos una función."; return; } step++; }
+
+    private void Next()
+    {
+        error = null;
+        if (step == 1 && !MinimumIdentity())
+        {
+            error = "Completa nombre, dirección web, municipio y categoría para continuar.";
+            return;
+        }
+        if (step == 2 && !AnyModule())
+        {
+            error = "Elige al menos una forma de atención.";
+            return;
+        }
+        step++;
+    }
+
     private void Previous() { error = null; step--; }
+
+    private bool MinimumIdentity()
+        => !string.IsNullOrWhiteSpace(request.Name) && request.Name.Trim().Length >= 2
+           && !string.IsNullOrWhiteSpace(request.Slug) && request.Slug.Trim().Length >= 3
+           && request.MunicipalityId != Guid.Empty && request.CategoryId != Guid.Empty;
+
+    private bool AnyModule() => request.Appointments || request.VirtualQueues || request.PickupOrders;
+
+    /// <summary>
+    /// Propone la dirección web a partir del nombre mientras la socia no la haya escrito ella.
+    /// El servidor normaliza igualmente; esto sólo evita que tenga que inventarla.
+    /// </summary>
+    private void SuggestSlug()
+    {
+        if (slugTouched) return;
+        request.Slug = Slugify(request.Name);
+    }
+
+    private string PreviewSlug()
+        => Slugify(string.IsNullOrWhiteSpace(request.Slug) ? request.Name : request.Slug) is { Length: > 0 } s
+            ? s : "nombre-del-negocio";
+
+    private static string Slugify(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "";
+        var normalized = value.Trim().ToLowerInvariant()
+            .Normalize(System.Text.NormalizationForm.FormD);
+        var builder = new System.Text.StringBuilder(normalized.Length);
+        foreach (var c in normalized)
+        {
+            if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c)
+                == System.Globalization.UnicodeCategory.NonSpacingMark) continue;
+            if (char.IsAsciiLetterOrDigit(c)) builder.Append(c);
+            else if (c is ' ' or '-' or '_' or '.') builder.Append('-');
+        }
+        // Sin guiones repetidos ni en los extremos: la dirección se comparte por escrito.
+        var slug = string.Join('-', builder.ToString().Split('-', StringSplitOptions.RemoveEmptyEntries));
+        return slug.Length > 120 ? slug[..120] : slug;
+    }
+
     private async Task Submit()
     {
+        if (saving) return;
+        if (!AnyModule())
+        {
+            error = "Elige al menos una forma de atención.";
+            exitAfterSave = false;
+            step = 2;
+            return;
+        }
         saving = true; error = null;
-        try { created = await Api.CreatePlatformBusinessAsync(request); }
-        catch (ApiException ex) { error = ex.Message; }
-        finally { saving = false; }
+        try
+        {
+            // Siempre nace como borrador: la publicación pasa por la lista de preparación y la
+            // revisión, nunca por este formulario.
+            request.SaveAsDraft = true;
+            var resultado = await Api.CreatePlatformBusinessAsync(request);
+            // Si hay contraseña temporal hay que mostrarla sí o sí: se ve una sola vez.
+            if (exitAfterSave && resultado.TemporaryPassword is null)
+            {
+                Navigation.NavigateTo("/panel", forceLoad: true);
+                return;
+            }
+            created = resultado;
+        }
+        catch (ApiException ex)
+        {
+            error = Friendly(ex);
+            // Se conserva lo escrito y se devuelve al paso donde está el problema.
+            if (ex.Code == "SLUG_EXISTS") step = 1;
+        }
+        finally { saving = false; exitAfterSave = false; }
     }
-    private string SelectedModules() => string.Join(", ", new[] { request.Appointments ? "Citas" : null, request.VirtualQueues ? "Turnos" : null, request.PickupOrders ? "Pedidos" : null }.Where(x => x is not null));
+
+    private static string Friendly(ApiException ex) => ex.Code switch
+    {
+        "SLUG_EXISTS" => "Esa dirección web ya está en uso. Prueba con otra.",
+        "MODULE_REQUIRED" => "Elige al menos una forma de atención.",
+        "INVALID_CATALOG" => "Selecciona un municipio y una categoría válidos.",
+        _ when ex.StatusCode is 401 or 403 => "Tu sesión no tiene permiso para crear negocios.",
+        _ => ex.Message
+    };
+
+    private string? Owner() => !string.IsNullOrWhiteSpace(request.ExistingOwnerEmail)
+        ? request.ExistingOwnerEmail
+        : !string.IsNullOrWhiteSpace(request.PilotEmail) ? request.PilotEmail : null;
+
+    private string SelectedModules()
+    {
+        var seleccion = new[]
+        {
+            request.Appointments ? "Citas" : null,
+            request.VirtualQueues ? "Turnos" : null,
+            request.PickupOrders ? "Pedidos para recoger" : null
+        }.Where(x => x is not null);
+        return string.Join(", ", seleccion) is { Length: > 0 } texto ? texto : "sin definir";
+    }
 }

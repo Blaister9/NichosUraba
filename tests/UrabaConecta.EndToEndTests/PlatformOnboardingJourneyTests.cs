@@ -94,7 +94,7 @@ public sealed class PlatformOnboardingJourneyTests(BrowserFixture fixture) : ICl
         Assert.Contains(withService.Readiness, x => x.Key == "logo" && !x.IsComplete);
         Assert.Equal("Active", (await CompleteAndPublish(admin, withService)).Status);
         await admin.ReloadAsync();
-        await Expect(admin.Locator("span.tag").Filter(new() { HasText = "Publicado" })).ToBeVisibleAsync();
+        await Expect(admin.Locator("[data-testid=ficha-estado]")).ToHaveTextAsync("Publicado");
     }
 
     [Fact]
@@ -257,26 +257,27 @@ public sealed class PlatformOnboardingJourneyTests(BrowserFixture fixture) : ICl
 
     private async Task<PlatformBusinessCreatedDto> CreateWithWizard(IPage admin, string slug, string pilotEmail)
     {
+        // Los selectores van por data-testid y no por el texto visible: el copy de este asistente
+        // cambia con el trabajo de experiencia y no debe romper el recorrido que verifica el alta.
         await admin.GotoAsync($"{fixture.BaseUrl}/admin/negocios/nuevo");
-        await admin.WaitForTimeoutAsync(750);
-        await admin.GetByLabel("Nombre comercial").FillAsync($"Piloto {slug}");
-        await admin.GetByLabel("Identificador público").FillAsync(slug);
-        await admin.GetByLabel("Municipio").SelectOptionAsync(new SelectOptionValue { Index = 1 });
-        await admin.GetByLabel("Categoría").SelectOptionAsync(new SelectOptionValue { Index = 1 });
-        await admin.GetByLabel("Descripción").FillAsync("Negocio piloto E2E");
-        await admin.GetByRole(AriaRole.Button, new() { Name = "Continuar" }).ClickAsync();
-        await admin.GetByLabel("Servicio inicial (opcional)").FillAsync("Corte piloto");
-        await admin.GetByRole(AriaRole.Button, new() { Name = "Continuar" }).ClickAsync();
-        await admin.GetByLabel("Nombre de la persona").FillAsync("Propietaria piloto");
-        await admin.GetByLabel("Correo piloto").FillAsync(pilotEmail);
-        await admin.GetByRole(AriaRole.Button, new() { Name = "Continuar" }).ClickAsync();
-        await admin.GetByLabel("Guardar como borrador").UncheckAsync();
-        await admin.GetByRole(AriaRole.Button, new() { Name = "Crear negocio" }).ClickAsync();
-        await Expect(admin.GetByRole(AriaRole.Heading, new() { Name = $"Piloto {slug} fue creado" }))
-            .ToBeVisibleAsync();
+        await admin.Locator("[data-testid=campo-nombre]").FillAsync($"Piloto {slug}");
+        await admin.Locator("[data-testid=campo-slug]").FillAsync(slug);
+        await admin.Locator("[data-testid=campo-municipio]").SelectOptionAsync(new SelectOptionValue { Index = 1 });
+        await admin.Locator("[data-testid=campo-categoria]").SelectOptionAsync(new SelectOptionValue { Index = 1 });
+        await admin.Locator("[data-testid=campo-descripcion]").FillAsync("Negocio piloto E2E");
+        await admin.Locator("[data-testid=continuar]").ClickAsync();
+        await admin.GetByLabel("Servicio inicial").FillAsync("Corte piloto");
+        await admin.Locator("[data-testid=continuar]").ClickAsync();
+        // Crea una cuenta nueva (devuelve contraseña temporal), no vincula una existente.
+        await admin.Locator("[data-testid=campo-propietario-nuevo-nombre]").FillAsync("Propietaria piloto");
+        await admin.Locator("[data-testid=campo-propietario-nuevo]").FillAsync(pilotEmail);
+        await admin.Locator("[data-testid=continuar]").ClickAsync();
+        // El asistente ya no publica: siempre nace como borrador y la publicación pasa por la
+        // lista de preparación y la revisión.
+        await admin.Locator("[data-testid=crear]").ClickAsync();
+        await Expect(admin.Locator("[data-testid=negocio-creado]")).ToBeVisibleAsync();
         var temporary = (await admin.Locator("p.temporary-secret").TextContentAsync())!.Trim();
-        var href = await admin.GetByRole(AriaRole.Link, new() { Name = "Abrir lista de preparación" })
-            .GetAttributeAsync("href");
+        var href = await admin.Locator("[data-testid=continuar-configuracion]").GetAttributeAsync("href");
         var businessId = Guid.Parse(href!.Split('/').Last());
         var detailResponse = await Fetch(admin, "GET", $"/api/v1/admin/businesses/{businessId}");
         return new(JsonSerializer.Deserialize<PlatformBusinessDto>(detailResponse.Body, Json)!, temporary);
