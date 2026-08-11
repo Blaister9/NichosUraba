@@ -17,6 +17,11 @@
 
         $env:URABACONECTA_ACCEPTANCE_PASSWORD
 
+.NOTES
+    Exige HTTPS. Fuera de Development la cookie de sesión se marca Secure, y el contenedor de
+    cookies de .NET no la conserva sobre HTTP plano: el inicio de sesión respondería 302 y aun
+    así la sesión se perdería. Contra un despliegue local por HTTP, use un navegador.
+
 .EXAMPLE
     ./ops/acceptance-production.ps1 -BaseUrl https://urabaconecta.up.railway.app `
                                     -Email admin@sudominio.co
@@ -44,7 +49,10 @@ if ([string]::IsNullOrWhiteSpace($plano)) { throw 'No se recibió contraseña.' 
 $sesion = New-Object Microsoft.PowerShell.Commands.WebRequestSession
 
 Write-Host 'Solicitando la página de inicio de sesión...'
-$login = Invoke-WebRequest -Uri "$BaseUrl/Account/Login" -WebSession $sesion -TimeoutSec $TimeoutSeconds
+# -UseBasicParsing: sin él, Windows PowerShell 5.1 intenta usar el motor de Internet Explorer,
+# que exige una sesión interactiva y aborta cuando el script corre desatendido.
+$login = Invoke-WebRequest -Uri "$BaseUrl/Account/Login" -WebSession $sesion `
+    -TimeoutSec $TimeoutSeconds -UseBasicParsing
 
 # El formulario está protegido por antiforgery: hay que reenviar el token que vino en la página.
 $token = [regex]::Match($login.Content,
@@ -64,8 +72,14 @@ $cuerpo = @{
 }
 
 Write-Host 'Iniciando sesión...'
-$respuesta = Invoke-WebRequest -Uri "$BaseUrl/Account/Login" -Method Post -Body $cuerpo `
-    -WebSession $sesion -TimeoutSec $TimeoutSeconds -SkipHttpErrorCheck -MaximumRedirection 5
+$respuesta = try {
+    Invoke-WebRequest -Uri "$BaseUrl/Account/Login" -Method Post -Body $cuerpo `
+        -WebSession $sesion -TimeoutSec $TimeoutSeconds -UseBasicParsing -MaximumRedirection 5
+} catch {
+    # En 5.1 una respuesta que no es 2xx llega como excepción; el contenido sigue sirviendo
+    # para distinguir un bloqueo de cuenta de un fallo de credenciales.
+    $_.Exception.Response
+}
 
 # La contraseña deja de existir en memoria en cuanto se usó.
 $plano = $null
