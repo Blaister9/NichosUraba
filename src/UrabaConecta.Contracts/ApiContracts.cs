@@ -69,6 +69,25 @@ public sealed record MyBusinessDto(Guid Id, string Name, string Slug, string Mem
     public bool ShowQueues => HasVirtualQueues && CanManageQueues;
     public bool ShowOrders => HasPickupOrders && CanManageOrders;
 }
+// ---------------------------------------------------------------------------
+// Resumen operativo del propietario
+// ---------------------------------------------------------------------------
+
+/// <summary>
+/// Lo que pasa hoy en un negocio. Los submódulos son nulos cuando la función no está habilitada:
+/// un cero y un "no aplica" no significan lo mismo, y mandar ceros de un módulo apagado obligaría a
+/// la pantalla a adivinar cuál de los dos está viendo.
+/// </summary>
+public sealed record OwnerDashboardSummaryDto(Guid BusinessId, string BusinessName,
+    AppointmentsSummaryDto? Appointments, QueueSummaryDto? Queues, OrdersSummaryDto? Orders);
+
+public sealed record AppointmentsSummaryDto(int TodayTotal, int Pending, int Confirmed, int Completed,
+    DateTimeOffset? NextAppointmentAtUtc, string? NextAppointmentServiceName);
+
+public sealed record QueueSummaryDto(int Waiting, int InService, int ServedToday, int? CurrentTicketNumber);
+
+public sealed record OrdersSummaryDto(int Pending, int Preparing, int Ready, int DeliveredToday);
+
 public sealed record MembershipPermissionsDto(bool CanManageAppointments, bool CanManageConfiguration,
     bool CanManageMembers, bool CanManageQueues = false, bool CanManageOrders = false);
 public sealed record BusinessMemberDto(Guid Id, string DisplayName, string Email, bool IsActive, bool IsOwner,
