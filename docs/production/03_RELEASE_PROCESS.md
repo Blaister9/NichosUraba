@@ -44,6 +44,34 @@ Promover a Demo es un acto deliberado, no un efecto secundario de guardar el tra
 lo permite, `git fetch . <sha>:release/pilot-demo` avanza la rama sólo si el movimiento es
 fast-forward y falla si no lo es, que es exactamente la garantía que se quiere.
 
+## Versión del SDK
+
+Tres sitios tienen que decir lo mismo, y hoy dicen `10.0.301`:
+
+| Dónde | Valor | Qué fija |
+| --- | --- | --- |
+| `global.json` | `10.0.301`, `rollForward: latestPatch` | Qué SDK acepta la solución |
+| `Dockerfile`, imagen `build` | `mcr.microsoft.com/dotnet/sdk:10.0.301` | Con qué SDK compila Railway |
+| Máquina de desarrollo | `dotnet --list-sdks` | Con qué SDK se ejecuta la suite |
+
+**No usar etiquetas flotantes (`sdk:10.0`, `aspnet:10.0`) en el Dockerfile.** El 2026-08-11 esa
+etiqueta pasó a traer un SDK 10.0.400 y el build empezó a morir en `dotnet restore` con código 155
+—«A compatible .NET SDK was not found»— sobre un commit que había compilado sin problema el día
+anterior. Nadie había tocado el código: cambió la imagen debajo. Una etiqueta flotante convierte la
+fecha del despliegue en una entrada silenciosa del build.
+
+Para subir de versión, en un commit propio y deliberado:
+
+1. Instalar el SDK nuevo en la máquina de desarrollo y comprobar `dotnet --list-sdks`.
+2. Actualizar `global.json` y la imagen `build` del `Dockerfile` al mismo número.
+3. Suite completa en verde con ese SDK.
+4. `docker build --no-cache` limpio.
+5. Recién entonces promover.
+
+El runtime (`aspnet:10.0.11`) se fija igual y se sube igual. Va por delante del 10.0.9 que trae el
+SDK a propósito: .NET adelanta parches de forma compatible, así que conviene el parche más reciente
+de la banda, pero elegido a mano y no por la fecha.
+
 ## Configuración en Railway
 
 - Servicio Production: rama observada `release/founder-production`.
