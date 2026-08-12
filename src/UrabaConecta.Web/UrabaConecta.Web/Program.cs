@@ -76,7 +76,12 @@ builder.Services.AddAuthorizationBuilder()
     .AddPolicy("BusinessMember", policy => policy.RequireAuthenticatedUser())
     .AddPolicy("BusinessOwner", policy => policy.RequireRole("BusinessOwner"))
     .AddPolicy("Appointments.Manage", policy => policy.RequireRole("BusinessOwner", "BusinessWorker"))
-    .AddPolicy("BusinessProfile.Manage", policy => policy.RequireRole("BusinessOwner"))
+    // Quién manda sobre un negocio concreto lo decide el caso de uso contra la membresía; esta
+    // política sólo descarta a quien no puede ser dueño de nada. La socia que da de alta negocios
+    // es PartnerOperator y a la vez propietaria de los suyos: dejarla fuera aquí le mostraba las
+    // tarjetas de Perfil e Imágenes y le cerraba la puerta al entrar.
+    .AddPolicy("BusinessProfile.Manage",
+        policy => policy.RequireRole("BusinessOwner", "PartnerOperator", "PlatformAdmin"))
     .AddPolicy("BusinessConfiguration.Manage", policy => policy.RequireRole("BusinessOwner", "BusinessWorker"))
     .AddPolicy("Workers.Manage", policy => policy.RequireRole("BusinessOwner", "BusinessWorker"))
     .AddPolicy("PlatformAdmin", policy => policy.RequireRole("PlatformAdmin"))

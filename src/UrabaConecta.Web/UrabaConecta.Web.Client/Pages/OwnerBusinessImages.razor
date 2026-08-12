@@ -1,6 +1,9 @@
 @page "/panel/{BusinessId:guid}/configuracion/imagenes"
 @rendermode InteractiveServer
-@attribute [Authorize(Roles = "BusinessOwner")]
+@* La socia que da de alta negocios es PartnerOperator y propietaria de los suyos: si
+   quedara fuera, vería las tarjetas y la pantalla la rechazaría. Quién manda sobre ESTE negocio lo
+   decide el servidor contra la membresía, no este atributo. *@
+@attribute [Authorize(Roles = "BusinessOwner,PartnerOperator,PlatformAdmin")]
 @inject IUrabaConectaApi Api
 
 @* Imágenes del negocio, en manos de su propietario. Mismo almacenamiento, misma validación de firma
