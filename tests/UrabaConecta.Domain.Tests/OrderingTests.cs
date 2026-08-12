@@ -67,6 +67,42 @@ public sealed class OrderingTests
         => Assert.Equal("INVALID_ORDER_TRANSITION", Assert.Throws<DomainException>(() =>
             Order().Transition(PickupOrderStatus.Delivered, Now, 0)).Code);
 
+    /// <summary>
+    /// Delivered es terminal, y de eso depende una métrica.
+    ///
+    /// El resumen del propietario cuenta los pedidos "entregados hoy" como
+    /// <c>Status == Delivered AND UpdatedAtUtc dentro del día local</c>. No existe DeliveredAtUtc ni
+    /// historial de estados: <see cref="PickupOrder.Transition"/> es el único mutador y el único que
+    /// escribe UpdatedAtUtc, así que en un pedido entregado esa marca ES el instante de la entrega
+    /// —pero sólo mientras nada pueda sacarlo de Delivered y volver a tocarlo.
+    ///
+    /// Si alguien abre esa puerta, la métrica empezaría a mentir en silencio. Esta prueba la cierra:
+    /// falla antes de que el número se vuelva incorrecto.
+    /// </summary>
+    [Theory]
+    [InlineData(PickupOrderStatus.Pending)]
+    [InlineData(PickupOrderStatus.Accepted)]
+    [InlineData(PickupOrderStatus.Preparing)]
+    [InlineData(PickupOrderStatus.ReadyForPickup)]
+    [InlineData(PickupOrderStatus.Rejected)]
+    [InlineData(PickupOrderStatus.Cancelled)]
+    [InlineData(PickupOrderStatus.Delivered)]
+    public void Delivered_is_terminal_because_a_metric_depends_on_it(PickupOrderStatus destino)
+    {
+        var order = Order();
+        order.Transition(PickupOrderStatus.Accepted, Now.AddMinutes(1), 0);
+        order.Transition(PickupOrderStatus.Preparing, Now.AddMinutes(2), 1);
+        order.Transition(PickupOrderStatus.ReadyForPickup, Now.AddMinutes(3), 2);
+        order.Transition(PickupOrderStatus.Delivered, Now.AddMinutes(4), 3);
+        var entregadoEn = order.UpdatedAtUtc;
+
+        Assert.Equal("INVALID_ORDER_TRANSITION", Assert.Throws<DomainException>(() =>
+            order.Transition(destino, Now.AddHours(20), order.Version, "motivo")).Code);
+        // Y la marca temporal de la entrega sigue intacta tras el intento.
+        Assert.Equal(entregadoEn, order.UpdatedAtUtc);
+        Assert.Equal(PickupOrderStatus.Delivered, order.Status);
+    }
+
     [Fact]
     public void Cancellation_requires_reason()
         => Assert.Equal("ORDER_REASON_REQUIRED", Assert.Throws<DomainException>(() =>
