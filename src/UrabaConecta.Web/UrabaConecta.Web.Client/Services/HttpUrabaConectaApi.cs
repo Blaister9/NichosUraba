@@ -301,6 +301,34 @@ public sealed class HttpUrabaConectaApi(HttpClient http) : IUrabaConectaApi
             $"api/v1/admin/businesses/{businessId}/scheduling-exceptions/{exceptionId}?version={version}",
             cancellationToken), cancellationToken);
 
+    public Task<PlatformBusinessDto> GetOwnerProfileAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => Get<PlatformBusinessDto>($"api/v1/businesses/{businessId}/profile", cancellationToken);
+    public async Task<PlatformBusinessDto> SaveOwnerProfileAsync(Guid businessId,
+        SaveOwnerProfileRequest request, CancellationToken cancellationToken = default)
+        => await Read<PlatformBusinessDto>(await http.PutAsJsonAsync(
+            $"api/v1/businesses/{businessId}/profile", request, Json, cancellationToken), cancellationToken);
+    public Task<IReadOnlyList<BusinessImageDto>> GetOwnerImagesAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => Get<IReadOnlyList<BusinessImageDto>>($"api/v1/businesses/{businessId}/images", cancellationToken);
+    public async Task<BusinessImageDto> UploadOwnerImageAsync(Guid businessId, string kind, string fileName,
+        string contentType, byte[] content, string? altText, CancellationToken cancellationToken = default)
+    {
+        using var form = new MultipartFormDataContent();
+        var part = new ByteArrayContent(content);
+        part.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+        form.Add(part, "file", fileName);
+        form.Add(new StringContent(kind), "kind");
+        if (!string.IsNullOrWhiteSpace(altText)) form.Add(new StringContent(altText), "altText");
+        return await Read<BusinessImageDto>(await http.PostAsync(
+            $"api/v1/businesses/{businessId}/images", form, cancellationToken), cancellationToken);
+    }
+    public async Task RemoveOwnerImageAsync(Guid businessId, Guid imageId, long version,
+        CancellationToken cancellationToken = default)
+        => await Ensure(await http.DeleteAsync(
+            $"api/v1/businesses/{businessId}/images/{imageId}?version={version}", cancellationToken),
+            cancellationToken);
+
     public Task<IReadOnlyList<BusinessImageDto>> GetBusinessImagesAsync(Guid businessId,
         CancellationToken cancellationToken = default)
         => Get<IReadOnlyList<BusinessImageDto>>($"api/v1/admin/businesses/{businessId}/images", cancellationToken);

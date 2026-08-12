@@ -1,0 +1,190 @@
+@page "/panel/{BusinessId:guid}/configuracion/perfil"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "BusinessOwner")]
+@inject IUrabaConectaApi Api
+
+@* Perfil comercial editado por su propietario. Vive bajo /panel y no bajo /admin a propósito: el
+   propietario no tiene por qué descubrir su ficha dentro de un menú de administración de plataforma,
+   que además habla de revisiones, suspensiones y auditoría, cosas que no le tocan. El servidor es el
+   mismo; lo que cambia es de quién es esta pantalla. *@
+
+<PageTitle>Perfil del negocio | UrabáConecta</PageTitle>
+<a class="back-link" href="/panel/@BusinessId/configuracion" data-enhance-nav="false">← Volver a configuración</a>
+<p class="eyebrow">Configuración</p>
+<h1>Perfil del negocio</h1>
+
+@if (loading)
+{
+    <p class="notice" role="status" data-testid="perfil-cargando">Cargando el perfil…</p>
+}
+else if (business is null)
+{
+    <p class="error" role="alert" data-testid="profile-error">@(error ?? "No tiene acceso a este negocio.")</p>
+}
+else
+{
+    <div class="config-business"><span class="tag">Negocio</span>
+        <strong data-testid="perfil-negocio">@business.Name</strong></div>
+    <ConfigurationNav BusinessId="BusinessId" ShowOwnerSections="true" />
+
+    <EditForm Model="form" OnValidSubmit="Save" class="appointment-form" data-testid="profile-form">
+        <DataAnnotationsValidator />
+        <fieldset disabled="@saving">
+            <p class="form-legend">Los campos marcados con <span class="field-required">*</span> son
+               obligatorios. Esto es lo que verán tus clientes en el directorio.</p>
+
+            @* Identidad del negocio: se muestra, no se edita. Presentarla como campo editable para
+               después ignorar el cambio sería mentirle a la propietaria. *@
+            <div class="notice" data-testid="perfil-bloqueados">
+                <p><strong>Datos que no puedes cambiar desde aquí</strong></p>
+                <dl class="details">
+                    <dt>Nombre</dt><dd>@business.Name</dd>
+                    <dt>Dirección web</dt><dd>urabaconecta.co/negocios/@business.Slug</dd>
+                    <dt>Municipio</dt><dd>@business.Municipality</dd>
+                    <dt>Categoría</dt><dd>@business.Category</dd>
+                </dl>
+                <p class="meta">Son la identidad de tu negocio en el directorio y en los enlaces que ya
+                   compartiste. Para cambiarlos, escribe a quien te acompaña en la plataforma.</p>
+            </div>
+
+            <label><span class="field-label">Descripción breve <span class="field-required" aria-hidden="true">*</span></span>
+                <InputText @bind-Value="form.ShortDescription" maxlength="160"
+                           data-testid="short-description" aria-required="true" />
+                <span class="field-hint">Una frase. Es la que se ve en el directorio. Máximo 160 caracteres.</span>
+                <ValidationMessage For="() => form.ShortDescription" />
+            </label>
+
+            <label>Descripción completa
+                <InputTextArea @bind-Value="form.Description" data-testid="full-description" />
+                <span class="field-hint">Qué hace tu negocio y qué lo distingue.</span>
+                <ValidationMessage For="() => form.Description" />
+            </label>
+
+            <label>Dirección
+                <InputText @bind-Value="form.Address" data-testid="address" />
+                <span class="field-hint">Dónde te encuentran. Hace falta antes de publicar.</span>
+                <ValidationMessage For="() => form.Address" />
+            </label>
+
+            <label>Punto de referencia
+                <InputText @bind-Value="form.ReferencePoint" data-testid="reference-point" />
+                <span class="field-hint">Opcional. Ej.: frente al parque principal.</span>
+                <ValidationMessage For="() => form.ReferencePoint" />
+            </label>
+
+            <label>Teléfono público
+                <InputText @bind-Value="form.PublicPhone" data-testid="phone" />
+                <span class="field-hint">El número al que pueden llamarte tus clientes.</span>
+                <ValidationMessage For="() => form.PublicPhone" />
+            </label>
+
+            <label>Correo público
+                <InputText @bind-Value="form.PublicEmail" data-testid="public-email" />
+                <ValidationMessage For="() => form.PublicEmail" />
+            </label>
+
+            <label>Enlace de WhatsApp
+                <InputText @bind-Value="form.WhatsAppUrl" data-testid="whatsapp" />
+                <ValidationMessage For="() => form.WhatsAppUrl" />
+            </label>
+
+            <label>Instagram
+                <InputText @bind-Value="form.InstagramUrl" data-testid="instagram" />
+                <ValidationMessage For="() => form.InstagramUrl" />
+            </label>
+
+            <label>Facebook
+                <InputText @bind-Value="form.FacebookUrl" data-testid="facebook" />
+                <ValidationMessage For="() => form.FacebookUrl" />
+            </label>
+
+            <label>Enlace de ubicación
+                <InputText @bind-Value="form.LocationUrl" data-testid="location-url" />
+                <span class="field-hint">Opcional. El enlace del mapa.</span>
+                <ValidationMessage For="() => form.LocationUrl" />
+            </label>
+
+            <label>Instrucciones para clientes
+                <InputTextArea @bind-Value="form.CustomerInstructions" data-testid="customer-instructions" />
+                <span class="field-hint">Opcional. Ej.: trae tu cédula, timbra en la reja.</span>
+                <ValidationMessage For="() => form.CustomerInstructions" />
+            </label>
+
+            @if (success is not null)
+            {
+                <p class="success" role="status" data-testid="profile-success">@success</p>
+            }
+            @if (error is not null)
+            {
+                <p class="error" role="alert" data-testid="profile-error">@error</p>
+            }
+
+            @* disabled mientras se guarda: sin esto un segundo clic mandaba la misma petición otra vez
+               y la segunda chocaba contra la concurrencia optimista con un mensaje que no dice nada. *@
+            <div class="actions">
+                <button type="submit" class="primary" disabled="@saving" data-testid="save-profile">
+                    @(saving ? "Guardando…" : "Guardar cambios")
+                </button>
+            </div>
+        </fieldset>
+    </EditForm>
+}
+
+@code {
+    [Parameter] public Guid BusinessId { get; set; }
+
+    private PlatformBusinessDto? business;
+    private SaveOwnerProfileRequest form = new();
+    private bool loading = true, saving;
+    private string? error, success;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        loading = true; error = null; success = null;
+        try
+        {
+            business = await Api.GetOwnerProfileAsync(BusinessId);
+            form = ToForm(business);
+        }
+        catch (ApiException ex) { error = Friendly(ex); business = null; }
+        finally { loading = false; }
+    }
+
+    private async Task Save()
+    {
+        if (saving) return;
+        saving = true; error = null; success = null;
+        try
+        {
+            // La respuesta trae el negocio ya guardado, incluida la versión nueva: se adopta para que
+            // un segundo guardado seguido no choque contra la concurrencia optimista.
+            business = await Api.SaveOwnerProfileAsync(BusinessId, form);
+            form = ToForm(business);
+            success = "Guardamos los cambios de tu perfil.";
+        }
+        catch (ApiException ex)
+        {
+            // El formulario NO se recarga en el error: lo que la propietaria escribió sigue en
+            // pantalla para que corrija y reintente, en lugar de perderlo.
+            error = Friendly(ex);
+        }
+        finally { saving = false; }
+    }
+
+    private static SaveOwnerProfileRequest ToForm(PlatformBusinessDto b) => new()
+    {
+        ShortDescription = b.ShortDescription, Description = b.Description, Address = b.Address,
+        ReferencePoint = b.ReferencePoint, PublicPhone = b.PublicPhone, PublicEmail = b.PublicEmail,
+        WhatsAppUrl = b.WhatsAppUrl, InstagramUrl = b.InstagramUrl, FacebookUrl = b.FacebookUrl,
+        LocationUrl = b.LocationUrl, CustomerInstructions = b.CustomerInstructions, Version = b.Version
+    };
+
+    private static string Friendly(ApiException ex) => ex.StatusCode switch
+    {
+        401 => "Tu sesión se cerró. Vuelve a ingresar.",
+        403 => "No tienes permiso para editar el perfil de este negocio.",
+        404 => "No encontramos el negocio.",
+        409 => "Alguien más guardó cambios mientras editabas. Recarga la página y vuelve a intentarlo.",
+        _ => ex.Message
+    };
+}

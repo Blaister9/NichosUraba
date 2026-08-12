@@ -1,5 +1,13 @@
 <nav class="config-nav" aria-label="Configuración del negocio">
     <a href="/panel/@BusinessId/configuracion">Resumen</a>
+    @* Perfil e imágenes viven aquí y no en "Administración": son del negocio, no de la plataforma.
+       Sólo para la propietaria: a un trabajador el enlace le llevaría a una pantalla que le niega
+       el paso, y ofrecer una puerta cerrada es peor que no ofrecerla. *@
+    @if (ShowOwnerSections)
+    {
+        <a href="/panel/@BusinessId/configuracion/perfil">Perfil</a>
+        <a href="/panel/@BusinessId/configuracion/imagenes">Imágenes</a>
+    }
     <a href="/panel/@BusinessId/configuracion/servicios">Servicios</a>
     <a href="/panel/@BusinessId/configuracion/personal">Personal</a>
     <a href="/panel/@BusinessId/configuracion/horarios">Horarios</a>
@@ -9,4 +17,5 @@
 
 @code {
     [Parameter, EditorRequired] public Guid BusinessId { get; set; }
+    [Parameter] public bool ShowOwnerSections { get; set; }
 }

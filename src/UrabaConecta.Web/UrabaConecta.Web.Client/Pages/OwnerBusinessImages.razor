@@ -1,0 +1,185 @@
+@page "/panel/{BusinessId:guid}/configuracion/imagenes"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "BusinessOwner")]
+@inject IUrabaConectaApi Api
+
+@* Imágenes del negocio, en manos de su propietario. Mismo almacenamiento, misma validación de firma
+   binaria y misma política de EXIF que usa la administración: aquí sólo cambia quién entra. *@
+
+<PageTitle>Imágenes del negocio | UrabáConecta</PageTitle>
+<a class="back-link" href="/panel/@BusinessId/configuracion" data-enhance-nav="false">← Volver a configuración</a>
+<p class="eyebrow">Configuración</p>
+<h1>Imágenes del negocio</h1>
+
+@if (loading)
+{
+    <p class="notice" role="status" data-testid="imagenes-cargando">Cargando las imágenes…</p>
+}
+else if (business is null)
+{
+    <p class="error" role="alert" data-testid="images-error">@(error ?? "No tiene acceso a este negocio.")</p>
+}
+else
+{
+    <div class="config-business"><span class="tag">Negocio</span>
+        <strong data-testid="imagenes-negocio">@business.Name</strong></div>
+    <ConfigurationNav BusinessId="BusinessId" ShowOwnerSections="true" />
+
+    <p class="form-legend">JPEG, PNG o WebP. Máximo 5 MB. La imagen se reescala y se le quitan los
+       datos de ubicación de la cámara antes de publicarse.</p>
+
+    @if (success is not null) { <p class="success" role="status" data-testid="images-success">@success</p> }
+    @if (error is not null) { <p class="error" role="alert" data-testid="images-error">@error</p> }
+
+    <section aria-labelledby="titulo-logo" data-testid="bloque-logo">
+        <h2 id="titulo-logo">Logo</h2>
+        <p class="meta">Se muestra junto al nombre de tu negocio.</p>
+        @if (Single("Logo") is { } logo)
+        {
+            <figure class="business-card">
+                <img src="@logo.Url" alt="Logo de @business.Name" width="@logo.Width" height="@logo.Height" />
+                <figcaption>@logo.Width×@logo.Height</figcaption>
+            </figure>
+            <p class="meta">Si subes otro, reemplaza al actual.</p>
+        }
+        else
+        {
+            <p class="empty-inline" data-testid="logo-vacio">Todavía no cargaste un logo.</p>
+        }
+        <InputFile OnChange="@(args => Upload(args, "Logo"))" accept="image/jpeg,image/png,image/webp"
+                   disabled="@Busy" data-testid="upload-logo" />
+    </section>
+
+    <section aria-labelledby="titulo-portada" data-testid="bloque-portada" class="divider">
+        <h2 id="titulo-portada">Portada</h2>
+        <p class="meta">Es la imagen principal de tu ficha.</p>
+        @if (Single("Cover") is { } cover)
+        {
+            <figure class="business-card">
+                <img src="@cover.Url" alt="Portada de @business.Name" width="@cover.Width" height="@cover.Height" />
+                <figcaption>@cover.Width×@cover.Height</figcaption>
+            </figure>
+            <p class="meta">Si subes otra, reemplaza a la actual.</p>
+        }
+        else
+        {
+            <p class="empty-inline" data-testid="portada-vacia">Todavía no cargaste una portada.</p>
+        }
+        <InputFile OnChange="@(args => Upload(args, "Cover"))" accept="image/jpeg,image/png,image/webp"
+                   disabled="@Busy" data-testid="upload-portada" />
+    </section>
+
+    <section aria-labelledby="titulo-galeria" data-testid="bloque-galeria" class="divider">
+        <h2 id="titulo-galeria">Galería</h2>
+        <p class="meta">Agrega imágenes para mostrar tus servicios, productos o tu espacio.</p>
+        @if (Gallery is { Count: > 0 } galeria)
+        {
+            <div class="card-grid" data-testid="galeria">
+                @foreach (var image in galeria)
+                {
+                    <figure class="business-card">
+                        <img src="@image.Url" alt="@(image.AltText ?? business.Name)"
+                             width="@image.Width" height="@image.Height" loading="lazy" />
+                        <figcaption>@image.Width×@image.Height</figcaption>
+                        <button type="button" class="secondary" disabled="@Busy"
+                                data-testid="eliminar-imagen" @onclick="() => Remove(image)">
+                            @(removing == image.Id ? "Eliminando…" : "Eliminar")
+                        </button>
+                    </figure>
+                }
+            </div>
+        }
+        else
+        {
+            <p class="empty-inline" data-testid="galeria-vacia">Todavía no agregaste imágenes a la galería.</p>
+        }
+        <InputFile OnChange="@(args => Upload(args, "Gallery"))" accept="image/jpeg,image/png,image/webp"
+                   disabled="@Busy" data-testid="upload-galeria" />
+    </section>
+
+    @if (uploading is { Length: > 0 } destino)
+    {
+        <p class="notice" role="status" data-testid="images-uploading">Subiendo la imagen de @destino…</p>
+    }
+}
+
+@code {
+    [Parameter] public Guid BusinessId { get; set; }
+
+    /// <summary>Coincide con ImagePolicy del servidor; abrir un archivo mayor falla antes de viajar.</summary>
+    private const long MaximumBytes = 5 * 1024 * 1024;
+
+    private PlatformBusinessDto? business;
+    private IReadOnlyList<BusinessImageDto> images = [];
+    private bool loading = true;
+    private string? uploading, error, success;
+    private Guid? removing;
+
+    /// <summary>Una sola operación a la vez: evita el doble clic y las cargas cruzadas.</summary>
+    private bool Busy => uploading is not null || removing is not null;
+
+    private BusinessImageDto? Single(string kind) => images.FirstOrDefault(x => x.Kind == kind);
+    private IReadOnlyList<BusinessImageDto> Gallery => images.Where(x => x.Kind == "Gallery").ToList();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        loading = true; error = null;
+        try
+        {
+            business = await Api.GetOwnerProfileAsync(BusinessId);
+            images = await Api.GetOwnerImagesAsync(BusinessId);
+        }
+        catch (ApiException ex) { error = Friendly(ex); business = null; }
+        finally { loading = false; }
+    }
+
+    private async Task Upload(InputFileChangeEventArgs args, string kind)
+    {
+        if (Busy) return;
+        uploading = KindLabel(kind); error = null; success = null;
+        try
+        {
+            var file = args.File;
+            await using var stream = file.OpenReadStream(MaximumBytes);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            await Api.UploadOwnerImageAsync(BusinessId, kind, file.Name, file.ContentType,
+                buffer.ToArray(), null);
+            images = await Api.GetOwnerImagesAsync(BusinessId);
+            success = $"Cargamos la imagen de {KindLabel(kind).ToLowerInvariant()}.";
+        }
+        catch (ApiException ex) { error = Friendly(ex); }
+        // El límite se comprueba también aquí: el archivo grande ni siquiera llega a subirse.
+        catch (IOException) { error = "El archivo supera el máximo de 5 MB."; }
+        finally { uploading = null; }
+    }
+
+    private async Task Remove(BusinessImageDto image)
+    {
+        if (Busy) return;
+        removing = image.Id; error = null; success = null;
+        try
+        {
+            await Api.RemoveOwnerImageAsync(BusinessId, image.Id, image.Version);
+            images = await Api.GetOwnerImagesAsync(BusinessId);
+            success = "Eliminamos la imagen.";
+        }
+        catch (ApiException ex) { error = Friendly(ex); }
+        finally { removing = null; }
+    }
+
+    private static string KindLabel(string kind) => kind switch
+    {
+        "Logo" => "Logo", "Cover" => "Portada", _ => "Galería"
+    };
+
+    private static string Friendly(ApiException ex) => ex.StatusCode switch
+    {
+        401 => "Tu sesión se cerró. Vuelve a ingresar.",
+        403 => "No tienes permiso para administrar las imágenes de este negocio.",
+        404 => "No encontramos el negocio.",
+        409 => "La imagen cambió mientras trabajabas. Recarga la página.",
+        413 => "El archivo supera el máximo de 5 MB.",
+        _ => ex.Message
+    };
+}

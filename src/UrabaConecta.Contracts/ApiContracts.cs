@@ -61,6 +61,9 @@ public sealed record MyBusinessDto(Guid Id, string Name, string Slug, string Mem
     string BusinessStatus = "Active",
     bool HasAppointments = false, bool HasVirtualQueues = false, bool HasPickupOrders = false)
 {
+    /// <summary>Perfil e imágenes son del propietario; un trabajador no las administra.</summary>
+    public bool IsOwner => string.Equals(MembershipRole, "Owner", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Mostrar acción = módulo habilitado en el negocio Y permiso del usuario.</summary>
     public bool ShowAppointments => HasAppointments && CanManageAppointments;
     public bool ShowQueues => HasVirtualQueues && CanManageQueues;
@@ -509,6 +512,18 @@ public interface IUrabaConectaApi
     Task<PlatformBusinessDto> UpdatePlatformModulesAsync(Guid businessId, UpdatePlatformModulesRequest request,
         CancellationToken cancellationToken = default);
     Task<PlatformBusinessDto> SavePlatformBusinessProfileAsync(Guid businessId, SaveBusinessProfileRequest request,
+        CancellationToken cancellationToken = default);
+    // --- Perfil e imágenes vistos por el propietario del negocio -----------------------------
+    // Mismos DTOs que la administración; cambia la ruta, y con ella quién está autorizado.
+    Task<PlatformBusinessDto> GetOwnerProfileAsync(Guid businessId,
+        CancellationToken cancellationToken = default);
+    Task<PlatformBusinessDto> SaveOwnerProfileAsync(Guid businessId, SaveOwnerProfileRequest request,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BusinessImageDto>> GetOwnerImagesAsync(Guid businessId,
+        CancellationToken cancellationToken = default);
+    Task<BusinessImageDto> UploadOwnerImageAsync(Guid businessId, string kind, string fileName,
+        string contentType, byte[] content, string? altText, CancellationToken cancellationToken = default);
+    Task RemoveOwnerImageAsync(Guid businessId, Guid imageId, long version,
         CancellationToken cancellationToken = default);
     Task<PlatformBusinessDto> SubmitBusinessForReviewAsync(Guid businessId, SubmitForReviewRequest request,
         CancellationToken cancellationToken = default);

@@ -262,6 +262,25 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
             .DeleteSchedulingExceptionAsync(actor, businessId, exceptionId, version, cancellationToken);
     }
 
+    // --- Superficie del propietario -------------------------------------------------------------
+    // Los mismos casos de uso que la administración. Quien entra lo decide la autorización, no la ruta.
+    public async Task<PlatformBusinessDto> GetOwnerProfileAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => await platform.GetAsync(await Actor(), businessId, cancellationToken);
+    public async Task<PlatformBusinessDto> SaveOwnerProfileAsync(Guid businessId,
+        SaveOwnerProfileRequest request, CancellationToken cancellationToken = default)
+        => await platform.SaveOwnerProfileAsync(await Actor(), businessId, request, cancellationToken);
+    public async Task<IReadOnlyList<BusinessImageDto>> GetOwnerImagesAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => await images.ListAsync(await Actor(), businessId, cancellationToken);
+    public async Task<BusinessImageDto> UploadOwnerImageAsync(Guid businessId, string kind, string fileName,
+        string contentType, byte[] content, string? altText, CancellationToken cancellationToken = default)
+        => await images.UploadAsync(await Actor(), businessId, kind,
+            new UploadedImage(fileName, contentType, content), altText, cancellationToken);
+    public async Task RemoveOwnerImageAsync(Guid businessId, Guid imageId, long version,
+        CancellationToken cancellationToken = default)
+        => await images.RemoveAsync(await Actor(), businessId, imageId, version, cancellationToken);
+
     public async Task<IReadOnlyList<BusinessImageDto>> GetBusinessImagesAsync(Guid businessId,
         CancellationToken cancellationToken = default)
         => await images.ListAsync(await Actor(), businessId, cancellationToken);
@@ -327,6 +346,8 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
         var id = Guid.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var parsed) ? parsed : Guid.Empty;
         return new(id, user.IsInRole("PlatformAdmin"), user.IsInRole("PartnerOperator"),
             httpContext.HttpContext?.Connection.RemoteIpAddress?.ToString(),
-            httpContext.HttpContext?.TraceIdentifier);
+            httpContext.HttpContext?.TraceIdentifier,
+            // El rol no concede nada por sí solo: el caso de uso confirma la membresía del negocio.
+            user.IsInRole("BusinessOwner"));
     }
 }

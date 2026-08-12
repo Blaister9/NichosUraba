@@ -19,19 +19,26 @@ else if (error is not null)
 else if (business is not null)
 {
     <div class="config-business"><span class="tag">Establecimiento</span><strong>@business.Name</strong></div>
-    <ConfigurationNav BusinessId="BusinessId" />
+    <ConfigurationNav BusinessId="BusinessId" ShowOwnerSections="business.IsOwner" />
     <div class="config-grid">
-        <a class="config-card" href="/panel/@BusinessId/configuracion/servicios"><span>01</span><h2>Servicios</h2><p>Oferta, duración, precio y publicación.</p></a>
-        <a class="config-card" href="/panel/@BusinessId/configuracion/personal"><span>02</span><h2>Personal</h2><p>Perfiles operativos y servicios que prestan.</p></a>
-        <a class="config-card" href="/panel/@BusinessId/configuracion/horarios"><span>03</span><h2>Horarios</h2><p>Apertura habitual por día, hora de Colombia.</p></a>
-        <a class="config-card" href="/panel/@BusinessId/configuracion/excepciones"><span>04</span><h2>Excepciones</h2><p>Cierres y aperturas para fechas concretas.</p></a>
+        @* El perfil y las imágenes abren la lista porque son lo primero que ve un cliente, y porque
+           hasta V6.5a el propietario sólo podía tocarlos entrando por "Administración". *@
+        @if (business.IsOwner)
+        {
+            <a class="config-card" href="/panel/@BusinessId/configuracion/perfil" data-testid="config-perfil"><span>01</span><h2>Perfil</h2><p>Descripciones, contacto y ubicación que ven tus clientes.</p></a>
+            <a class="config-card" href="/panel/@BusinessId/configuracion/imagenes" data-testid="config-imagenes"><span>02</span><h2>Imágenes</h2><p>Logo, portada y galería de tu ficha pública.</p></a>
+        }
+        <a class="config-card" href="/panel/@BusinessId/configuracion/servicios"><span>03</span><h2>Servicios</h2><p>Oferta, duración, precio y publicación.</p></a>
+        <a class="config-card" href="/panel/@BusinessId/configuracion/personal"><span>04</span><h2>Personal</h2><p>Perfiles operativos y servicios que prestan.</p></a>
+        <a class="config-card" href="/panel/@BusinessId/configuracion/horarios"><span>05</span><h2>Horarios</h2><p>Apertura habitual por día, hora de Colombia.</p></a>
+        <a class="config-card" href="/panel/@BusinessId/configuracion/excepciones"><span>06</span><h2>Excepciones</h2><p>Cierres y aperturas para fechas concretas.</p></a>
         @if (business.CanManageQueues)
         {
-            <a class="config-card" href="/panel/@BusinessId/configuracion/turnos"><span>05</span><h2>Turnos</h2><p>Nombre, capacidad, duración y publicación de la fila.</p></a>
+            <a class="config-card" href="/panel/@BusinessId/configuracion/turnos"><span>07</span><h2>Turnos</h2><p>Nombre, capacidad, duración y publicación de la fila.</p></a>
         }
         @if (business.SupportsPickupOrdering)
         {
-            <a class="config-card" href="/panel/@BusinessId/configuracion/pedidos"><span>06</span><h2>Pedidos</h2><p>Catálogo, precios, franjas y capacidad.</p></a>
+            <a class="config-card" href="/panel/@BusinessId/configuracion/pedidos"><span>08</span><h2>Pedidos</h2><p>Catálogo, precios, franjas y capacidad.</p></a>
         }
     </div>
 }
