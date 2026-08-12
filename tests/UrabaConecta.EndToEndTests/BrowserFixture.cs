@@ -20,6 +20,13 @@ public sealed class BrowserFixture : IAsyncLifetime
     public IBrowser Browser { get; private set; } = default!;
     public string BaseUrl { get; private set; } = "";
 
+    /// <summary>
+    /// La misma base que usa la aplicación. La expone para los escenarios que el sembrado no cubre
+    /// —una socia que además es propietaria, por ejemplo— y que sólo se pueden montar añadiendo el
+    /// dato: la aplicación corre en otro proceso, así que no hay contenedor de servicios compartido.
+    /// </summary>
+    public string ConnectionString { get; private set; } = "";
+
     private static readonly string? Externa = Environment.GetEnvironmentVariable("URABACONECTA_TEST_PG");
 
     public async Task InitializeAsync()
@@ -42,7 +49,8 @@ public sealed class BrowserFixture : IAsyncLifetime
         };
         start.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
         start.Environment["ASPNETCORE_URLS"] = BaseUrl;
-        start.Environment["ConnectionStrings__DefaultConnection"] = Externa ?? _postgres.GetConnectionString();
+        ConnectionString = Externa ?? _postgres.GetConnectionString();
+        start.Environment["ConnectionStrings__DefaultConnection"] = ConnectionString;
         start.Environment["URABACONECTA_TRACKING_HMAC_KEY"] = "e2e-test-hmac-key-with-at-least-32-bytes";
         start.Environment["RateLimits__PublicWritesPerMinute"] = "200";
         _app = Process.Start(start) ?? throw new InvalidOperationException("No fue posible iniciar la aplicación.");

@@ -103,7 +103,8 @@ else
     @* ---------------- Negocios donde la persona opera ---------------- *@
     @if (memberships is { Count: > 0 })
     {
-        <section aria-labelledby="titulo-operacion" class="@(isOperator ? "divider" : "")">
+        <section aria-labelledby="titulo-operacion" class="@(isOperator ? "divider" : "")"
+                 data-testid="owner-dashboard">
             @if (isOperator)
             {
                 <h2 id="titulo-operacion">Negocios donde trabajas</h2>
@@ -112,42 +113,29 @@ else
             {
                 <h2 id="titulo-operacion" class="visually-hidden">Negocios donde trabajas</h2>
             }
+
+            @if (dashboard == DashboardState.Loading)
+            {
+                @* Nada de ceros mientras se espera: un "0 citas" que después salta a 7 hace dudar de
+                   las dos cifras. *@
+                <p class="notice" role="status" data-testid="dashboard-loading">Cargando resumen…</p>
+            }
+            else if (dashboard == DashboardState.Error)
+            {
+                <div class="notice" role="alert" data-testid="dashboard-error">
+                    <p>No pudimos cargar el resumen de tus negocios.</p>
+                    <button type="button" class="secondary" data-testid="dashboard-retry"
+                            @onclick="LoadDashboardAsync">Intentar de nuevo</button>
+                </div>
+            }
+
             <div class="card-grid">
                 @foreach (var business in memberships)
                 {
-                    <article class="business-card"><span class="tag">@RoleLabel(business.MembershipRole)</span><h3>@business.Name</h3>
-                        @if (business.BusinessStatus == BusinessStatusText.Suspended)
-                        { <p class="notice"><strong>Negocio suspendido.</strong> Puede consultar el historial, pero no iniciar operaciones nuevas.</p> }
-                        @* Cada operación exige el módulo habilitado en ESTE negocio y además el permiso
-                           de la persona. Antes bastaba el permiso, y una propietaria veía las tres
-                           operaciones aunque su negocio sólo tuviera una activa.
-
-                           data-enhance-nav="false": al salir de este componente interactivo, la navegación
-                           mejorada cambiaba la dirección pero dejaba en pantalla el panel. Quien pulsaba
-                           "Operar pedidos" seguía viendo la misma página y parecía que la operación no
-                           funcionaba. Con la navegación normal la página destino se carga completa. *@
-                        <div class="actions" data-enhance-nav="false">
-                        @if (business.ShowAppointments)
-                        {
-                            <a class="button-link" href="/panel/@business.Id/citas">Administrar citas</a>
-                        }
-                        @if (business.CanManageConfiguration)
-                        {
-                            <a class="secondary button-link" href="/panel/@business.Id/configuracion">Configuración del negocio</a>
-                        }
-                        @if (business.CanManageMembers)
-                        {
-                            <a class="secondary button-link" href="/panel/@business.Id/equipo">Equipo y permisos</a>
-                        }
-                        @if (business.ShowQueues)
-                        {
-                            <a class="button-link" href="/panel/@business.Id/turnos">Operar turnos</a>
-                        }
-                        @if (business.ShowOrders)
-                        {
-                            <a class="button-link" href="/panel/@business.Id/pedidos">Operar pedidos</a>
-                        }</div>
-                    </article>
+                    @* Cada operación exige el módulo habilitado en ESTE negocio y además el permiso
+                       de la persona. Antes bastaba el permiso, y una propietaria veía las tres
+                       operaciones aunque su negocio sólo tuviera una activa. *@
+                    <BusinessOperationSummary Business="business" Summary="SummaryOf(business.Id)" />
                 }
             </div>
         </section>
@@ -167,6 +155,19 @@ else
     private IReadOnlyList<PlatformBusinessDto>? managed;
     private bool isOperator, loading = true;
     private string? error;
+
+    /// <summary>
+    /// El resumen operativo se pide UNA vez para todos los negocios, no uno por negocio: ese fue el
+    /// trabajo del pipeline y la pantalla no puede deshacerlo pidiendo por separado.
+    /// </summary>
+    private IReadOnlyDictionary<Guid, OwnerDashboardSummaryDto> summaries =
+        new Dictionary<Guid, OwnerDashboardSummaryDto>();
+    private DashboardState dashboard = DashboardState.Loading;
+
+    private enum DashboardState { Loading, Loaded, Error }
+
+    private OwnerDashboardSummaryDto? SummaryOf(Guid businessId)
+        => summaries.GetValueOrDefault(businessId);
 
     /// <summary>Cuántos requisitos pendientes se enumeran antes de resumir el resto.</summary>
     private const int MaximumPendingShown = 3;
@@ -189,6 +190,32 @@ else
                 : "No pudimos cargar tus negocios. Actualiza la página para intentarlo de nuevo.";
         }
         finally { loading = false; }
+
+        if (memberships is { Count: > 0 }) await LoadDashboardAsync();
+        else dashboard = DashboardState.Loaded;
+    }
+
+    /// <summary>
+    /// Una sola llamada para todos los negocios. Si falla, la página sigue siendo utilizable: se
+    /// conservan los negocios y sus accesos, y sólo faltan las cifras del día.
+    /// </summary>
+    private async Task LoadDashboardAsync()
+    {
+        dashboard = DashboardState.Loading;
+        StateHasChanged();
+        try
+        {
+            summaries = (await Api.GetOwnerDashboardAsync()).ToDictionary(x => x.BusinessId);
+            dashboard = DashboardState.Loaded;
+        }
+        // Se atrapa cualquier excepción a propósito: una que escape de aquí termina el circuito de
+        // Blazor y deja la pantalla congelada sin explicación. El resumen es informativo; perderlo
+        // no puede costar la sesión de trabajo.
+        catch (Exception)
+        {
+            summaries = new Dictionary<Guid, OwnerDashboardSummaryDto>();
+            dashboard = DashboardState.Error;
+        }
     }
 
     private static IReadOnlyList<string> Pending(PlatformBusinessDto business)
@@ -211,10 +238,4 @@ else
         };
     }
 
-    private static string RoleLabel(string? role) => role switch
-    {
-        "Owner" => "Propietario",
-        "Worker" => "Colaborador",
-        _ => "Miembro"
-    };
 }

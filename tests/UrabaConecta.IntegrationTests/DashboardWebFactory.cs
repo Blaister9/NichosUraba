@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using UrabaConecta.Application;
+using UrabaConecta.Contracts;
 
 namespace UrabaConecta.IntegrationTests;
 
@@ -13,7 +15,7 @@ namespace UrabaConecta.IntegrationTests;
 /// alguien la corra —a las 11 p. m. ya no queda ninguna cita futura del día—; lo segundo permite
 /// comprobar que quien agrupa y cuenta es PostgreSQL y no la aplicación.
 /// </summary>
-public sealed class DashboardWebFactory : PostgresWebFactory
+public class DashboardWebFactory : PostgresWebFactory
 {
     /// <summary>
     /// Hoy a las 3:00 p. m. en Bogotá. Se fija el día real y sólo se congela la hora, para que las
@@ -40,6 +42,30 @@ public sealed class DashboardWebFactory : PostgresWebFactory
     private sealed class FrozenTime(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
+    }
+}
+
+/// <summary>
+/// La misma aplicación, pero con el resumen operativo averiado. Sirve para comprobar que el panel
+/// sobrevive a que esa consulta falle: la persona tiene que conservar sus negocios y sus accesos.
+/// </summary>
+public sealed class BrokenDashboardWebFactory : DashboardWebFactory
+{
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        base.ConfigureWebHost(builder);
+        builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<IOwnerDashboardUseCases>();
+            services.AddScoped<IOwnerDashboardUseCases, FailingDashboard>();
+        });
+    }
+
+    private sealed class FailingDashboard : IOwnerDashboardUseCases
+    {
+        public Task<IReadOnlyList<OwnerDashboardSummaryDto>> SummarizeAsync(IReadOnlyList<MyBusinessDto> mine,
+            CancellationToken cancellationToken = default)
+            => throw new InvalidOperationException("Fallo simulado del resumen operativo.");
     }
 }
 

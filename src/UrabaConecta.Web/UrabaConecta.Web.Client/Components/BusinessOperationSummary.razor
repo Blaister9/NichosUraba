@@ -1,0 +1,173 @@
+@*
+    Lo que pasa hoy en un negocio, y la acción que sigue. La jerarquía es deliberada: primero las
+    cifras del día, después la operación, y sólo al final la configuración. Antes esta tarjeta era
+    una fila de botones iguales, así que "Administrar citas" y "Equipo y permisos" pesaban lo mismo
+    y la pantalla no decía en ningún momento cómo iba el día.
+
+    Ni un solo número se calcula aquí: todos vienen resueltos del resumen que el servidor entrega en
+    una sola consulta por familia.
+*@
+<article class="business-card operation-card" data-testid="business-dashboard"
+         data-business-id="@Business.Id">
+    <div class="operation-head">
+        <span class="tag">@RoleLabel</span>
+        <h3>@Business.Name</h3>
+    </div>
+
+    @if (Business.BusinessStatus == BusinessStatusText.Suspended)
+    {
+        <p class="notice"><strong>Negocio suspendido.</strong> Puedes consultar el historial, pero no
+            iniciar operaciones nuevas.</p>
+    }
+
+    @if (Summary is null)
+    {
+        @* El resumen no llegó para este negocio en particular. Se dice, en vez de pintar ceros que
+           se leerían como "hoy no ha pasado nada". *@
+        <p class="meta" data-testid="business-summary-unavailable">
+            No pudimos cargar el resumen de hoy de este negocio.
+        </p>
+    }
+    else
+    {
+        <h4 class="operation-subtitle">Resumen de hoy</h4>
+
+        @if (Summary.Appointments is { } citas)
+        {
+            <section class="summary-block" data-testid="appointments-summary"
+                     aria-label="Citas de hoy en @Business.Name">
+                @if (citas.TodayTotal == 0)
+                {
+                    <p class="summary-empty" data-testid="appointments-empty">
+                        Aún no tienes citas para hoy.
+                        <span class="meta">Cuando alguien reserve, aparecerá aquí.</span>
+                    </p>
+                }
+                else
+                {
+                    <dl class="metric-grid">
+                        <div class="metric"><dt>Citas de hoy</dt><dd>@citas.TodayTotal</dd></div>
+                        <div class="metric"><dt>Pendientes</dt><dd>@citas.Pending</dd></div>
+                        <div class="metric"><dt>Confirmadas</dt><dd>@citas.Confirmed</dd></div>
+                        <div class="metric"><dt>Completadas</dt><dd>@citas.Completed</dd></div>
+                    </dl>
+                    @if (citas.NextAppointmentAtUtc is { } cuando)
+                    {
+                        <p class="next-up" data-testid="next-appointment">
+                            <span class="meta">Próxima cita</span>
+                            <strong>@OwnerDashboardText.Time(cuando, Summary.TimeZoneId)</strong>
+                            @if (!string.IsNullOrWhiteSpace(citas.NextAppointmentServiceName))
+                            {
+                                <span class="next-service">@citas.NextAppointmentServiceName</span>
+                            }
+                        </p>
+                    }
+                }
+            </section>
+        }
+
+        @if (Summary.Queues is { } turnos)
+        {
+            <section class="summary-block" data-testid="queues-summary"
+                     aria-label="Turnos de hoy en @Business.Name">
+                @if (turnos.Waiting == 0 && turnos.InService == 0 && turnos.ServedToday == 0)
+                {
+                    <p class="summary-empty" data-testid="queues-empty">
+                        En este momento no hay personas esperando turno.
+                        <span class="meta">Los turnos que atiendas hoy se irán contando aquí.</span>
+                    </p>
+                }
+                else
+                {
+                    @* Con la fila vacía pero habiendo atendido gente, decir sólo "no hay nadie
+                       esperando" borraría el trabajo del día; por eso se conserva el detalle. *@
+                    @if (turnos.Waiting == 0)
+                    {
+                        <p class="summary-empty" data-testid="queues-empty">
+                            En este momento no hay personas esperando turno.
+                        </p>
+                    }
+                    <dl class="metric-grid">
+                        <div class="metric"><dt>Personas esperando</dt><dd>@turnos.Waiting</dd></div>
+                        <div class="metric"><dt>En atención</dt><dd>@turnos.InService</dd></div>
+                        <div class="metric"><dt>Atendidos hoy</dt><dd>@turnos.ServedToday</dd></div>
+                    </dl>
+                }
+            </section>
+        }
+
+        @if (Summary.Orders is { } pedidos)
+        {
+            <section class="summary-block" data-testid="orders-summary"
+                     aria-label="Pedidos de hoy en @Business.Name">
+                @if (pedidos.Pending == 0 && pedidos.Preparing == 0 && pedidos.Ready == 0
+                     && pedidos.DeliveredToday == 0)
+                {
+                    <p class="summary-empty" data-testid="orders-empty">
+                        Aún no hay pedidos pendientes.
+                        <span class="meta">Los pedidos que recibas hoy aparecerán aquí.</span>
+                    </p>
+                }
+                else
+                {
+                    @if (pedidos.Pending == 0 && pedidos.Preparing == 0 && pedidos.Ready == 0)
+                    {
+                        <p class="summary-empty" data-testid="orders-empty">
+                            Aún no hay pedidos pendientes.
+                        </p>
+                    }
+                    <dl class="metric-grid">
+                        <div class="metric"><dt>Pedidos pendientes</dt><dd>@pedidos.Pending</dd></div>
+                        <div class="metric"><dt>En preparación</dt><dd>@pedidos.Preparing</dd></div>
+                        <div class="metric"><dt>Listos para recoger</dt><dd>@pedidos.Ready</dd></div>
+                        <div class="metric"><dt>Entregados hoy</dt><dd>@pedidos.DeliveredToday</dd></div>
+                    </dl>
+                }
+            </section>
+        }
+    }
+
+    @* data-enhance-nav="false": al salir de este componente interactivo, la navegación mejorada
+       cambiaba la dirección pero dejaba el panel en pantalla, y parecía que la operación no
+       funcionaba. Con la navegación normal la página destino se carga completa. *@
+    <div class="operation-actions" data-enhance-nav="false">
+        @foreach (var (label, href) in PrimaryActions)
+        {
+            <a class="button-link primary operation-cta" data-testid="primary-operation-action"
+               href="@href">@label</a>
+        }
+        @if (Business.CanManageConfiguration)
+        {
+            <a class="secondary button-link" data-testid="business-configuration-action"
+               href="/panel/@Business.Id/configuracion">Configuración</a>
+        }
+    </div>
+</article>
+
+@code {
+    [Parameter, EditorRequired] public MyBusinessDto Business { get; set; } = default!;
+
+    /// <summary>Nulo cuando el resumen no pudo resolverse para este negocio.</summary>
+    [Parameter] public OwnerDashboardSummaryDto? Summary { get; set; }
+
+    /// <summary>
+    /// Las operaciones que esta persona puede abrir en este negocio. Salen de las mismas banderas
+    /// que ya decidían qué botones mostrar: módulo habilitado Y permiso de la persona.
+    /// </summary>
+    private IEnumerable<(string Label, string Href)> PrimaryActions
+    {
+        get
+        {
+            if (Business.ShowAppointments) yield return ("Administrar citas", $"/panel/{Business.Id}/citas");
+            if (Business.ShowQueues) yield return ("Operar turnos", $"/panel/{Business.Id}/turnos");
+            if (Business.ShowOrders) yield return ("Operar pedidos", $"/panel/{Business.Id}/pedidos");
+        }
+    }
+
+    private string RoleLabel => Business.MembershipRole switch
+    {
+        "Owner" => "Propietario",
+        "Worker" => "Colaborador",
+        _ => "Miembro"
+    };
+}

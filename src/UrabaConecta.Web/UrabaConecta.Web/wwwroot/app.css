@@ -74,3 +74,41 @@ footer nav{display:flex;flex-wrap:wrap;gap:.75rem;justify-content:center;margin-
 .field-required{color:#b34525;font-weight:800}
 .field-hint{display:block;margin-top:.15rem;font-weight:500;font-size:.87rem;color:#567067}
 .form-legend{margin:0 0 .5rem;color:#567067;font-size:.9rem}
+
+/* --- Resumen operativo del panel ------------------------------------------------------------
+   La tarjeta de un negocio dejó de ser una fila de botones iguales: primero se lee cómo va el día
+   y después qué hacer. Por eso las cifras tienen peso tipográfico y la operación un solo botón
+   destacado, con la configuración claramente por debajo. */
+.operation-card{gap:.15rem}
+.operation-head{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem}
+.operation-head h3{margin:.15rem 0}
+.operation-subtitle{margin:.9rem 0 .35rem;font-size:.86rem;font-weight:800;letter-spacing:.04em;
+  text-transform:uppercase;color:#567067}
+.summary-block{width:100%;margin-bottom:.55rem}
+/* minmax(0,1fr) y no 1fr: sin el mínimo en cero, una cifra larga ensancha la columna y la tarjeta
+   empuja la página a scroll horizontal en móvil. */
+.metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(7.5rem,100%),1fr));
+  gap:.5rem;margin:0}
+.metric{display:grid;gap:.15rem;min-width:0;padding:.6rem .7rem;border-radius:12px;background:#edf3f0}
+.metric dt{font-size:.82rem;font-weight:700;color:#415a51;overflow-wrap:anywhere}
+.metric dd{margin:0;font-size:1.6rem;font-weight:850;line-height:1.1;color:#146b51}
+.summary-empty{margin:.2rem 0 .5rem;padding:.7rem .8rem;border-radius:12px;background:#f4f7f5;
+  color:#415a51;font-weight:600}
+.summary-empty .meta{display:block;margin-top:.15rem;font-weight:500}
+.next-up{display:flex;flex-wrap:wrap;align-items:baseline;gap:.4rem;margin:.55rem 0 0;
+  padding:.65rem .8rem;border-radius:12px;background:#d9f2e8;color:#125a42}
+.next-up .meta{width:100%;margin:0;color:#2c6b56}
+.next-up strong{font-size:1.25rem}
+.next-service{overflow-wrap:anywhere}
+/* margin-top:auto empuja la operación al pie para que todas las tarjetas de la rejilla alineen su
+   acción, aunque unas tengan tres métricas y otras cuatro. */
+.operation-actions{display:flex;flex-wrap:wrap;gap:.5rem;width:100%;margin-top:auto;
+  padding-top:.9rem}
+/* .business-card .button-link ya traía margin-top:auto para empujar su único botón al pie; aquí
+   quien se encarga de eso es el contenedor, y dejarlo activo descuadraba los botones entre sí. */
+.operation-actions .button-link{margin-top:0}
+.operation-cta{flex:1 1 auto}
+@media(max-width:720px){
+  .metric dd{font-size:1.4rem}
+  .operation-actions .button-link{width:100%}
+}

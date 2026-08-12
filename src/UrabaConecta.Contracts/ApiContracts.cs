@@ -78,8 +78,14 @@ public sealed record MyBusinessDto(Guid Id, string Name, string Slug, string Mem
 /// un cero y un "no aplica" no significan lo mismo, y mandar ceros de un módulo apagado obligaría a
 /// la pantalla a adivinar cuál de los dos está viendo.
 /// </summary>
+/// <param name="TimeZoneId">
+/// La zona con la que se calculó el día de este negocio, ya resuelto el respaldo. Viaja con el
+/// resumen porque las horas se miden en UTC pero se leen en la hora del local: sin ella la pantalla
+/// tendría que adivinar, y "próxima cita 8:00 p. m." en vez de 3:00 p. m. es peor que no decir nada.
+/// </param>
 public sealed record OwnerDashboardSummaryDto(Guid BusinessId, string BusinessName,
-    AppointmentsSummaryDto? Appointments, QueueSummaryDto? Queues, OrdersSummaryDto? Orders);
+    AppointmentsSummaryDto? Appointments, QueueSummaryDto? Queues, OrdersSummaryDto? Orders,
+    string TimeZoneId = "America/Bogota");
 
 public sealed record AppointmentsSummaryDto(int TodayTotal, int Pending, int Confirmed, int Completed,
     DateTimeOffset? NextAppointmentAtUtc, string? NextAppointmentServiceName);

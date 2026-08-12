@@ -87,7 +87,8 @@ public sealed class OwnerDashboardUseCases(
                 : null,
             business.ShowOrders
                 ? pedidos.GetValueOrDefault(business.Id) ?? EmptyOrders
-                : null)).ToList();
+                : null,
+            EffectiveTimeZone(timeZones.GetValueOrDefault(business.Id)))).ToList();
     }
 
     /// <summary>
@@ -104,6 +105,14 @@ public sealed class OwnerDashboardUseCases(
         var to = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(startLocal.AddDays(1), zone));
         return new(businessId, from, to);
     }
+
+    /// <summary>
+    /// La zona con la que de verdad se calculó el día del negocio. Es la que viaja al resumen para
+    /// que la hora que se muestra y el rango con el que se contó sean la misma decisión: si un
+    /// negocio cayó al respaldo, su próxima cita se lee en la hora del respaldo y no en otra.
+    /// </summary>
+    public static string EffectiveTimeZone(string? timeZoneId)
+        => Resolve(timeZoneId, Guid.Empty, null).Id;
 
     private static TimeZoneInfo Resolve(string? timeZoneId, Guid businessId,
         IOwnerDashboardDiagnostics? diagnostics)
