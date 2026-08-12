@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -197,11 +197,50 @@ public sealed partial class PlatformAdministrationApiTests(PostgresWebFactory fa
         return client.PostAsync($"/api/v1/admin/businesses/{businessId}/images", form);
     }
 
+    /// <summary>
+    /// V6.4.1: la descripción breve se captura en el alta. Antes sólo existía en la edición del
+    /// perfil, así que un negocio recién creado nacía reclamando un campo que el alta jamás pidió.
+    /// </summary>
+    [Fact]
+    public async Task Draft_creation_persists_the_short_description_and_stops_reporting_it_as_missing()
+    {
+        using var admin = Client();
+        await Login(admin, DevelopmentSeeder.PlatformAdminEmail);
+        var catalog = await admin.GetFromJsonAsync<PlatformBusinessListDto>("/api/v1/admin/businesses", Json);
+        var request = NewRequest(catalog!, $"breve-{Guid.NewGuid():N}", saveAsDraft: true);
+        request.ShortDescription = "  Tienda de insumos agrícolas en el parque.  ";
+
+        var response = await admin.PostAsJsonAsync("/api/v1/admin/businesses", request, Json);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var created = (await response.Content.ReadFromJsonAsync<PlatformBusinessCreatedDto>(Json))!.Business;
+
+        // Se relee del servidor, no del cuerpo de la creación: interesa que quedara guardada.
+        var reloaded = await admin.GetFromJsonAsync<PlatformBusinessDto>(
+            $"/api/v1/admin/businesses/{created.Id}", Json);
+        Assert.Equal("Tienda de insumos agrícolas en el parque.", reloaded!.ShortDescription);
+        Assert.DoesNotContain("Falta la descripción breve.", reloaded.MissingLabels ?? []);
+        Assert.Contains(reloaded.Readiness, x => x.Key == "short-description" && x.IsComplete);
+    }
+
+    [Fact]
+    public async Task Draft_creation_rejects_a_blank_short_description()
+    {
+        using var admin = Client();
+        await Login(admin, DevelopmentSeeder.PlatformAdminEmail);
+        var catalog = await admin.GetFromJsonAsync<PlatformBusinessListDto>("/api/v1/admin/businesses", Json);
+        var request = NewRequest(catalog!, $"sin-breve-{Guid.NewGuid():N}", saveAsDraft: true);
+        request.ShortDescription = "   ";
+
+        var response = await admin.PostAsJsonAsync("/api/v1/admin/businesses", request, Json);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     private static CreatePlatformBusinessRequest NewRequest(PlatformBusinessListDto catalog, string slug, bool saveAsDraft)
         => new()
         {
             Name = $"Negocio {slug[^6..]}", Slug = slug,
             MunicipalityId = catalog.Municipalities[0].Id, CategoryId = catalog.Categories[0].Id,
+            ShortDescription = "Piloto de prueba.",
             Description = "Piloto de prueba", Appointments = true,
             ExistingOwnerEmail = DevelopmentSeeder.BellaOwnerEmail, SaveAsDraft = saveAsDraft
         };

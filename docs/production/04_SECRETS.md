@@ -27,6 +27,45 @@ aplicación no arranca.
 
 Conclusión: **no hay secretos productivos filtrados en Git.** No hace falta reescribir historial.
 
+## Credenciales de las cuentas Demo
+
+Regla, porque la confusión ya costó un incidente de acceso:
+
+| Variable | Para qué sirve | Qué NO hace |
+| --- | --- | --- |
+| `DemoSeed__AdminPassword`, `DemoSeed__BusinessPassword` | Fijan la contraseña **en el momento de crear** cada cuenta sembrada | No cambian la contraseña de una cuenta que ya existe |
+| `DemoAccess__SharedPassword` | Reconcilia de forma deliberada las cinco cuentas comerciales de Demo | No debe quedarse puesta |
+
+`DevelopmentSeeder.EnsureUser` sólo asigna contraseña al **crear** el usuario: si ya existe,
+actualiza el nombre visible y se va. Rotar `DemoSeed__*Password` después del primer sembrado no rota
+nada, y deja las variables diciendo una cosa mientras la base dice otra. Eso fue exactamente lo que
+pasó: en agosto de 2026 ninguna de las dos variables abría ya su cuenta.
+
+**No conviertas el sembrado en un sincronizador de contraseñas.** Si `EnsureUser` reescribiera la
+contraseña en cada arranque, una variable mal puesta restablecería en silencio todas las cuentas
+Demo cada vez que el contenedor se reinicia, y nadie se enteraría hasta la siguiente capacitación.
+
+### Reconciliación deliberada
+
+Para volver a dejar las cuentas con una credencial conocida existe `DemoAccessNormalizer`, que ya
+cubre las cinco cuentas que se usan para capacitar: `admin@urabaconecta.demo`,
+`socia@urabaconecta.demo`, `propietaria@bella.demo`, `propietario@corte.demo` y
+`propietario@sazon.demo`. Usa el flujo soportado de Identity —token de restablecimiento y
+`ResetPasswordAsync`—, limpia bloqueos e intentos fallidos, corrige rol y membresía, y **verifica
+las cinco cuentas antes de dar el trabajo por bueno**. Fuera de `Demo` lanza excepción.
+
+Se activa por la **presencia** del secreto, no por un interruptor permanente:
+
+1. Poner `DemoAccess__SharedPassword` en el servicio Demo.
+2. Reiniciar el servicio.
+3. Comprobar en el registro: «Se normalizaron y verificaron cinco accesos comerciales».
+4. Comprobar el inicio de sesión de un rol.
+5. **Borrar la variable.** Mientras siga puesta, cada reinicio vuelve a restablecer esas cinco
+   cuentas y desactiva cualquier otra membresía suya. Es un bisturí, no una política.
+
+La contraseña resultante se guarda donde se guardan las credenciales operativas, no en el repositorio
+ni en el registro.
+
 ## Qué rotar antes de Production
 
 Production estrena todo. No se hereda ningún valor de Demo:

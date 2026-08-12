@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using UrabaConecta.Contracts;
@@ -125,6 +125,7 @@ public sealed class SplitScheduleApiTests(PostgresWebFactory factory) : IClassFi
             {
                 Name = $"Jornada {Guid.NewGuid():N}"[..18], Slug = $"jornada-{Guid.NewGuid():N}",
                 MunicipalityId = catalog.Municipalities[0].Id, CategoryId = catalog.Categories[0].Id,
+                ShortDescription = "Piloto ficticio de jornadas partidas.",
                 Description = "Piloto ficticio para comprobar jornadas partidas.",
                 Appointments = true, SaveAsDraft = true,
             }, Json)).Content.ReadFromJsonAsync<PlatformBusinessCreatedDto>(Json))!.Business;

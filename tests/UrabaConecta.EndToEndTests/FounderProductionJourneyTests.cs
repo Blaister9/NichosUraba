@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Microsoft.Playwright;
 using UrabaConecta.Contracts;
 using UrabaConecta.Infrastructure.Persistence;
@@ -292,6 +292,7 @@ public sealed class FounderProductionJourneyTests(BrowserFixture fixture) : ICla
         var response = await Fetch(partner, "POST", "/api/v1/admin/businesses", new CreatePlatformBusinessRequest
         {
             Name = $"Piloto {slug}", Slug = slug, MunicipalityId = catalog.Municipalities[0].Id,
+            ShortDescription = "Piloto ficticio del recorrido.",
             CategoryId = catalog.Categories[0].Id, Description = "Negocio ficticio del recorrido",
             Appointments = true, InitialServiceName = "Corte ficticio", SaveAsDraft = true
         });

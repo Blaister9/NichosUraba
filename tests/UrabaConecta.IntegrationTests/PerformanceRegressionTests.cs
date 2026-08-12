@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
@@ -38,6 +38,7 @@ public sealed class PerformanceRegressionTests(PostgresWebFactory factory) : ICl
             {
                 Name = $"Carga {Guid.NewGuid():N}"[..18], Slug = $"carga-{Guid.NewGuid():N}",
                 MunicipalityId = catalog.Municipalities[0].Id, CategoryId = catalog.Categories[0].Id,
+                ShortDescription = "Negocio ficticio de medición.",
                 Description = "Negocio ficticio para medir el coste del listado.",
                 Appointments = true, ExistingOwnerEmail = DevelopmentSeeder.BellaOwnerEmail, SaveAsDraft = true
             }, Json);
@@ -202,6 +203,7 @@ public sealed class PerformanceRegressionTests(PostgresWebFactory factory) : ICl
         {
             Name = $"Ficha {Guid.NewGuid():N}"[..18], Slug = $"ficha-{Guid.NewGuid():N}",
             MunicipalityId = catalog.Municipalities[0].Id, CategoryId = catalog.Categories[0].Id,
+            ShortDescription = "Negocio ficticio de medición.",
             Description = "Negocio ficticio para medir el coste de la ficha pública.",
             Appointments = true, InitialServiceName = "Servicio de prueba",
             ExistingOwnerEmail = DevelopmentSeeder.BellaOwnerEmail, SaveAsDraft = true

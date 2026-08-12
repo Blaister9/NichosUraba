@@ -49,6 +49,8 @@ public sealed class PartnerOperatorJourneyTests(BrowserFixture fixture) : IClass
 
         await socia.Locator("[data-testid=campo-municipio]").SelectOptionAsync(new SelectOptionValue { Index = 1 });
         await socia.Locator("[data-testid=campo-categoria]").SelectOptionAsync(new SelectOptionValue { Index = 1 });
+        await socia.Locator("[data-testid=campo-descripcion-breve]")
+            .FillAsync("Pan del día y encargos en el barrio.");
         await socia.Locator("[data-testid=campo-descripcion]").FillAsync("Panadería de barrio con producto del día.");
         await socia.Locator("[data-testid=campo-direccion]").FillAsync("Calle 50 # 20-15");
         await socia.Locator("[data-testid=campo-telefono]").FillAsync("3005557788");
@@ -81,6 +83,11 @@ public sealed class PartnerOperatorJourneyTests(BrowserFixture fixture) : IClass
         await Expect(tarjeta.Locator("[data-testid=negocio-faltantes]")).ToBeVisibleAsync();
         Assert.DoesNotContain("Draft", await regreso.Locator("body").InnerTextAsync());
 
+        // La tarjeta sólo muestra los primeros pendientes, así que aquí basta con que ninguno de los
+        // visibles sea uno que ella ya resolvió; la comprobación fuerte va contra el DTO más abajo.
+        var faltantesVisibles = await tarjeta.Locator("[data-testid=negocio-faltantes]").InnerTextAsync();
+        Assert.DoesNotContain("descripción breve", faltantesVisibles);
+
         // --- 5. Continuar el negocio incompleto --------------------------------------------
         await tarjeta.Locator("[data-testid=negocio-cta]").ClickAsync();
         await regreso.WaitForURLAsync(url => url.Contains("/admin/negocios/"));
@@ -89,6 +96,13 @@ public sealed class PartnerOperatorJourneyTests(BrowserFixture fixture) : IClass
 
         var negocio = await Load(regreso, regreso.Url.Split('/').Last());
         Assert.False(negocio.IsReady);
+
+        // El defecto que corrige V6.4.1: la descripción breve se escribió en el alta, así que tiene
+        // que estar guardada y no puede figurar entre los pendientes. La completa tampoco.
+        Assert.Equal("Pan del día y encargos en el barrio.", negocio.ShortDescription);
+        Assert.DoesNotContain("Falta la descripción breve.", negocio.MissingLabels ?? []);
+        Assert.DoesNotContain("Falta la descripción completa.", negocio.MissingLabels ?? []);
+        Assert.DoesNotContain("Falta el nombre del negocio.", negocio.MissingLabels ?? []);
 
         // --- 6. Completar lo que falta -----------------------------------------------------
         var catalogo = JsonSerializer.Deserialize<PlatformBusinessListDto>(

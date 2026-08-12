@@ -45,8 +45,8 @@ public sealed class PlatformAdministrationUseCases(
 
         var now = timeProvider.GetUtcNow();
         var business = TryDomain(() => Business.CreateDraft(Guid.NewGuid(), slug, request.Name,
-            request.MunicipalityId, request.CategoryId, request.Description, request.Address, request.PublicPhone,
-            request.WhatsAppUrl, request.LocationUrl, now));
+            request.MunicipalityId, request.CategoryId, request.ShortDescription, request.Description,
+            request.Address, request.PublicPhone, request.WhatsAppUrl, request.LocationUrl, now));
         business.AssignCreator(actor.UserId);
         store.AddBusiness(business);
         foreach (var module in modules) store.AddModule(new BusinessModule(business.Id, module, true, now));
@@ -473,8 +473,9 @@ public sealed class PlatformAdministrationUseCases(
             HasLocation: !string.IsNullOrWhiteSpace(b.Address),
             HasLogo: r.HasLogo, HasCover: r.HasCover);
         return BusinessReadinessCalculator.Calculate(
-            !string.IsNullOrWhiteSpace(b.Name) && !string.IsNullOrWhiteSpace(b.ShortDescription)
-                && !string.IsNullOrWhiteSpace(b.Description),
+            !string.IsNullOrWhiteSpace(b.Name),
+            !string.IsNullOrWhiteSpace(b.ShortDescription),
+            !string.IsNullOrWhiteSpace(b.Description),
             r.Owner is not null, r.Modules.Where(x => x.IsEnabled).Select(x => x.Module).ToList(),
             r.HasHours, r.HasService, r.HasQueueDefinition, r.HasPickupSettings, r.HasProductCategory,
             r.HasProduct, signals);

@@ -18,6 +18,40 @@ Data Protection y cuentas. No comparten nada.
 Demo existe para enseñar el producto. Puede romperse, reponerse y volver a sembrarse sin
 consecuencias.
 
+### El environment de Railway que aloja Demo se llama `production`
+
+Riesgo de confusión, vigente y sin resolver:
+
+| Dónde se lee | Valor |
+| --- | --- |
+| Railway, nombre del environment | `production` |
+| Railway, nombre del proyecto | `skillful-sparkle` |
+| Dominio público | `nichosuraba-production.up.railway.app` |
+| `ASPNETCORE_ENVIRONMENT` | `Demo` |
+| Bucket | `urabaconecta-demo-media` |
+
+Quien mire Railway leerá «production» y creerá que está frente a datos reales; lo único que manda es
+`ASPNETCORE_ENVIRONMENT`. Mientras no se renombre, **la palabra `production` en Railway no significa
+nada** para este servicio.
+
+Procedimiento para renombrarlo a `demo` más adelante, en este orden:
+
+1. Comprobar en la consola de Railway que el proyecto tiene un solo environment; renombrar es una
+   operación de metadatos y no recrea servicios, volúmenes ni la base, pero conviene verlo antes.
+2. Anotar el dominio público actual. El dominio pertenece al servicio, no al environment, así que no
+   debería cambiar; si Railway ofreciera regenerarlo, **rechazarlo**: cambiarlo invalida los enlaces
+   ya repartidos para capacitación.
+3. Renombrar el environment en Ajustes.
+4. Volver a enlazar el repositorio local: `railway link` y elegir el nuevo nombre. El enlace guarda
+   el identificador, no el nombre, pero conviene dejar el `status` legible.
+5. Comprobar `railway status`: proyecto, environment `demo`, servicio `NichosUraba`, rama observada
+   `release/pilot-demo`.
+6. Comprobar `/health/live` y `/health/ready`, y que el SHA vivo no cambió.
+
+No hace falta tocar la aplicación: **ningún archivo del repositorio lee `RAILWAY_ENVIRONMENT`,
+`RAILWAY_PROJECT_NAME` ni `RAILWAY_SERVICE_NAME`**, y ningún script de `ops/` fija el nombre del
+environment. El alcance del cambio es el nombre en la consola y en la memoria de quien opera.
+
 ## Production
 
 | Recurso | Valor |

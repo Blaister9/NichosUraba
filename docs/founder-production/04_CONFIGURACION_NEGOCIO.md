@@ -7,7 +7,9 @@ mensaje concreto de lo que falta.
 
 | Clave | Requisito | Aplica |
 | --- | --- | --- |
-| `public-information` | Nombre, descripción breve y descripción completa | Siempre |
+| `business-name` | Nombre del negocio | Siempre |
+| `short-description` | Descripción breve | Siempre |
+| `full-description` | Descripción completa | Siempre |
 | `contact` | Al menos un teléfono, WhatsApp o correo público | Siempre |
 | `location` | Dirección | Siempre |
 | `logo` | Logo cargado | Siempre |

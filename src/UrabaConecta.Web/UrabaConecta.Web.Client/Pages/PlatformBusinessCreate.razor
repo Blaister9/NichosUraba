@@ -77,7 +77,15 @@ else
                     @foreach (var x in catalog.Categories) { <option value="@x.Id">@x.Name</option> }
                 </InputSelect>
             </label>
-            <label>Descripción
+            @* La breve alimenta el directorio y el checklist la exige para publicar; se pide aquí
+               para que el negocio no nazca reclamando un campo que el alta nunca ofreció. *@
+            <label><span class="field-label">Descripción breve <span class="field-required" aria-hidden="true">*</span></span>
+                <InputText @bind-Value="request.ShortDescription" maxlength="160"
+                           data-testid="campo-descripcion-breve" aria-required="true" />
+                <span class="field-hint">Resume tu negocio en una frase. Se mostrará en el directorio.
+                    Máximo 160 caracteres.</span>
+            </label>
+            <label>Descripción completa
                 <InputTextArea @bind-Value="request.Description" data-testid="campo-descripcion" />
                 <span class="field-hint">Qué hace el negocio y qué lo distingue. Puedes completarla después.</span>
             </label>
@@ -137,6 +145,7 @@ else
             <div class="review-card"><h2>Revisa antes de crear</h2>
                 <dl class="details">
                     <dt>Negocio</dt><dd data-testid="revision-nombre">@request.Name</dd>
+                    <dt>Descripción breve</dt><dd data-testid="revision-descripcion-breve">@request.ShortDescription</dd>
                     <dt>Dirección web</dt><dd>urabaconecta.co/negocios/@PreviewSlug()</dd>
                     <dt>Municipio</dt><dd>@(catalog.Municipalities.FirstOrDefault(x => x.Id == request.MunicipalityId)?.Name ?? "sin definir")</dd>
                     <dt>Categoría</dt><dd>@(catalog.Categories.FirstOrDefault(x => x.Id == request.CategoryId)?.Name ?? "sin definir")</dd>
@@ -200,7 +209,7 @@ else
         error = null;
         if (step == 1 && !MinimumIdentity())
         {
-            error = "Completa nombre, dirección web, municipio y categoría para continuar.";
+            error = "Completa nombre, dirección web, municipio, categoría y descripción breve para continuar.";
             return;
         }
         if (step == 2 && !AnyModule())
@@ -216,7 +225,9 @@ else
     private bool MinimumIdentity()
         => !string.IsNullOrWhiteSpace(request.Name) && request.Name.Trim().Length >= 2
            && !string.IsNullOrWhiteSpace(request.Slug) && request.Slug.Trim().Length >= 3
-           && request.MunicipalityId != Guid.Empty && request.CategoryId != Guid.Empty;
+           && request.MunicipalityId != Guid.Empty && request.CategoryId != Guid.Empty
+           && !string.IsNullOrWhiteSpace(request.ShortDescription)
+           && request.ShortDescription.Trim().Length <= 160;
 
     private bool AnyModule() => request.Appointments || request.VirtualQueues || request.PickupOrders;
 

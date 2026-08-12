@@ -332,6 +332,9 @@ public sealed class CreatePlatformBusinessRequest
     [Required, StringLength(120, MinimumLength = 3)] public string Slug { get; set; } = "";
     [Required] public Guid MunicipalityId { get; set; }
     [Required] public Guid CategoryId { get; set; }
+    [Required(ErrorMessage = "La descripción breve es obligatoria."),
+     StringLength(160, ErrorMessage = "La descripción breve admite máximo 160 caracteres.")]
+    public string ShortDescription { get; set; } = "";
     [StringLength(600)] public string Description { get; set; } = "";
     [StringLength(240)] public string? Address { get; set; }
     [StringLength(30)] public string? PublicPhone { get; set; }

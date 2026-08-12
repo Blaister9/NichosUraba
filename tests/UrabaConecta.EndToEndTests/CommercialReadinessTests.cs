@@ -39,6 +39,7 @@ public sealed class CommercialReadinessTests(BrowserFixture fixture) : IClassFix
         await page.Locator("[data-testid=campo-nombre]").FillAsync("Negocio de comprobación");
         await page.Locator("[data-testid=campo-municipio]").SelectOptionAsync(new SelectOptionValue { Index = 1 });
         await page.Locator("[data-testid=campo-categoria]").SelectOptionAsync(new SelectOptionValue { Index = 1 });
+        await page.Locator("[data-testid=campo-descripcion-breve]").FillAsync("Negocio de comprobación.");
         await page.Locator("[data-testid=continuar]").ClickAsync();
         await Assertions.Expect(page.GetByLabel("Duración del servicio en minutos")).ToBeEnabledAsync();
         await page.GetByLabel("Pedidos para recoger").CheckAsync();

@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Microsoft.Playwright;
 using UrabaConecta.Contracts;
 using UrabaConecta.Infrastructure.Persistence;
@@ -242,6 +242,7 @@ public sealed class PlatformOnboardingJourneyTests(BrowserFixture fixture) : ICl
         var request = new CreatePlatformBusinessRequest
         {
             Name = $"Piloto {slug}", Slug = slug, MunicipalityId = catalog.Municipalities[0].Id,
+            ShortDescription = "Piloto ficticio del recorrido E2E.",
             CategoryId = catalog.Categories[0].Id, Description = "Negocio piloto E2E",
             Appointments = appointments, VirtualQueues = queues, PickupOrders = orders,
             InitialServiceName = service, InitialProductName = product,
@@ -264,6 +265,7 @@ public sealed class PlatformOnboardingJourneyTests(BrowserFixture fixture) : ICl
         await admin.Locator("[data-testid=campo-slug]").FillAsync(slug);
         await admin.Locator("[data-testid=campo-municipio]").SelectOptionAsync(new SelectOptionValue { Index = 1 });
         await admin.Locator("[data-testid=campo-categoria]").SelectOptionAsync(new SelectOptionValue { Index = 1 });
+        await admin.Locator("[data-testid=campo-descripcion-breve]").FillAsync("Piloto ficticio del recorrido E2E.");
         await admin.Locator("[data-testid=campo-descripcion]").FillAsync("Negocio piloto E2E");
         await admin.Locator("[data-testid=continuar]").ClickAsync();
         await admin.GetByLabel("Servicio inicial").FillAsync("Corte piloto");

@@ -13,12 +13,12 @@ capturas, incidencias ni mensajes de soporte.
 ## Crear y preparar un negocio
 
 1. Complete nombre comercial, identificador público, municipio, categoría,
-   descripción, dirección y teléfono.
+   descripción breve, descripción completa, dirección y teléfono.
 2. Seleccione al menos un módulo. Para citas, agregue el servicio inicial; para
    pedidos, agregue categoría y producto inicial.
 3. Termine el asistente como borrador.
-4. Abra la lista de preparación y complete descripción breve, descripción
-   completa, instrucciones, contacto y ubicación.
+4. Abra la lista de preparación y complete lo que quedó pendiente: instrucciones,
+   contacto y ubicación. Las descripciones ya vienen del asistente.
 5. Cargue logo, portada y una imagen de galería. Confirme cada carga mediante
    el aviso visible y la miniatura persistida.
 6. Abra la vista previa pública.

@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -506,6 +506,7 @@ public sealed partial class FounderProductionApiTests(PostgresWebFactory factory
         {
             Name = $"Negocio {slug[^6..]}", Slug = slug,
             MunicipalityId = catalog.Municipalities[0].Id, CategoryId = catalog.Categories[0].Id,
+            ShortDescription = "Negocio ficticio de pruebas.",
             Description = "Negocio ficticio de pruebas", Appointments = true,
             InitialServiceName = "Servicio de prueba",
             ExistingOwnerEmail = withOwner ? DevelopmentSeeder.BellaOwnerEmail : null,

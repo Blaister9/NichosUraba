@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using UrabaConecta.Contracts;
@@ -79,6 +79,7 @@ public sealed class ModuleVisibilityTests(PostgresWebFactory factory) : IClassFi
             {
                 Name = $"Multi {Guid.NewGuid():N}"[..18], Slug = $"multi-{Guid.NewGuid():N}",
                 MunicipalityId = catalog.Municipalities[0].Id, CategoryId = catalog.Categories[0].Id,
+                ShortDescription = "Negocio ficticio con dos funciones.",
                 Description = "Negocio ficticio con dos funciones activas.",
                 // Dos módulos sí, uno no: el listado debe reflejar exactamente eso.
                 Appointments = true, PickupOrders = true, VirtualQueues = false,
@@ -170,6 +171,7 @@ public sealed class ModuleVisibilityTests(PostgresWebFactory factory) : IClassFi
             {
                 Name = $"Residuo {Guid.NewGuid():N}"[..18], Slug = $"residuo-{Guid.NewGuid():N}",
                 MunicipalityId = catalog.Municipalities[0].Id, CategoryId = catalog.Categories[0].Id,
+                ShortDescription = "Piloto ficticio que se archiva.",
                 Description = "Piloto ficticio que después se archiva.",
                 Appointments = true, ExistingOwnerEmail = DevelopmentSeeder.BellaOwnerEmail, SaveAsDraft = true
             }, Json)).Content.ReadFromJsonAsync<PlatformBusinessCreatedDto>(Json))!.Business;

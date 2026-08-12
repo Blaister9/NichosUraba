@@ -7,7 +7,8 @@ public sealed class FounderProductionTests
     private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-07-27T12:00:00Z");
 
     private static Business Draft() => Business.CreateDraft(Guid.NewGuid(), "piloto-v5", "Piloto V5",
-        Guid.NewGuid(), Guid.NewGuid(), "Descripción completa", "Calle 1", "3000000000", null, null, Now);
+        Guid.NewGuid(), Guid.NewGuid(), "Resumen breve del piloto", "Descripción completa", "Calle 1",
+        "3000000000", null, null, Now);
 
     private static BusinessProfileEdit Edit(Business business, string? shortDescription = null,
         string? phone = "3001234567", string? email = null, string? instagram = null, string? facebook = null)
@@ -121,7 +122,7 @@ public sealed class FounderProductionTests
     [Fact]
     public void Checklist_reports_progress_and_names_what_is_missing()
     {
-        var readiness = BusinessReadinessCalculator.Calculate(true, true,
+        var readiness = BusinessReadinessCalculator.Calculate(true, true, true, true,
             [BusinessModuleKind.VirtualQueues], false, false, true, false, false, false,
             new BusinessCompletionSignals(HasContact: true, HasLocation: true, HasLogo: false, HasCover: false));
         Assert.False(readiness.IsReady);
@@ -133,7 +134,7 @@ public sealed class FounderProductionTests
     [Fact]
     public void Checklist_is_complete_when_every_applicable_requirement_is_met()
     {
-        var readiness = BusinessReadinessCalculator.Calculate(true, true,
+        var readiness = BusinessReadinessCalculator.Calculate(true, true, true, true,
             [BusinessModuleKind.VirtualQueues], false, false, true, false, false, false);
         Assert.True(readiness.IsReady);
         Assert.Equal(100, readiness.CompletionPercentage);

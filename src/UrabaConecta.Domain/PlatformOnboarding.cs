@@ -92,15 +92,22 @@ public sealed partial class Business
         ReviewNotes = notes.Trim(); Touch(now);
     }
 
+    /// <summary>
+    /// Alta de un borrador. Toma la descripción breve desde el principio: el checklist la exige para
+    /// publicar, así que capturarla sólo en la edición dejaba al negocio recién creado con un
+    /// requisito imposible de entender desde el alta.
+    /// </summary>
     public static Business CreateDraft(Guid id, string slug, string name, Guid municipalityId, Guid categoryId,
-        string description, string? address, string? publicPhone, string? whatsAppUrl, string? locationUrl,
-        DateTimeOffset now)
+        string shortDescription, string description, string? address, string? publicPhone, string? whatsAppUrl,
+        string? locationUrl, DateTimeOffset now)
     {
         ValidateProfile(slug, name, description, address, publicPhone, whatsAppUrl, locationUrl);
+        ValidateShortDescription(shortDescription);
         var business = new Business(id, NormalizeSlug(slug), name.Trim(), municipalityId, categoryId,
             description.Trim(), address?.Trim() ?? "", publicPhone?.Trim() ?? "")
         {
-            Status = BusinessStatus.Draft, IsPublished = false, WhatsAppUrl = CleanUrl(whatsAppUrl),
+            Status = BusinessStatus.Draft, IsPublished = false, ShortDescription = shortDescription.Trim(),
+            WhatsAppUrl = CleanUrl(whatsAppUrl),
             LocationUrl = CleanUrl(locationUrl), CreatedAtUtc = now, UpdatedAtUtc = now
         };
         return business;
@@ -212,11 +219,23 @@ public sealed partial class Business
         Touch(now);
     }
 
-    private static void ValidateExtendedProfile(BusinessProfileEdit edit)
+    /// <summary>
+    /// Regla única de la descripción breve. La comparten el alta y la edición del perfil para que no
+    /// puedan divergir: un campo obligatorio en un sitio y opcional en el otro fue justamente el
+    /// defecto que dejaba el checklist reclamando algo que la socia no podía escribir.
+    /// </summary>
+    private static void ValidateShortDescription(string? value)
     {
-        if (string.IsNullOrWhiteSpace(edit.ShortDescription) || edit.ShortDescription.Trim().Length > 160)
+        if (string.IsNullOrWhiteSpace(value) || value.Trim().Length > 160)
             throw new DomainException("INVALID_SHORT_DESCRIPTION",
                 "La descripción breve es obligatoria y admite máximo 160 caracteres.");
+        if (value.Contains('<') || value.Contains('>'))
+            throw new DomainException("INVALID_BUSINESS_PROFILE", "No se admite HTML en la información pública.");
+    }
+
+    private static void ValidateExtendedProfile(BusinessProfileEdit edit)
+    {
+        ValidateShortDescription(edit.ShortDescription);
         if (edit.ReferencePoint?.Length > 160)
             throw new DomainException("INVALID_REFERENCE_POINT", "El punto de referencia admite máximo 160 caracteres.");
         if (edit.CustomerInstructions?.Length > 600)
@@ -225,7 +244,7 @@ public sealed partial class Business
         ValidateEmail(edit.PublicEmail);
         ValidateSocialUrl(edit.InstagramUrl, "instagram.com");
         ValidateSocialUrl(edit.FacebookUrl, "facebook.com");
-        if (new[] { edit.ShortDescription, edit.ReferencePoint, edit.CustomerInstructions, edit.PublicEmail }
+        if (new[] { edit.ReferencePoint, edit.CustomerInstructions, edit.PublicEmail }
             .Any(x => x?.Contains('<') == true || x?.Contains('>') == true))
             throw new DomainException("INVALID_BUSINESS_PROFILE", "No se admite HTML en la información pública.");
     }
@@ -332,7 +351,13 @@ public sealed record BusinessCompletionSignals(bool HasContact = true, bool HasL
 
 public static class BusinessReadinessCalculator
 {
-    public static BusinessReadiness Calculate(bool publicInformation, bool activeOwner,
+    /// <summary>
+    /// La información básica se reporta como tres requisitos separados y no como uno agrupado: un
+    /// solo mensaje con "el nombre, la descripción breve o la descripción completa" obliga a la
+    /// socia a adivinar cuál de los tres le falta.
+    /// </summary>
+    public static BusinessReadiness Calculate(bool hasName, bool hasShortDescription, bool hasDescription,
+        bool activeOwner,
         IReadOnlyCollection<BusinessModuleKind> enabledModules, bool hasHours, bool hasService,
         bool hasQueueDefinition, bool hasPickupSettings, bool hasProductCategory, bool hasProduct,
         BusinessCompletionSignals? signals = null)
@@ -342,8 +367,11 @@ public static class BusinessReadinessCalculator
         var queues = enabledModules.Contains(BusinessModuleKind.VirtualQueues);
         var orders = enabledModules.Contains(BusinessModuleKind.PickupOrders);
         return new([
-            new("public-information", "Información básica", true, publicInformation,
-                "Falta el nombre, la descripción breve o la descripción completa."),
+            new("business-name", "Nombre", true, hasName, "Falta el nombre del negocio."),
+            new("short-description", "Descripción breve", true, hasShortDescription,
+                "Falta la descripción breve."),
+            new("full-description", "Descripción completa", true, hasDescription,
+                "Falta la descripción completa."),
             new("contact", "Contacto", true, s.HasContact,
                 "Registre al menos un teléfono, un WhatsApp o un correo público."),
             new("location", "Ubicación", true, s.HasLocation, "Falta la dirección del establecimiento."),
