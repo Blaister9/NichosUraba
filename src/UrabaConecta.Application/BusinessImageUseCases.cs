@@ -107,11 +107,20 @@ public sealed class BusinessImageUseCases(
 
     // -----------------------------------------------------------------------
 
+    /// <summary>
+    /// Tres vías legítimas y ninguna más: la administración de plataforma, la socia que dio de alta el
+    /// negocio, y el propietario activo de ESE negocio. La última existe para que el propietario
+    /// gestione su logo, su portada y su galería sin pasar por "Administración", con el mismo
+    /// almacenamiento, la misma validación y la misma auditoría que ya usan las otras dos.
+    /// </summary>
     private async Task EnsureScopeAsync(PlatformActor actor, Guid businessId, CancellationToken cancellationToken)
     {
-        if (!actor.CanOperate)
+        var isOwner = actor.IsBusinessOwner
+            && await businesses.GetMembershipByUserAsync(businessId, actor.UserId, cancellationToken)
+                is { IsActive: true, Role: MembershipRole.Owner };
+        if (!actor.CanOperate && !isOwner)
             throw new ApiException("FORBIDDEN", "No tiene permiso para administrar imágenes.", 403);
-        if (actor.IsPlatformAdmin) return;
+        if (actor.IsPlatformAdmin || isOwner) return;
         var record = await businesses.GetAsync(businessId, cancellationToken)
             ?? throw new ApiException("BUSINESS_NOT_FOUND", "No encontramos el negocio.", 404);
         if (record.Business.CreatedByUserId != actor.UserId)

@@ -469,6 +469,50 @@ platformApi.MapPost("/businesses/{businessId:guid}/{action}",
 var privateApi = app.MapGroup("/api/v1/businesses").RequireAuthorization("BusinessMember");
 privateApi.MapGet("/mine", (ClaimsPrincipal user, IUrabaUseCases useCases, CancellationToken ct)
     => useCases.GetMyBusinessesAsync(UserId(user), ct));
+
+// --- Perfil e imágenes del propietario -------------------------------------------------------
+// Mismos casos de uso que usa la administración: la autorización distingue quién entra, no qué
+// código corre. Un propietario ya no necesita "Administración" para editar su ficha ni sus fotos,
+// que era el segundo P0 de la auditoría V6.
+privateApi.MapGet("/{businessId:guid}/profile",
+    (Guid businessId, HttpContext http, IPlatformAdministrationUseCases useCases, CancellationToken ct)
+        => useCases.GetAsync(Actor(http), businessId, ct))
+    .RequireAuthorization("BusinessProfile.Manage");
+privateApi.MapPut("/{businessId:guid}/profile",
+    (Guid businessId, SaveOwnerProfileRequest request, HttpContext http,
+        IPlatformAdministrationUseCases useCases, CancellationToken ct)
+        => useCases.SaveOwnerProfileAsync(Actor(http), businessId, request, ct))
+    .RequireAuthorization("BusinessProfile.Manage");
+privateApi.MapGet("/{businessId:guid}/images",
+    (Guid businessId, HttpContext http, IBusinessImageUseCases images, CancellationToken ct)
+        => images.ListAsync(Actor(http), businessId, ct))
+    .RequireAuthorization("BusinessProfile.Manage");
+privateApi.MapPost("/{businessId:guid}/images",
+    async (Guid businessId, HttpRequest request, HttpContext http, IBusinessImageUseCases images,
+        CancellationToken ct) =>
+    {
+        if (!request.HasFormContentType) return Results.BadRequest(new { code = "INVALID_UPLOAD" });
+        var form = await request.ReadFormAsync(ct);
+        var file = form.Files["file"];
+        if (file is null) return Results.BadRequest(new { code = "FILE_REQUIRED" });
+        if (file.Length > ImagePolicy.MaximumOriginalBytes)
+            return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+        using var buffer = new MemoryStream();
+        await file.CopyToAsync(buffer, ct);
+        return Results.Created("", await images.UploadAsync(Actor(http), businessId,
+            form["kind"].ToString(), new UploadedImage(file.FileName, file.ContentType, buffer.ToArray()),
+            form["altText"].ToString(), ct));
+    }).RequireAuthorization("BusinessProfile.Manage").DisableAntiforgery();
+privateApi.MapPut("/{businessId:guid}/images/{imageId:guid}",
+    (Guid businessId, Guid imageId, UpdateBusinessImageRequest request, HttpContext http,
+        IBusinessImageUseCases images, CancellationToken ct)
+        => images.DescribeAsync(Actor(http), businessId, imageId, request, ct))
+    .RequireAuthorization("BusinessProfile.Manage");
+privateApi.MapDelete("/{businessId:guid}/images/{imageId:guid}",
+    async (Guid businessId, Guid imageId, long version, HttpContext http, IBusinessImageUseCases images,
+        CancellationToken ct) =>
+    { await images.RemoveAsync(Actor(http), businessId, imageId, version, ct); return Results.NoContent(); })
+    .RequireAuthorization("BusinessProfile.Manage");
 privateApi.MapGet("/{businessId:guid}/appointments",
     (Guid businessId, DateOnly? date, string? status, ClaimsPrincipal user, IUrabaUseCases useCases, CancellationToken ct)
         => useCases.GetAppointmentsAsync(UserId(user), businessId, date, status, ct))
@@ -679,6 +723,8 @@ static Guid UserId(ClaimsPrincipal user)
 /// <summary>El rol y la IP se derivan de la petición autenticada, nunca de la carga útil del cliente.</summary>
 static PlatformActor Actor(HttpContext http)
     => new(UserId(http.User), http.User.IsInRole("PlatformAdmin"), http.User.IsInRole("PartnerOperator"),
-        http.Connection.RemoteIpAddress?.ToString(), http.TraceIdentifier);
+        http.Connection.RemoteIpAddress?.ToString(), http.TraceIdentifier,
+        // El rol por sí solo no abre nada: cada caso de uso confirma la membresía del negocio concreto.
+        http.User.IsInRole("BusinessOwner"));
 
 public partial class Program;

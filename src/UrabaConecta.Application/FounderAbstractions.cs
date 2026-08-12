@@ -7,8 +7,14 @@ namespace UrabaConecta.Application;
 /// Quién ejecuta una operación administrativa y desde dónde. Se construye en el borde HTTP;
 /// los casos de uso nunca deducen el rol por su cuenta.
 /// </summary>
+/// <summary>
+/// Quién actúa sobre un negocio. <paramref name="IsBusinessOwner"/> no concede nada por sí solo: la
+/// propiedad se confirma contra la membresía del negocio concreto. Existe para que un propietario
+/// pueda administrar el perfil y las imágenes de SU negocio reutilizando estos mismos casos de uso,
+/// en lugar de mantener un segundo sistema de perfil y de medios para él.
+/// </summary>
 public sealed record PlatformActor(Guid UserId, bool IsPlatformAdmin, bool IsPartnerOperator,
-    string? IpAddress = null, string? CorrelationId = null)
+    string? IpAddress = null, string? CorrelationId = null, bool IsBusinessOwner = false)
 {
     public bool CanReview => IsPlatformAdmin;
     public bool CanOperate => IsPlatformAdmin || IsPartnerOperator;

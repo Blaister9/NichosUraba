@@ -141,6 +141,9 @@ public interface IPlatformAdministrationUseCases
     /// <summary>Guarda el perfil comercial completo, incluidos los campos añadidos en V5.</summary>
     Task<PlatformBusinessDto> SaveProfileAsync(PlatformActor actor, Guid businessId,
         SaveBusinessProfileRequest request, CancellationToken cancellationToken = default);
+    /// <summary>Perfil comercial editado por el propietario del negocio. Ver la implementación.</summary>
+    Task<PlatformBusinessDto> SaveOwnerProfileAsync(PlatformActor actor, Guid businessId,
+        SaveOwnerProfileRequest request, CancellationToken cancellationToken = default);
     Task<PlatformBusinessDto> ChangeStateAsync(PlatformActor actor, Guid businessId, string action,
         PlatformBusinessStateRequest request, CancellationToken cancellationToken = default);
     Task<PlatformBusinessDto> UpdateModulesAsync(PlatformActor actor, Guid businessId,

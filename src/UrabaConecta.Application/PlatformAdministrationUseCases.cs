@@ -113,6 +113,29 @@ public sealed class PlatformAdministrationUseCases(
         return source.Length <= 160 ? source : source[..160];
     }
 
+    /// <summary>
+    /// Guardado del perfil por su propietario. Reutiliza <see cref="SaveProfileAsync"/> entero
+    /// —validación de dominio, concurrencia optimista, auditoría e invalidación de caché— y sólo se
+    /// encarga de una cosa: reponer desde lo guardado los cuatro campos que el propietario no
+    /// gobierna, para que no pueda cambiarlos ni siquiera enviándolos a mano.
+    /// </summary>
+    public async Task<PlatformBusinessDto> SaveOwnerProfileAsync(PlatformActor actor, Guid businessId,
+        SaveOwnerProfileRequest request, CancellationToken cancellationToken = default)
+    {
+        var current = (await RequireScopedAsync(actor, businessId, cancellationToken)).Business;
+        return await SaveProfileAsync(actor, businessId, new SaveBusinessProfileRequest
+        {
+            Name = current.Name, Slug = current.Slug,
+            MunicipalityId = current.MunicipalityId, CategoryId = current.CategoryId,
+            ShortDescription = request.ShortDescription, Description = request.Description,
+            Address = request.Address, ReferencePoint = request.ReferencePoint,
+            PublicPhone = request.PublicPhone, WhatsAppUrl = request.WhatsAppUrl,
+            PublicEmail = request.PublicEmail, InstagramUrl = request.InstagramUrl,
+            FacebookUrl = request.FacebookUrl, LocationUrl = request.LocationUrl,
+            CustomerInstructions = request.CustomerInstructions, Version = request.Version
+        }, cancellationToken);
+    }
+
     public async Task<PlatformBusinessDto> SaveProfileAsync(PlatformActor actor, Guid businessId,
         SaveBusinessProfileRequest request, CancellationToken cancellationToken = default)
     {
@@ -412,13 +435,30 @@ public sealed class PlatformAdministrationUseCases(
     private async Task<PlatformBusinessRecord> RequireScopedAsync(PlatformActor actor, Guid businessId,
         CancellationToken cancellationToken)
     {
-        EnsureOperator(actor);
+        // El permiso se resuelve antes de leer el negocio: si se leyera primero, quien no tiene nada
+        // que hacer aquí distinguiría un 404 de un 403 y tendría un oráculo de existencia.
+        var isOwner = await IsActiveOwnerAsync(actor, businessId, cancellationToken);
+        if (!actor.CanOperate && !isOwner)
+            throw new ApiException("FORBIDDEN", "No tiene permiso para administrar negocios.", 403);
         var record = await store.GetAsync(businessId, cancellationToken)
             ?? throw new ApiException("BUSINESS_NOT_FOUND", "No encontramos el negocio.", 404);
-        if (!actor.IsPlatformAdmin && record.Business.CreatedByUserId != actor.UserId)
+        if (!actor.IsPlatformAdmin && !isOwner && record.Business.CreatedByUserId != actor.UserId)
             throw new ApiException("FORBIDDEN", "El negocio no está a su cargo.", 403);
         return record;
     }
+
+    /// <summary>
+    /// Propietario activo de ESTE negocio. Es la única puerta por la que un BusinessOwner entra a los
+    /// casos de uso de plataforma, y se comprueba contra su membresía, nunca contra su rol: el rol
+    /// dice qué clase de persona es, la membresía dice sobre qué negocio manda.
+    /// Se corta antes de consultar cuando el actor no es propietario para no cobrar una consulta
+    /// extra a la administración, que llega aquí en cada petición.
+    /// </summary>
+    private async Task<bool> IsActiveOwnerAsync(PlatformActor actor, Guid businessId,
+        CancellationToken cancellationToken)
+        => actor.IsBusinessOwner
+           && await store.GetMembershipByUserAsync(businessId, actor.UserId, cancellationToken)
+               is { IsActive: true, Role: MembershipRole.Owner };
 
     private static void EnsureOperator(PlatformActor actor)
     {

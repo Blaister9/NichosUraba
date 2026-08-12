@@ -78,6 +78,31 @@ public sealed class RejectReviewRequest
 }
 
 /// <summary>Perfil comercial completo tal como lo administra una socia.</summary>
+/// <summary>
+/// Lo que un propietario puede cambiar de su propio perfil comercial. Deliberadamente no incluye
+/// nombre, dirección web, municipio ni categoría: son la identidad del negocio en el directorio
+/// público —el enlace ya repartido, la ficha ya indexada— y cambiarlos sigue siendo decisión de la
+/// administración de plataforma. El resto del perfil es suyo y lo edita sin pedir permiso a nadie.
+/// </summary>
+public sealed class SaveOwnerProfileRequest
+{
+    [Required(ErrorMessage = "La descripción breve es obligatoria."),
+     StringLength(160, MinimumLength = 10,
+         ErrorMessage = "La descripción breve admite de 10 a 160 caracteres.")]
+    public string ShortDescription { get; set; } = "";
+    [StringLength(600)] public string Description { get; set; } = "";
+    [StringLength(240)] public string? Address { get; set; }
+    [StringLength(160)] public string? ReferencePoint { get; set; }
+    [StringLength(30)] public string? PublicPhone { get; set; }
+    [Url, StringLength(500)] public string? WhatsAppUrl { get; set; }
+    [EmailAddress, StringLength(160)] public string? PublicEmail { get; set; }
+    [Url, StringLength(500)] public string? InstagramUrl { get; set; }
+    [Url, StringLength(500)] public string? FacebookUrl { get; set; }
+    [Url, StringLength(500)] public string? LocationUrl { get; set; }
+    [StringLength(600)] public string? CustomerInstructions { get; set; }
+    public long Version { get; set; }
+}
+
 public sealed class SaveBusinessProfileRequest
 {
     [Required, StringLength(160, MinimumLength = 2)] public string Name { get; set; } = "";
