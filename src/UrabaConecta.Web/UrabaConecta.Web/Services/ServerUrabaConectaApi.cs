@@ -10,7 +10,8 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
     IPlatformAdministrationUseCases platform, IAccessInvitationUseCases invitations,
     IBusinessImageUseCases images, IPlatformHealthProvider health, IOptions<LegalOptions> legal,
     IConsentPolicyProvider consentPolicy, IHttpContextAccessor httpContext,
-    AuthenticationStateProvider authentication, IServiceScopeFactory scopeFactory) : IUrabaConectaApi
+    AuthenticationStateProvider authentication, IServiceScopeFactory scopeFactory,
+    IOwnerDashboardUseCases dashboard) : IUrabaConectaApi
 {
     public Task<IReadOnlyList<BusinessCardDto>> GetBusinessesAsync(string? search = null, string? municipality = null,
         string? category = null, CancellationToken cancellationToken = default)
@@ -36,6 +37,14 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
         => useCases.GetDepositAuditAsync(appointmentId, cancellationToken);
     public async Task<IReadOnlyList<MyBusinessDto>> GetMyBusinessesAsync(CancellationToken cancellationToken = default)
         => await useCases.GetMyBusinessesAsync(await UserId(), cancellationToken);
+    /// <summary>
+    /// El alcance sale de las membresías, igual que en la ruta HTTP: la pantalla nunca dice de qué
+    /// negocios quiere métricas.
+    /// </summary>
+    public async Task<IReadOnlyList<OwnerDashboardSummaryDto>> GetOwnerDashboardAsync(
+        CancellationToken cancellationToken = default)
+        => await dashboard.SummarizeAsync(
+            await useCases.GetMyBusinessesAsync(await UserId(), cancellationToken), cancellationToken);
     public async Task<IReadOnlyList<AppointmentAdminDto>> GetAppointmentsAsync(Guid businessId, DateOnly? date = null,
         string? status = null, CancellationToken cancellationToken = default)
         => await useCases.GetAppointmentsAsync(await UserId(), businessId, date, status, cancellationToken);

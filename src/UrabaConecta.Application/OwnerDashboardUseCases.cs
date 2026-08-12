@@ -13,8 +13,14 @@ public sealed record BusinessDayWindow(Guid BusinessId, DateTimeOffset FromUtc, 
 /// </summary>
 public interface IOwnerDashboardStore
 {
+    /// <summary>
+    /// <paramref name="nowUtc"/> viaja aparte de la ventana porque los contadores miran el día
+    /// entero y la próxima cita sólo mira de ahora en adelante: son dos cortes distintos sobre el
+    /// mismo rango, y mezclarlos daría un "próxima cita" que ya pasó.
+    /// </summary>
     Task<IReadOnlyDictionary<Guid, AppointmentsSummaryDto>> AppointmentsAsync(
-        IReadOnlyCollection<BusinessDayWindow> windows, CancellationToken cancellationToken = default);
+        IReadOnlyCollection<BusinessDayWindow> windows, DateTimeOffset nowUtc,
+        CancellationToken cancellationToken = default);
     Task<IReadOnlyDictionary<Guid, QueueSummaryDto>> QueuesAsync(
         IReadOnlyCollection<BusinessDayWindow> windows, CancellationToken cancellationToken = default);
     Task<IReadOnlyDictionary<Guid, OrdersSummaryDto>> OrdersAsync(
@@ -40,7 +46,8 @@ public interface IOwnerDashboardUseCases
 public sealed class OwnerDashboardUseCases(
     IOwnerDashboardStore store,
     IBusinessTimeZoneResolver zones,
-    TimeProvider clock) : IOwnerDashboardUseCases
+    TimeProvider clock,
+    IOwnerDashboardDiagnostics diagnostics) : IOwnerDashboardUseCases
 {
     public async Task<IReadOnlyList<OwnerDashboardSummaryDto>> SummarizeAsync(
         IReadOnlyList<MyBusinessDto> mine, CancellationToken cancellationToken = default)
@@ -52,7 +59,7 @@ public sealed class OwnerDashboardUseCases(
 
         // Cada negocio aporta su propia ventana: "hoy" en Turbo y "hoy" en Apartadó son el mismo día,
         // pero el rango se calcula por negocio para no atarlo a una zona escrita a mano.
-        BusinessDayWindow Window(Guid id) => LocalDay(id, timeZones.GetValueOrDefault(id), now);
+        BusinessDayWindow Window(Guid id) => LocalDay(id, timeZones.GetValueOrDefault(id), now, diagnostics);
 
         var conCitas = mine.Where(x => x.ShowAppointments).Select(x => Window(x.Id)).ToList();
         var conTurnos = mine.Where(x => x.ShowQueues).Select(x => Window(x.Id)).ToList();
@@ -61,7 +68,7 @@ public sealed class OwnerDashboardUseCases(
         // Como mucho tres agregaciones, y sólo de los módulos que alguien tiene encendidos. El número
         // de consultas no crece con la cantidad de negocios: crece —hasta tres— con la de módulos.
         var citas = conCitas.Count > 0
-            ? await store.AppointmentsAsync(conCitas, cancellationToken)
+            ? await store.AppointmentsAsync(conCitas, now, cancellationToken)
             : EmptyOf<AppointmentsSummaryDto>();
         var turnos = conTurnos.Count > 0
             ? await store.QueuesAsync(conTurnos, cancellationToken)
@@ -87,9 +94,10 @@ public sealed class OwnerDashboardUseCases(
     /// El día local del negocio llevado a UTC. Se calcula una vez por negocio y viaja a la consulta
     /// como un rango, en lugar de convertir la hora de cada fila.
     /// </summary>
-    public static BusinessDayWindow LocalDay(Guid businessId, string? timeZoneId, DateTimeOffset nowUtc)
+    public static BusinessDayWindow LocalDay(Guid businessId, string? timeZoneId, DateTimeOffset nowUtc,
+        IOwnerDashboardDiagnostics? diagnostics = null)
     {
-        var zone = Resolve(timeZoneId);
+        var zone = Resolve(timeZoneId, businessId, diagnostics);
         var localNow = TimeZoneInfo.ConvertTime(nowUtc, zone);
         var startLocal = DateTime.SpecifyKind(localNow.Date, DateTimeKind.Unspecified);
         var from = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(startLocal, zone));
@@ -97,13 +105,16 @@ public sealed class OwnerDashboardUseCases(
         return new(businessId, from, to);
     }
 
-    private static TimeZoneInfo Resolve(string? timeZoneId)
+    private static TimeZoneInfo Resolve(string? timeZoneId, Guid businessId,
+        IOwnerDashboardDiagnostics? diagnostics)
     {
         if (string.IsNullOrWhiteSpace(timeZoneId)) return Bogota;
-        // Una zona mal escrita en un negocio no puede tumbar el panel de los demás.
+        // Una zona mal escrita en un negocio no puede tumbar el panel de los demás. Se cae a Bogotá
+        // para que ese negocio siga teniendo métricas, pero se avisa: un panel que calla el error
+        // muestra el día equivocado sin que nadie se entere de por qué.
         try { return TimeZoneInfo.FindSystemTimeZoneById(timeZoneId); }
-        catch (TimeZoneNotFoundException) { return Bogota; }
-        catch (InvalidTimeZoneException) { return Bogota; }
+        catch (TimeZoneNotFoundException) { diagnostics?.InvalidTimeZone(businessId, timeZoneId); return Bogota; }
+        catch (InvalidTimeZoneException) { diagnostics?.InvalidTimeZone(businessId, timeZoneId); return Bogota; }
     }
 
     private static readonly TimeZoneInfo Bogota = TimeZoneInfo.FindSystemTimeZoneById("America/Bogota");
@@ -120,4 +131,19 @@ public interface IBusinessTimeZoneResolver
 {
     Task<IReadOnlyDictionary<Guid, string>> ResolveAsync(IReadOnlyCollection<Guid> businessIds,
         CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Avisos del panel que no interrumpen la respuesta. Es un puerto y no un registrador directo para
+/// que esta capa no dependa de la infraestructura de trazas, y para que una prueba pueda afirmar que
+/// el aviso se emitió en vez de leer la salida del proceso.
+/// </summary>
+public interface IOwnerDashboardDiagnostics
+{
+    /// <summary>
+    /// El negocio tiene configurada una zona horaria que el sistema no reconoce. Se resuelve con
+    /// Bogotá y el panel continúa para todos los demás. Sólo viajan el identificador del negocio y el
+    /// valor rechazado: nada de esto describe a una persona.
+    /// </summary>
+    void InvalidTimeZone(Guid businessId, string timeZoneId);
 }

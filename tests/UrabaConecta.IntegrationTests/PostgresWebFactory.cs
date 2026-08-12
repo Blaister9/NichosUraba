@@ -1,12 +1,19 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Testcontainers.PostgreSql;
+using UrabaConecta.Infrastructure.Persistence;
 
 namespace UrabaConecta.IntegrationTests;
 
-public sealed class PostgresWebFactory : WebApplicationFactory<Program>, IAsyncLifetime
+/// <summary>
+/// No es sellada para que una prueba pueda añadir lo suyo —un reloj detenido, por ejemplo— sin
+/// levantar un segundo PostgreSQL ni duplicar el conteo de sentencias.
+/// </summary>
+public class PostgresWebFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
     /// <summary>
     /// PostgreSQL de las pruebas. Por omisión se levanta un contenedor, que es lo que corre en
@@ -21,8 +28,9 @@ public sealed class PostgresWebFactory : WebApplicationFactory<Program>, IAsyncL
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        var connectionString = Externa ?? _postgres.GetConnectionString();
         builder.UseEnvironment("Development");
-        builder.UseSetting("ConnectionStrings:DefaultConnection", Externa ?? _postgres.GetConnectionString());
+        builder.UseSetting("ConnectionStrings:DefaultConnection", connectionString);
         builder.UseSetting("URABACONECTA_TRACKING_HMAC_KEY", "integration-test-hmac-key-at-least-32-bytes");
         // Toda la suite escribe desde la misma IP, así que el límite público de doce por minuto la
         // cortaba a mitad. Se sube igual que en las pruebas de navegador; el límite en sí se
@@ -34,6 +42,14 @@ public sealed class PostgresWebFactory : WebApplicationFactory<Program>, IAsyncL
         {
             services.AddSingleton<QueryCounter>();
             services.AddSingleton<IInterceptor, CountingInterceptor>();
+            // Registrar el interceptor en el contenedor NO basta: EF sólo los aplica si están
+            // enlazados a las opciones del contexto. Sin este reenlace el contador se quedaba en
+            // cero y toda afirmación de coste pasaba sola —"0 == 0"—, que es exactamente el modo en
+            // que una prueba de rendimiento deja de proteger nada sin que nadie se entere.
+            services.RemoveAll<DbContextOptions<AppDbContext>>();
+            services.RemoveAll<DbContextOptions>();
+            services.AddDbContext<AppDbContext>((provider, options) =>
+                options.UseNpgsql(connectionString).AddInterceptors(provider.GetServices<IInterceptor>()));
         });
     }
 

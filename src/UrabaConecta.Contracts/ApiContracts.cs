@@ -439,6 +439,12 @@ public interface IUrabaConectaApi
     Task<IReadOnlyList<AppointmentDepositAuditDto>> GetAppointmentDepositAuditAsync(Guid appointmentId,
         CancellationToken cancellationToken = default);
     Task<IReadOnlyList<MyBusinessDto>> GetMyBusinessesAsync(CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Lo que pasa hoy en los negocios que la persona opera. No recibe identificadores: el alcance lo
+    /// resuelve el servidor a partir de sus membresías.
+    /// </summary>
+    Task<IReadOnlyList<OwnerDashboardSummaryDto>> GetOwnerDashboardAsync(
+        CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AppointmentAdminDto>> GetAppointmentsAsync(Guid businessId, DateOnly? date = null,
         string? status = null, CancellationToken cancellationToken = default);
     Task<AppointmentAdminDto> ChangeAppointmentStatusAsync(Guid businessId, Guid appointmentId,

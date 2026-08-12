@@ -150,6 +150,9 @@ builder.Services.AddScoped<IMembershipAdministrationStore, MembershipAdministrat
 builder.Services.AddScoped<IQueueStore, QueueStore>();
 builder.Services.AddScoped<IOrderingStore, OrderingStore>();
 builder.Services.AddScoped<IPlatformAdministrationStore, PlatformAdministrationStore>();
+builder.Services.AddScoped<IOwnerDashboardStore, OwnerDashboardStore>();
+builder.Services.AddScoped<IBusinessTimeZoneResolver, BusinessTimeZoneResolver>();
+builder.Services.AddSingleton<IOwnerDashboardDiagnostics, OwnerDashboardDiagnostics>();
 builder.Services.AddScoped<IIdentityAccountManager, IdentityAccountManager>();
 builder.Services.AddScoped<IPublicCodeService, PublicCodeService>();
 builder.Services.AddScoped<UrabaConecta.Application.IPersonalDataProtector, PersonalDataProtector>();
@@ -158,6 +161,7 @@ builder.Services.AddScoped<IUrabaUseCases, UrabaUseCases>();
 builder.Services.AddScoped<IQueueUseCases, QueueUseCases>();
 builder.Services.AddScoped<IOrderingUseCases, OrderingUseCases>();
 builder.Services.AddScoped<IPlatformAdministrationUseCases, PlatformAdministrationUseCases>();
+builder.Services.AddScoped<IOwnerDashboardUseCases, OwnerDashboardUseCases>();
 builder.Services.AddScoped<IQueueChangeNotifier, SignalRQueueChangeNotifier>();
 builder.Services.AddScoped<IUrabaConectaApi, ServerUrabaConectaApi>();
 builder.Services.AddSignalR();
@@ -474,6 +478,14 @@ platformApi.MapPost("/businesses/{businessId:guid}/{action}",
 var privateApi = app.MapGroup("/api/v1/businesses").RequireAuthorization("BusinessMember");
 privateApi.MapGet("/mine", (ClaimsPrincipal user, IUrabaUseCases useCases, CancellationToken ct)
     => useCases.GetMyBusinessesAsync(UserId(user), ct));
+
+// El resumen operativo no recibe identificadores del cliente: el alcance sale de las membresías de
+// quien pregunta. Aceptar "?businessIds=" dejaría al navegador elegir de qué negocios pide métricas,
+// y bastaría con que la respuesta cambiara ante un identificador ajeno para delatar que ese negocio
+// existe. Por eso la lista se resuelve aquí, con la misma consulta que alimenta "Mis establecimientos".
+privateApi.MapGet("/dashboard", async (ClaimsPrincipal user, IUrabaUseCases businesses,
+        IOwnerDashboardUseCases dashboard, CancellationToken ct)
+    => await dashboard.SummarizeAsync(await businesses.GetMyBusinessesAsync(UserId(user), ct), ct));
 
 // --- Perfil e imágenes del propietario -------------------------------------------------------
 // Mismos casos de uso que usa la administración: la autorización distingue quién entra, no qué

@@ -47,6 +47,9 @@ public sealed class HttpUrabaConectaApi(HttpClient http) : IUrabaConectaApi
             $"api/v1/admin/appointments/{appointmentId}/deposit-audit", cancellationToken);
     public Task<IReadOnlyList<MyBusinessDto>> GetMyBusinessesAsync(CancellationToken cancellationToken = default)
         => Get<IReadOnlyList<MyBusinessDto>>("api/v1/businesses/mine", cancellationToken);
+    public Task<IReadOnlyList<OwnerDashboardSummaryDto>> GetOwnerDashboardAsync(
+        CancellationToken cancellationToken = default)
+        => Get<IReadOnlyList<OwnerDashboardSummaryDto>>("api/v1/businesses/dashboard", cancellationToken);
     public Task<IReadOnlyList<AppointmentAdminDto>> GetAppointmentsAsync(Guid businessId, DateOnly? date = null,
         string? status = null, CancellationToken cancellationToken = default)
         => Get<IReadOnlyList<AppointmentAdminDto>>($"api/v1/businesses/{businessId}/appointments?date={date:yyyy-MM-dd}&status={E(status)}", cancellationToken);

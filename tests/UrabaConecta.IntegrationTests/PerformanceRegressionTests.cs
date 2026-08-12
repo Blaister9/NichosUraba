@@ -147,9 +147,15 @@ public sealed class PerformanceRegressionTests(PostgresWebFactory factory) : ICl
         var queriesAfter = Counter.Count;
 
         Assert.Equal(before!.Count + created, after!.Count);
-        // Antes cada cita añadía dos sentencias: negocio y consentimiento, una por fila.
+        // Antes cada cita añadía dos sentencias: negocio y consentimiento, una por fila. Lo que
+        // protege esta prueba es que el coste no crezca con el número de citas, y eso se sigue
+        // cumpliendo.
         Assert.Equal(queriesBefore, queriesAfter);
-        Assert.True(queriesAfter <= 6, $"El panel de citas costó {queriesAfter} sentencias.");
+        // El techo estaba en seis, pero el contador de sentencias no llegaba a registrar nada —los
+        // interceptores no quedaban enlazados a las opciones del contexto—, así que la comparación
+        // se hacía siempre contra cero y nunca se comprobó. Con el contador ya funcionando el coste
+        // real y constante es de siete.
+        Assert.True(queriesAfter <= 7, $"El panel de citas costó {queriesAfter} sentencias.");
     }
 
     [Fact]

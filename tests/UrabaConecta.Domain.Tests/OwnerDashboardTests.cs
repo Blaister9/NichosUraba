@@ -21,8 +21,9 @@ public sealed class OwnerDashboardTests
             BusinessStatus: "Active",
             HasAppointments: citas, HasVirtualQueues: turnos, HasPickupOrders: pedidos);
 
-    private static OwnerDashboardUseCases Sut(FakeDashboardStore store)
-        => new(store, new FakeZones(), new FrozenClock(Ahora));
+    private static OwnerDashboardUseCases Sut(FakeDashboardStore store,
+        RecordingDiagnostics? diagnostics = null, string zona = "America/Bogota")
+        => new(store, new FakeZones(zona), new FrozenClock(Ahora), diagnostics ?? new RecordingDiagnostics());
 
     // ------------------------------------------------------------------ gating por módulo
 
@@ -161,6 +162,33 @@ public sealed class OwnerDashboardTests
         Assert.Equal(TimeSpan.FromDays(1), ventana.ToUtc - ventana.FromUtc);
     }
 
+    [Fact]
+    public async Task An_unknown_time_zone_is_reported_instead_of_failing_quietly()
+    {
+        // Caer a Bogotá salva la respuesta, pero deja al negocio contando un día que no es el suyo.
+        // Si eso no se avisa, el error sólo se descubre cuando alguien duda de sus propias cifras.
+        var id = Guid.NewGuid();
+        var avisos = new RecordingDiagnostics();
+
+        var resumen = await Sut(new FakeDashboardStore(), avisos, "Zona/Inexistente")
+            .SummarizeAsync([Negocio(id, "Zona rota", citas: true)]);
+
+        var aviso = Assert.Single(avisos.Invalid);
+        Assert.Equal(id, aviso.BusinessId);
+        Assert.Equal("Zona/Inexistente", aviso.TimeZoneId);
+        // Y el negocio sigue apareciendo: el aviso no lo saca del panel.
+        Assert.NotNull(resumen.Single().Appointments);
+    }
+
+    [Fact]
+    public async Task A_valid_time_zone_reports_nothing()
+    {
+        var avisos = new RecordingDiagnostics();
+        await Sut(new FakeDashboardStore(), avisos, "America/Bogota")
+            .SummarizeAsync([Negocio(Guid.NewGuid(), "Zona buena", citas: true)]);
+        Assert.Empty(avisos.Invalid);
+    }
+
     // ------------------------------------------------------------------ dobles
 
     private sealed class FrozenClock(DateTimeOffset now) : TimeProvider
@@ -168,12 +196,18 @@ public sealed class OwnerDashboardTests
         public override DateTimeOffset GetUtcNow() => now;
     }
 
-    private sealed class FakeZones : IBusinessTimeZoneResolver
+    private sealed class FakeZones(string zona) : IBusinessTimeZoneResolver
     {
         public Task<IReadOnlyDictionary<Guid, string>> ResolveAsync(IReadOnlyCollection<Guid> businessIds,
             CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyDictionary<Guid, string>>(
-                businessIds.ToDictionary(x => x, _ => "America/Bogota"));
+                businessIds.ToDictionary(x => x, _ => zona));
+    }
+
+    private sealed class RecordingDiagnostics : IOwnerDashboardDiagnostics
+    {
+        public List<(Guid BusinessId, string TimeZoneId)> Invalid { get; } = [];
+        public void InvalidTimeZone(Guid businessId, string timeZoneId) => Invalid.Add((businessId, timeZoneId));
     }
 
     private sealed class FakeDashboardStore : IOwnerDashboardStore
@@ -184,7 +218,8 @@ public sealed class OwnerDashboardTests
         public int AppointmentCalls, QueueCalls, OrderCalls, LastAppointmentWindows;
 
         public Task<IReadOnlyDictionary<Guid, AppointmentsSummaryDto>> AppointmentsAsync(
-            IReadOnlyCollection<BusinessDayWindow> windows, CancellationToken cancellationToken = default)
+            IReadOnlyCollection<BusinessDayWindow> windows, DateTimeOffset nowUtc,
+            CancellationToken cancellationToken = default)
         {
             AppointmentCalls++; LastAppointmentWindows = windows.Count;
             return Task.FromResult<IReadOnlyDictionary<Guid, AppointmentsSummaryDto>>(Appointments);
