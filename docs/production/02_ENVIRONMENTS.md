@@ -8,15 +8,26 @@ Data Protection y cuentas. No comparten nada.
 | Recurso | Valor |
 | --- | --- |
 | `ASPNETCORE_ENVIRONMENT` | `Demo` |
-| Datos | Ficticios. Tres negocios de muestra |
-| Cuentas | `*.demo`, contraseña compartida operativa |
+| Datos | Un solo negocio real acompañado: Studio Laura usuga |
+| Cuentas | `*.demo` |
 | PostgreSQL | Instancia Demo |
 | Almacenamiento | Proveedor `Local` sobre volumen, o bucket Demo |
-| `DemoSeed__Enabled` | `true` |
+| `DemoSeed__Enabled` | `false` desde el 13 de agosto de 2026 |
 | Rama desplegada | `release/pilot-demo` |
 
-Demo existe para enseñar el producto. Puede romperse, reponerse y volver a sembrarse sin
-consecuencias.
+Demo existe para enseñar el producto. Puede romperse y reponerse sin consecuencias.
+
+### El sembrado está apagado a propósito
+
+El 13 de agosto de 2026 se retiraron de la Demo los veinte negocios ficticios y de prueba, y quedó
+únicamente Studio Laura usuga. Eso **obliga** a mantener `DemoSeed__Enabled=false`: el sembrado
+vuelve a crear los negocios de muestra y, peor, reinstala membresías que apuntan a negocios que ya
+no existen. Esa escritura ocurre en el arranque y fuera del bloque tolerante a fallos, así que
+reactivarlo con la base actual deja el contenedor en un ciclo de caída y el despliegue en 502, sin
+que un rollback lo arregle.
+
+Para volver a tener una demostración con negocios de muestra hay que **recrear la base**, no
+reencender el sembrado sobre ésta.
 
 ### El environment de Railway que aloja Demo se llama `production`
 

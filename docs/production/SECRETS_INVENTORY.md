@@ -58,6 +58,11 @@ La aplicación **no arranca** si alguna de estas está definida:
 - `DemoBootstrap__Enabled=true`, `DemoBootstrap__AdminEmail`, `DemoBootstrap__AdminPassword`
 - `DemoAccess__SharedPassword`
 
+`DemoBootstrap__Token` acompaña a las anteriores y sólo tiene sentido en Demo: es la etiqueta que
+habilita **una** recuperación administrativa más. Declarar una etiqueta nueva permite exactamente
+una ejecución; repetir la misma no repone nada. Cada recuperación deja su propia entrada en la
+auditoría de accesos, así que el rastro de todas se conserva.
+
 ## Reglas
 
 1. Los secretos de Production son **nuevos**. No se reutiliza ninguno de Demo.
