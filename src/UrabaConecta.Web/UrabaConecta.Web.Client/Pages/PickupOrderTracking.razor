@@ -3,17 +3,20 @@
 @inject IUrabaConectaApi Api
 
 <PageTitle>Seguimiento del pedido | UrabáConecta</PageTitle>
-<a class="back-link" href="/">← Inicio</a>
+<a class="back-link" href="/">← Negocios de Urabá</a>
 @if (error is not null) { <div class="error" role="alert">@error</div> }
 else if (order is null) { <p class="notice">Consultando pedido…</p> }
 else
 {
-    <section class="success narrow" data-testid="order-tracking">
+    @* La tarjeta era verde de "éxito" pasara lo que pasara: un pedido rechazado se anunciaba
+       con el mismo color que uno listo para recoger. El estado lo dice la etiqueta. *@
+    <section class="narrow" data-testid="order-tracking">
         <p class="eyebrow">@order.BusinessName</p><h1>Pedido #@order.OrderNumber</h1>
-        <span class="status">@order.StatusLabel</span>
-        <p>Recoger: @Local(order.PickupStart)<br />Celular: @order.PhoneMasked</p>
+        <span class="status @order.Status.ToLowerInvariant()">@order.StatusLabel</span>
+        <p class="lead">Recoges el @Local(order.PickupStart)</p>
+        <p class="meta">Celular: @order.PhoneMasked</p>
         @foreach (var line in order.Lines) { <p>@line.Quantity × @line.ProductName <strong>@line.LineTotal.ToString("C0", Colombia)</strong></p> }
-        <p><strong>Total: @order.Total.ToString("C0", Colombia)</strong></p>
+        <p class="total-pedido"><span>Total a pagar en el local</span><strong>@order.Total.ToString("C0", Colombia)</strong></p>
         @if (order.CanCancel)
         {
             <button class="danger" disabled="@(!interactiveReady || busy)" @onclick="Cancel">

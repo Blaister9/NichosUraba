@@ -2,23 +2,24 @@
 @rendermode InteractiveServer
 @inject IUrabaConectaApi Api
 
-<PageTitle>Directorio | UrabáConecta</PageTitle>
-<section class="hero">
-    <p class="eyebrow">Directorio local demostrativo</p>
-    <h1>Encuentre servicios cerca de usted</h1>
-    <p>Agende una cita, tome un turno o haga un pedido para recoger sin crear cuenta.</p>
+<PageTitle>Negocios de Urabá | UrabáConecta</PageTitle>
+@* Cinco segundos: qué es esto, qué encuentro, dónde busco y cómo llego a un negocio. Por eso el
+   buscador va inmediatamente debajo del titular y los negocios empiezan en el primer scroll. La
+   explicación del producto se movió al pie: quien llega quiere encontrar un negocio, no entender
+   la plataforma. *@
+<section class="hero-home">
+    <p class="eyebrow">Apartadó · Carepa · Chigorodó · Turbo</p>
+    <h1>Los negocios de Urabá, a un toque</h1>
+    <p class="hero-sub">Reserva una cita, toma un turno o pide para recoger. Sin llamar y sin crear cuenta.</p>
 </section>
-<section class="capability-grid" aria-label="Formas de atención disponibles">
-    <div><strong>Agendar</strong><span>Reserve una hora disponible.</span></div>
-    <div><strong>Tomar turno</strong><span>Entre a una fila virtual.</span></div>
-    <div><strong>Pedir para recoger</strong><span>Elija productos y una franja.</span></div>
-</section>
+
 @* Los filtros permanecen deshabilitados hasta que el circuito responde: un control que
    parece funcionar antes de conectar descarta el clic sin avisar. *@
-<fieldset class="search-panel" aria-label="Filtros del directorio" disabled="@(!interactiveReady)">
-    <label>Buscar por nombre<InputText @bind-Value="search" placeholder="Ej. Bella" /></label>
+<fieldset class="search-panel" aria-label="Buscar negocios" disabled="@(!interactiveReady)">
+    <label>Qué buscas<InputText @bind-Value="search" placeholder="Salón, barbería, restaurante…" /></label>
     <label>Municipio<InputSelect @bind-Value="municipality">
-        <option value="">Todos</option><option value="apartado">Apartadó</option><option value="carepa">Carepa</option><option value="turbo">Turbo</option><option value="chigorodo">Chigorodó</option>
+        <option value="">Todos</option>
+        @foreach (var (slug, nombre) in Municipios) { <option value="@slug">@nombre</option> }
     </InputSelect></label>
     <label>Categoría<InputSelect @bind-Value="category">
         <option value="">Todas</option><option value="belleza-cuidado-personal">Belleza y cuidado personal</option><option value="barberia">Barbería</option><option value="restaurante">Restaurante</option>
@@ -26,54 +27,96 @@
     <button class="primary" @onclick="Load" disabled="@(!interactiveReady || loading)">
         @(loading ? "Buscando…" : "Buscar")
     </button>
-    @if (!interactiveReady) { <p class="notice" role="status">Preparando los filtros…</p> }
 </fieldset>
-@if (loading) { <p class="notice">Cargando establecimientos…</p> }
+
+@* Atajos de municipio: el mismo filtro de arriba, al alcance del pulgar. *@
+<div class="chip-row" role="group" aria-label="Filtrar por municipio">
+    <button type="button" class="chip" aria-pressed="@(municipality == "")"
+            disabled="@(!interactiveReady || loading)" @onclick='() => Filter("")'>Todo Urabá</button>
+    @foreach (var (slug, nombre) in Municipios)
+    {
+        <button type="button" class="chip" aria-pressed="@(municipality == slug)"
+                disabled="@(!interactiveReady || loading)" @onclick="() => Filter(slug)">@nombre</button>
+    }
+</div>
+
+@if (loading) { <p class="notice" role="status">Buscando negocios…</p> }
 else if (error is not null) { <p class="error" role="alert">@error</p> }
 else if (businesses.Count == 0)
 {
-    <div class="empty"><h2>No encontramos resultados</h2><p>Pruebe otro nombre, municipio o categoría.</p></div>
+    <div class="empty">
+        <h2>No encontramos negocios con esa búsqueda</h2>
+        <p>Prueba con otro nombre, otro municipio o mira todo Urabá.</p>
+        <button type="button" class="secondary" @onclick='() => Filter("")'>Ver todos los negocios</button>
+    </div>
 }
 else
 {
-    <section class="card-grid" aria-live="polite">
+    <div class="resultados-head">
+        <h2 aria-live="polite">@businesses.Count @(businesses.Count == 1 ? "negocio" : "negocios") @Ambito</h2>
+    </div>
+    <section class="card-grid" aria-label="Negocios">
         @foreach (var (business, index) in businesses.Select((x, i) => (x, i)))
         {
-            <article class="business-card">
-                @if (business.CoverUrl is { Length: > 0 } cover)
-                {
-                    @* Dimensiones fijas para reservar el espacio y evitar saltos al cargar.
-                       La portada de la primera tarjeta es el elemento LCP: se pide con prioridad
-                       y sin diferir. Las siguientes quedan por debajo del primer viewport. *@
-                    <img class="card-cover" src="@cover" alt="@(business.CoverAltText ?? $"Portada de {business.Name}")"
-                         width="640" height="360"
-                         loading="@(index == 0 ? "eager" : "lazy")"
-                         fetchpriority="@(index == 0 ? "high" : "auto")" />
-                }
-                <div class="card-identity">
+            <article class="negocio-card">
+                <div class="card-media">
+                    @if (business.CoverUrl is { Length: > 0 } cover)
+                    {
+                        @* Dimensiones fijas para reservar el espacio y evitar saltos al cargar.
+                           La portada de la primera tarjeta es el elemento LCP: se pide con prioridad
+                           y sin diferir. Las siguientes quedan por debajo del primer viewport. *@
+                        <img class="card-cover" src="@cover" alt="@(business.CoverAltText ?? $"Portada de {business.Name}")"
+                             width="640" height="400"
+                             loading="@(index == 0 ? "eager" : "lazy")"
+                             fetchpriority="@(index == 0 ? "high" : "auto")" />
+                    }
                     @if (business.LogoUrl is { Length: > 0 } logo)
                     {
                         <img class="card-logo" src="@logo" alt="@(business.LogoAltText ?? $"Logo de {business.Name}")"
-                             width="64" height="64" loading="lazy" />
+                             width="58" height="58" loading="lazy" />
                     }
-                    <span class="tag">@business.Category.Name</span>
                 </div>
-                <h2>@business.Name</h2>
-                <p>@(string.IsNullOrWhiteSpace(business.ShortDescription) ? business.Description : business.ShortDescription)</p>
-                <p><strong>@business.Municipality.Name</strong> · @business.Address</p>
-                @if (business.HasScheduling) { <span class="operation-badge">Citas disponibles</span> }
-                @if (business.HasVirtualQueue) { <span class="operation-badge">Turnos virtuales activos</span> }
-                @if (business.HasPickupOrdering) { <span class="operation-badge">Pedidos activos</span> }
-                <a class="button-link" href="@ActionUrl(business)">@ActionLabel(business)</a>
+                <div class="card-body">
+                    <p class="card-meta">
+                        <span class="tag">@business.Category.Name</span>
+                        <span class="meta">@business.Municipality.Name</span>
+                    </p>
+                    <h2>@business.Name</h2>
+                    <p class="card-desc">@(string.IsNullOrWhiteSpace(business.ShortDescription) ? business.Description : business.ShortDescription)</p>
+                    @* Una sola señal, la de la operación que manda en ese negocio: tres insignias
+                       apiladas convertían la tarjeta en una lista de funciones. *@
+                    @if (OperationBadge(business) is { Length: > 0 } insignia)
+                    {
+                        <p class="card-meta"><span class="operation-badge">@insignia</span></p>
+                    }
+                    <a class="button-link" href="@ActionUrl(business)">@ActionLabel(business)</a>
+                </div>
             </article>
         }
     </section>
 }
+
+<section class="capability-grid" aria-label="Cómo funciona UrabáConecta">
+    <div><strong>Reserva una cita</strong><span>Eliges servicio, día y hora disponible.</span></div>
+    <div><strong>Toma un turno</strong><span>Entras a la fila desde el celular y llegas cuando falte poco.</span></div>
+    <div><strong>Pide para recoger</strong><span>Armas tu pedido y eliges a qué hora pasas.</span></div>
+</section>
+
 @code {
     private string search = "", municipality = "", category = "";
     private string? error;
     private bool loading = true, interactiveReady;
     private IReadOnlyList<BusinessCardDto> businesses = [];
+
+    /// <summary>Los cuatro municipios del foco comercial inicial.</summary>
+    private static readonly (string Slug, string Nombre)[] Municipios =
+    [
+        ("apartado", "Apartadó"), ("carepa", "Carepa"), ("chigorodo", "Chigorodó"), ("turbo", "Turbo"),
+    ];
+
+    private string Ambito => Municipios.FirstOrDefault(x => x.Slug == municipality) is { Nombre: { } nombre }
+        ? $"en {nombre}" : "en Urabá";
+
     protected override async Task OnInitializedAsync() => await Load();
     protected override void OnAfterRender(bool firstRender)
     {
@@ -82,6 +125,11 @@ else
         if (!firstRender) return;
         interactiveReady = true;
         StateHasChanged();
+    }
+    private async Task Filter(string municipio)
+    {
+        municipality = municipio;
+        await Load();
     }
     private async Task Load()
     {
@@ -95,6 +143,9 @@ else
         ? $"/negocios/{business.Slug}/turnos" : business.HasScheduling
         ? $"/negocios/{business.Slug}/citas" : $"/negocios/{business.Slug}";
     private static string ActionLabel(BusinessCardDto business) => business.HasPickupOrdering
-        ? "Ver menú" : business.HasVirtualQueue ? "Solicitar turno"
-        : business.HasScheduling ? "Ver citas disponibles" : "Ver establecimiento";
+        ? "Pedir para recoger" : business.HasVirtualQueue ? "Tomar turno"
+        : business.HasScheduling ? "Reservar cita" : "Ver negocio";
+    private static string OperationBadge(BusinessCardDto business) => business.HasPickupOrdering
+        ? "Pedidos abiertos" : business.HasVirtualQueue ? "Fila virtual activa"
+        : business.HasScheduling ? "Agenda disponible" : "";
 }

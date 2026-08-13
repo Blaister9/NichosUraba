@@ -2,23 +2,30 @@
 
 <header class="site-header">
     <a class="brand" href="/"><span>U</span> UrabáConecta</a>
+    @* El logotipo ya lleva al directorio: repetirlo como enlace sólo restaba espacio en móvil.
+       Y como no existe registro público, quien entra con sesión siempre viene a trabajar: su barra
+       arranca por "Panel" y no comparte sitio con el seguimiento de un cliente. *@
     <nav aria-label="Navegación principal">
-        <a href="/">Directorio</a><a href="/seguimiento/citas">Mi cita</a>
         <AuthorizeView>
-            <Authorized><a href="/panel">Panel</a><a href="/Account/Manage" target="_self">Cuenta</a></Authorized>
-            <NotAuthorized><a href="/Account/Login" target="_self">Ingresar</a></NotAuthorized>
+            <Authorized><a href="/panel">Panel</a></Authorized>
+            <NotAuthorized><a href="/seguimiento/citas">Mi reserva</a></NotAuthorized>
         </AuthorizeView>
         <AuthorizeView Roles="PlatformAdmin,PartnerOperator">
-            <Authorized><a href="/admin/negocios">Administración</a></Authorized>
+            <Authorized><a href="/admin/negocios">Negocios Fundadores</a></Authorized>
         </AuthorizeView>
         <AuthorizeView Roles="PlatformAdmin">
             <Authorized><a href="/admin/accesos">Accesos</a><a href="/admin/salud">Salud</a></Authorized>
+        </AuthorizeView>
+        <AuthorizeView>
+            <Authorized><a href="/Account/Manage" target="_self">Cuenta</a></Authorized>
+            <NotAuthorized><a href="/Account/Login" target="_self">Ingresar</a></NotAuthorized>
         </AuthorizeView>
     </nav>
 </header>
 <main class="page-shell">@Body</main>
 <footer>
-    <p>Demo con datos ficticios · Urabá, Colombia</p>
+    <p><strong>UrabáConecta</strong> · Apartadó · Carepa · Chigorodó · Turbo</p>
+    <p>Demostración con negocios y datos ficticios.</p>
     <nav aria-label="Información legal">
         <a href="/legal/politica-de-datos">Política de datos</a>
         <a href="/legal/aviso-de-privacidad">Aviso de privacidad</a>

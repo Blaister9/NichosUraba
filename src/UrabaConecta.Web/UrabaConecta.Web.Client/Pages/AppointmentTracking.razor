@@ -4,7 +4,14 @@
 
 <PageTitle>Estado de la cita | UrabáConecta</PageTitle>
 <section class="narrow">
-    @if (IsNew) { <div class="success"><strong>Solicitud enviada.</strong><p>Guarde este código: <code data-testid="tracking-code">@Code</code></p></div> }
+    @if (IsNew)
+    {
+        <div class="success">
+            <strong>Solicitud enviada.</strong>
+            <p>El negocio la revisa y te confirma. Guarda este enlace o el código
+                <code data-testid="tracking-code">@Code</code> para consultar el estado cuando quieras.</p>
+        </div>
+    }
     @if (loading) { <p class="notice">Consultando estado…</p> }
     else if (appointment is null) { <div class="empty"><h1>Código no encontrado</h1><a href="/seguimiento/citas">Intentar otro código</a></div> }
     else
@@ -13,7 +20,9 @@
         <h1>Su cita está <span class="status @appointment.Status.ToLowerInvariant()">@appointment.StatusLabel</span></h1>
         <dl class="details">
             <dt>Servicio</dt><dd>@appointment.ServiceName</dd><dt>Fecha y hora</dt><dd>@LocalDate(appointment.Start)</dd>
-            <dt>Teléfono</dt><dd>@appointment.PhoneMasked</dd><dt>Última actualización</dt><dd>@appointment.UpdatedAt.ToString("dd/MM/yyyy HH:mm") UTC</dd>
+            @* Antes esta línea mostraba la hora en UTC, que no es la hora de nadie en Urabá. *@
+            <dt>Teléfono</dt><dd>@appointment.PhoneMasked</dd>
+            <dt>Última actualización</dt><dd>@LocalDate(appointment.UpdatedAt)</dd>
         </dl>
         @if (appointment.RequiresDeposit)
         {
@@ -44,7 +53,9 @@
                         El pago se hace directamente al negocio. UrabáConecta no recibe dinero: sólo abre
                         la conversación de WhatsApp con los datos de su cita.
                     </p>
-                    <a class="primary button" href="@appointment.DepositWhatsAppUrl" target="_blank" rel="noopener"
+                    @* La clase era "primary button", que no existe: el enlace se pintaba como texto
+                       suelto justo donde el cliente tiene que enviar su comprobante. *@
+                    <a class="button-link primary" href="@appointment.DepositWhatsAppUrl" target="_blank" rel="noopener"
                        data-testid="whatsapp-link" @onclick="() => openingWhatsApp = true">
                         Enviar comprobante por WhatsApp
                     </a>

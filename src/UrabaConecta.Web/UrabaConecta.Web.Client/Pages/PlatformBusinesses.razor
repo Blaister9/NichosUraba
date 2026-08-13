@@ -3,13 +3,27 @@
 @attribute [Authorize(Roles = "PlatformAdmin,PartnerOperator")]
 @inject IUrabaConectaApi Api
 
-<PageTitle>Administración de plataforma | UrabáConecta</PageTitle>
-<p class="eyebrow">Administración de plataforma</p>
-<div class="title-actions"><h1>Negocios piloto</h1><a class="button-link primary" href="/admin/negocios/nuevo">Crear negocio</a></div>
-<p>Alta, preparación y control del acceso público de cada piloto. Esta vista no concede membresía al administrador.</p>
+<PageTitle>Negocios Fundadores | UrabáConecta</PageTitle>
+<div class="title-actions panel-header">
+    <div>
+        <p class="eyebrow">Cohorte fundadora</p>
+        <h1>Negocios Fundadores</h1>
+        <p class="meta">Alta, preparación y publicación de cada negocio.</p>
+    </div>
+    <a class="button-link primary" href="/admin/negocios/nuevo">Crear negocio</a>
+</div>
 <fieldset class="filters" disabled="@(!interactiveReady)">
     <label>Buscar<input @bind="search" /></label>
-    <label>Estado<select @bind="status"><option value="">Todos</option><option>Draft</option><option>PendingConfiguration</option><option>Active</option><option>Suspended</option><option>Archived</option></select></label>
+    @* El desplegable ofrecía los valores internos —Draft, PendingConfiguration— tal cual salían
+       del modelo. La socia no habla ese idioma. *@
+    <label>Estado<select @bind="status">
+        <option value="">Todos</option>
+        <option value="Draft">Borrador</option>
+        <option value="PendingConfiguration">Configuración pendiente</option>
+        <option value="Active">Activo</option>
+        <option value="Suspended">Suspendido</option>
+        <option value="Archived">Archivado</option>
+    </select></label>
     <label>Función<select @bind="module"><option value="">Todas</option><option value="Appointments">Citas</option><option value="VirtualQueues">Turnos</option><option value="PickupOrders">Pedidos</option></select></label>
     <button class="secondary" @onclick="Load" disabled="@(!interactiveReady || loading)">
         @(loading ? "Filtrando…" : "Filtrar")
@@ -24,11 +38,13 @@ else
         @foreach (var item in data.Items)
         {
             <article class="business-card">
-                <span class="tag">@State(item.Status)</span><h2>@item.Name</h2>
-                <p>@item.Municipality · @item.Category</p>
-                <p><strong>Responsable:</strong> @(item.OwnerName ?? "Sin asignar")</p>
-                <p>@string.Join(" · ", item.Modules.Select(Module))</p>
-                <p class="@(item.IsReady ? "success" : "notice")">Lista para activar: @(item.IsReady ? "sí" : "no")</p>
+                <span class="status @BusinessStatusText.CssModifier(item.Status)">@State(item.Status)</span>
+                <h2>@item.Name</h2>
+                <p class="meta">@item.Municipality · @item.Category</p>
+                <p class="meta">Responsable: @(item.OwnerName ?? "Sin asignar")</p>
+                <p class="meta">@string.Join(" · ", item.Modules.Select(Module))</p>
+                <p class="@(item.IsReady ? "success" : "notice")">
+                    @(item.IsReady ? "Listo para publicarse." : "Todavía le falta configuración.")</p>
                 <a class="button-link secondary" href="/admin/negocios/@item.Id">Revisar</a>
             </article>
         }

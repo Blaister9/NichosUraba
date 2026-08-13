@@ -30,8 +30,11 @@ public sealed class OrderingHardeningJourneyTests(BrowserFixture fixture) : ICla
         await using var publicContext = await Mobile(390, 844);
         var tracking = await publicContext.NewPageAsync();
         await tracking.GotoAsync($"{fixture.BaseUrl}/seguimiento/pedidos/{oldOrder.TrackingCode}");
+        // El total del pedido dejó de llevar el prefijo "Total:" pegado a la cifra, así que en un
+        // pedido de una sola línea el mismo importe aparece dos veces: como línea y como total.
+        // Lo que este caso vigila es que el precio congelado siga siendo el histórico.
         await Expect(tracking.GetByText(original.ReferencePrice.ToString("C0", Colombia),
-            new() { Exact = true })).ToBeVisibleAsync();
+            new() { Exact = true }).First).ToBeVisibleAsync();
         Assert.True(await tracking.EvaluateAsync<bool>("document.documentElement.scrollWidth <= innerWidth"));
 
         var newOrder = await CreateOrder($"Nuevo {Guid.NewGuid():N}"[..15], ProductId);

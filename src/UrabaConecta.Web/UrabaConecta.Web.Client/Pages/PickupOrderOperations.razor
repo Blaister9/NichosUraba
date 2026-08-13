@@ -4,10 +4,12 @@
 @inject IUrabaConectaApi Api
 
 <PageTitle>Pedidos | UrabáConecta</PageTitle>
-<a class="back-link" href="/panel">← Establecimientos</a>
-<p class="eyebrow">Operación</p><h1>Pedidos para recoger</h1>
-@* El nombre del establecimiento, para quien llega por dirección directa. *@
-<p class="operation-business" data-testid="business-name">@businessName</p>
+<a class="back-link" href="/panel">← Mis negocios</a>
+<div class="panel-header">
+    <p class="eyebrow">Operación</p><h1>Pedidos para recoger</h1>
+    @* El nombre del establecimiento, para quien llega por dirección directa. *@
+    <p class="operation-business" data-testid="business-name">@businessName</p>
+</div>
 <div class="actions">
     <button class="secondary" @onclick="Load" disabled="@(!interactiveReady || busy || loading)">@(loading ? "Actualizando…" : "Actualizar")</button>
     <a class="button-link secondary" href="/panel/@BusinessId/configuracion/pedidos">Configurar catálogo</a>
@@ -28,12 +30,12 @@
         <div class="actions">
             @* busy además de interactiveReady: mientras una transición está en vuelo ningún botón
                de la pantalla acepta un segundo clic. *@
-            @if (order.Status == "Pending") { <button class="primary" disabled="@Blocked" @onclick="() => Accept(order)">Aceptar</button><button class="danger" disabled="@Blocked" @onclick="() => Reject(order)">Rechazar</button> }
+            @if (order.Status == "Pending") { <button class="primary" disabled="@Blocked" @onclick="() => Accept(order)">Aceptar</button><button class="secondary" disabled="@Blocked" @onclick="() => Reject(order)">Rechazar</button> }
             @if (order.Status == "Accepted") { <button class="primary" disabled="@Blocked" @onclick="() => Prepare(order)">Preparar</button> }
             @if (order.Status == "Preparing") { <button class="primary" disabled="@Blocked" @onclick="() => Ready(order)">Listo</button> }
             @if (order.Status == "ReadyForPickup") { <button class="primary" disabled="@Blocked" @onclick="() => Deliver(order)">Entregado</button> }
             @if (order.Status is "Pending" or "Accepted" or "Preparing" or "ReadyForPickup")
-            { <button class="danger" disabled="@Blocked" @onclick="() => Cancel(order)">Cancelar</button> }
+            { <button class="tertiary" disabled="@Blocked" @onclick="() => Cancel(order)">Cancelar</button> }
         </div>
     </article>
 }

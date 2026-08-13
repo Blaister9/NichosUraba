@@ -4,9 +4,12 @@
 @inject IUrabaConectaApi Api
 
 <PageTitle>Configuración del negocio | UrabáConecta</PageTitle>
-<a class="back-link" href="/panel">← Mis establecimientos</a>
-<p class="eyebrow">Área privada</p>
-<h1>Configuración del negocio</h1>
+<a class="back-link" href="/panel">← Mis negocios</a>
+<div class="panel-header">
+    <p class="eyebrow">Panel del negocio</p>
+    <h1>Configuración del negocio</h1>
+    <p class="meta">Lo que configuras aquí es lo que ven tus clientes en la ficha pública.</p>
+</div>
 
 @if (loading)
 {
@@ -18,7 +21,7 @@ else if (error is not null)
 }
 else if (business is not null)
 {
-    <div class="config-business"><span class="tag">Establecimiento</span><strong>@business.Name</strong></div>
+    <div class="config-business"><span class="tag">Negocio</span><strong>@business.Name</strong></div>
     <ConfigurationNav BusinessId="BusinessId" ShowOwnerSections="business.IsOwner" />
     <div class="config-grid">
         @* El perfil y las imágenes abren la lista porque son lo primero que ve un cliente, y porque

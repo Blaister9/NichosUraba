@@ -14,7 +14,7 @@ public sealed class QueueJourneyTests(BrowserFixture fixture) : IClassFixture<Br
 
         // 1. Directorio -> perfil -> fila.
         await visitor.GotoAsync(fixture.BaseUrl);
-        await visitor.GetByLabel("Buscar por nombre").FillAsync("El Corte");
+        await visitor.GetByLabel("Qué buscas").FillAsync("El Corte");
         await visitor.GetByRole(AriaRole.Button, new() { Name = "Buscar" }).ClickAsync();
         await Expect(visitor.GetByText("Barbería El Corte")).ToBeVisibleAsync();
         await visitor.GotoAsync($"{fixture.BaseUrl}/negocios/barberia-el-corte");

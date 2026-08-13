@@ -4,31 +4,38 @@
 @inject NavigationManager Navigation
 
 <PageTitle>Pedidos para recoger | UrabáConecta</PageTitle>
-<a class="back-link" href="/negocios/@Slug">← Volver al establecimiento</a>
+<a class="back-link" href="/negocios/@Slug">← Volver al negocio</a>
 @if (error is not null) { <div class="error" role="alert">@error</div> }
 @if (menu is null && error is null) { <p class="notice">Cargando menú…</p> }
 else if (menu is not null && created is null)
 {
-    <p class="eyebrow">@menu.BusinessName</p><h1>Pedido para recoger</h1><p>@menu.PublicMessage</p>
+    <div class="panel-header">
+        <p class="eyebrow">@menu.BusinessName</p><h1>Pedido para recoger</h1>
+        <p class="meta">@menu.PublicMessage</p>
+    </div>
     @foreach (var category in menu.Categories)
     {
-        <section><h2>@category.Name</h2><div class="card-grid">
+        <section class="bloque"><h2>@category.Name</h2><div class="card-grid">
         @foreach (var product in menu.Products.Where(x => x.CategoryId == category.Id))
         {
             <article class="service-card" data-testid="product-card">
-                <h3>@product.Name</h3><p>@product.Description</p>
-                <strong>@product.ReferencePrice.ToString("C0", Colombia)</strong>
-                <div class="actions">
-                    <button class="secondary" type="button" disabled="@(!Ready)" @onclick="() => Change(product.Id, -1)">−</button>
-                    <span data-testid="quantity">@Quantity(product.Id)</span>
-                    <button class="secondary" type="button" disabled="@(!Ready)" @onclick="() => Change(product.Id, 1)">+</button>
+                <h3>@product.Name</h3><p class="meta">@product.Description</p>
+                <p class="precio">@product.ReferencePrice.ToString("C0", Colombia)</p>
+                @* Antes los dos botones ocupaban el ancho de la tarjeta y la cantidad quedaba
+                   suelta entre ellos: un control de tres pisos para sumar una hamburguesa. *@
+                <div class="stepper">
+                    <button class="secondary" type="button" aria-label="Quitar uno de @product.Name"
+                            disabled="@(!Ready || Quantity(product.Id) == 0)" @onclick="() => Change(product.Id, -1)">−</button>
+                    <span class="cantidad" data-testid="quantity">@Quantity(product.Id)</span>
+                    <button class="secondary" type="button" aria-label="Agregar uno de @product.Name"
+                            disabled="@(!Ready)" @onclick="() => Change(product.Id, 1)">+</button>
                 </div>
             </article>
         }</div></section>
     }
     <section class="config-form">
         <h2>Tu pedido</h2>
-        <p><strong>@CartCount unidades · @CartTotal.ToString("C0", Colombia)</strong></p>
+        <p class="total-pedido"><span>@CartCount unidades</span><strong>@CartTotal.ToString("C0", Colombia)</strong></p>
         @* Al hidratar, el circuito crea una instancia nueva y vuelve a pedir menú y franjas: la
            lista prerenderizada desaparece durante ese segundo. Antes el formulario ya estaba
            habilitado en esa ventana, así que quien llegaba rápido encontraba el selector de hora
@@ -51,21 +58,26 @@ else if (menu is not null && created is null)
             <p class="meta">
                 Consulta la <a href="/legal/politica-de-datos" target="_blank">política de tratamiento de datos</a>
                 y el <a href="/legal/aviso-de-privacidad" target="_blank">aviso de privacidad</a>.
-                Se registra la versión @request.ConsentNoticeVersion y la fecha de tu aceptación.
+                Guardamos la fecha de tu aceptación y la versión vigente de la política.
             </p>
             <p class="meta">El pago se realiza directamente en el establecimiento. UrabáConecta no procesa pagos.</p>
             @if (!Ready) { <p class="notice" role="status">Preparando el formulario…</p> }
-            <button class="primary" disabled="@(!Ready || busy || CartCount == 0 || string.IsNullOrEmpty(selectedSlot))">@(busy ? "Enviando pedido…" : "Confirmar pedido")</button>
+            <button class="primary btn-grande" disabled="@(!Ready || busy || CartCount == 0 || string.IsNullOrEmpty(selectedSlot))">@(busy ? "Enviando pedido…" : "Confirmar pedido")</button>
             </fieldset>
         </EditForm>
     </section>
 }
 else if (created is not null)
 {
-    <section class="success narrow" data-testid="order-created">
-        <p class="eyebrow">Pedido recibido</p><h1>Pedido #@created.OrderNumber</h1>
-        <p>Total @created.Total.ToString("C0", Colombia). Guarda el enlace privado para consultar el estado.</p>
-        <a class="button-link" href="/seguimiento/pedidos/@created.TrackingCode">Seguir mi pedido</a>
+    @* Una confirmación tiene que decir qué pasó, cuánto es y qué sigue. "Operación exitosa" no
+       le sirve a nadie que esté esperando su comida. *@
+    <section class="narrow" data-testid="order-created">
+        <p class="eyebrow">@menu?.BusinessName</p>
+        <h1>Recibimos tu pedido #@created.OrderNumber</h1>
+        <p class="lead">Total a pagar: @created.Total.ToString("C0", Colombia). Pagas al recogerlo en el
+            establecimiento.</p>
+        <p>El negocio lo confirma y prepara. Guarda este enlace: con él sigues el estado sin crear cuenta.</p>
+        <a class="button-link btn-grande" href="/seguimiento/pedidos/@created.TrackingCode">Seguir mi pedido</a>
     </section>
 }
 

@@ -6,19 +6,26 @@
 @inject NavigationManager Navigation
 
 <PageTitle>Operación de turnos | UrabáConecta</PageTitle>
-<a class="back-link" href="/panel">← Establecimientos</a>
-<p class="eyebrow">Operación</p><h1>Turnos virtuales</h1>
+<a class="back-link" href="/panel">← Mis negocios</a>
+<div class="panel-header">
+    <p class="eyebrow">Operación</p><h1>Turnos virtuales</h1>
+    @if (data is not null) { <p class="operation-business" data-testid="business-name">@data.Definition.BusinessName</p> }
+</div>
 @if (error is not null) { <div class="error" role="alert">@error <button class="inline-button" @onclick="Load">Recargar</button></div> }
 @if (data is null && error is null) { <p class="notice">Cargando jornada…</p> }
 else if (data is not null)
 {
+    @* "Cerrar jornada" era el botón más llamativo de la pantalla, en rojo y a ancho completo, por
+       encima de la acción que de verdad se usa cada dos minutos. Ahora manda "Llamar siguiente" y
+       el cierre queda discreto, que es lo que corresponde a algo que se hace una vez al día. *@
     <section class="queue-toolbar">
-        <div><strong data-testid="business-name">@data.Definition.BusinessName</strong><br /><span>@data.Definition.Name · @SessionLabel(data.SessionStatus)</span></div>
+        <div><strong>@data.Definition.Name</strong>
+            <span class="status @data.SessionStatus.ToLowerInvariant()">@SessionLabel(data.SessionStatus)</span></div>
         <div class="actions">
-            <a class="secondary button-link" href="/panel/@BusinessId/configuracion/turnos">Configurar</a>
             @if (data.SessionStatus == "Closed") { <button class="primary" @onclick="Open" disabled="@(!interactiveReady || busy)">Abrir jornada</button> }
-            @if (data.SessionStatus == "Open") { <button class="secondary" @onclick="Pause" disabled="@(!interactiveReady || busy)">Pausar</button> }
             @if (data.SessionStatus == "Paused") { <button class="primary" @onclick="Resume" disabled="@(!interactiveReady || busy)">Reanudar</button> }
+            @if (data.SessionStatus == "Open") { <button class="secondary" @onclick="Pause" disabled="@(!interactiveReady || busy)">Pausar</button> }
+            <a class="secondary button-link" href="/panel/@BusinessId/configuracion/turnos">Configurar</a>
             @if (data.SessionStatus != "Closed") { <button class="danger" @onclick="Close" disabled="@(!interactiveReady || busy)">Cerrar jornada</button> }
         </div>
     </section>
@@ -49,7 +56,7 @@ else if (data is not null)
                     @if (ticket.Status == "Called") { <button class="secondary" disabled="@(!interactiveReady || busy)" @onclick="() => Recall(ticket)">Volver a llamar</button><button class="primary" disabled="@(!interactiveReady || busy)" @onclick="() => Start(ticket)">Iniciar atención</button><button class="secondary" disabled="@(!interactiveReady || busy)" @onclick="() => Skip(ticket)">No se presentó</button> }
                     @if (ticket.Status == "InService") { <button class="primary" disabled="@(!interactiveReady || busy)" @onclick="() => Complete(ticket)">Completar</button> }
                     @if (ticket.Status == "Skipped" && ticket.RestoreCount == 0) { <button class="secondary" disabled="@(!interactiveReady || busy)" @onclick="() => Restore(ticket)">Devolver a espera</button> }
-                    @if (ticket.Status is "Waiting" or "Called" or "InService" or "Skipped") { <button class="danger" disabled="@(!interactiveReady || busy)" @onclick="() => Cancel(ticket)">Cancelar</button> }
+                    @if (ticket.Status is "Waiting" or "Called" or "InService" or "Skipped") { <button class="tertiary" disabled="@(!interactiveReady || busy)" @onclick="() => Cancel(ticket)">Cancelar</button> }
                 </div>
             </article>
         }

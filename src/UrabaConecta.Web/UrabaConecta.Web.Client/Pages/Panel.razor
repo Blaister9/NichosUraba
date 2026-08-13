@@ -7,9 +7,11 @@
 @inject PersistentComponentState PanelState
 
 <PageTitle>Panel | UrabáConecta</PageTitle>
-<p class="eyebrow">Área privada</p>
-<div class="title-actions">
-    <h1>Mis negocios</h1>
+<div class="title-actions panel-header">
+    <div>
+        <p class="eyebrow">Panel</p>
+        <h1>Mis negocios</h1>
+    </div>
     @* La socia entra aquí a trabajar. Su acción principal no puede estar escondida detrás de
        "Administración" en la barra superior: vive en su propia pantalla, siempre visible. *@
     @if (isOperator && managed is { Count: > 0 })

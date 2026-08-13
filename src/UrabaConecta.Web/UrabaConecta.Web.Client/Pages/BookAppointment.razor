@@ -3,8 +3,15 @@
 @inject IUrabaConectaApi Api
 @inject NavigationManager Navigation
 
-<PageTitle>Solicitar cita | UrabáConecta</PageTitle>
-<a class="back-link" href="/negocios/@Slug">← Volver al establecimiento</a><h1>Solicitar una cita</h1>
+<PageTitle>Reservar cita | UrabáConecta</PageTitle>
+<a class="back-link" href="/negocios/@Slug">← Volver al negocio</a>
+@* Quien llega por un enlace directo tiene que ver de qué negocio es esta agenda antes de escribir
+   su teléfono. Antes el título no lo decía en ninguna parte. *@
+<div class="panel-header">
+    @if (business is not null) { <p class="eyebrow">@business.Name</p> }
+    <h1>Solicitar una cita</h1>
+    <p class="meta">Elige el servicio y la hora. El negocio te confirma; no se paga en línea.</p>
+</div>
 @if (business is null) { <p class="notice">Cargando servicios…</p> }
 else
 {
@@ -18,13 +25,21 @@ else
             </InputSelect></label>
             <label>Fecha<input type="date" value="@dateText" @oninput="e => dateText = e.Value?.ToString() ?? string.Empty" min="@DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd")" /></label>
             <button type="button" class="secondary" @onclick="LoadSlots" disabled="@(!interactiveReady || loadingSlots)">@(loadingSlots ? "Consultando…" : "Ver horas disponibles")</button>
-            @if (slots is not null && slots.Count == 0) { <p class="notice">No hay horas disponibles para esa fecha.</p> }
+            @if (slots is not null && slots.Count == 0) { <p class="notice">No hay horas disponibles para esa fecha. Prueba otro día.</p> }
             else if (slots is not null)
             {
-                <div class="slot-grid" role="radiogroup" aria-label="Horas disponibles">
-                    @foreach (var slot in slots)
-                    { <button type="button" class="slot @(request.Start == slot.Start ? "selected" : "")" @onclick="() => request.Start = slot.Start">@LocalTime(slot.Start)</button> }
-                </div>
+                @* Cuarenta botones seguidos no se leen. Partidos en mañana, tarde y noche, el
+                   cliente encuentra su franja de un vistazo. *@
+                @foreach (var (titulo, horas) in Franjas(slots))
+                {
+                    <div>
+                        <p class="franja">@titulo</p>
+                        <div class="slot-grid" role="radiogroup" aria-label="Horas disponibles en la @titulo.ToLowerInvariant()">
+                            @foreach (var slot in horas)
+                            { <button type="button" class="slot @(request.Start == slot.Start ? "selected" : "")" @onclick="() => request.Start = slot.Start">@LocalTime(slot.Start)</button> }
+                        </div>
+                    </div>
+                }
             }
         </fieldset>
         <fieldset><legend>2. Sus datos</legend>
@@ -37,16 +52,16 @@ else
             <p class="meta">
                 Consulta la <a href="/legal/politica-de-datos" target="_blank">política de tratamiento de datos</a>
                 y el <a href="/legal/aviso-de-privacidad" target="_blank">aviso de privacidad</a>.
-                Se registra la versión @request.ConsentNoticeVersion y la fecha de tu aceptación.
+                Guardamos la fecha de tu aceptación y la versión vigente de la política.
             </p>
         </fieldset>
-        <fieldset><legend>4. Valor y adelanto</legend>
+        <fieldset><legend>4. Cuánto cuesta</legend>
             @if (Selected is null) { <p class="notice" role="status">Calculando adelanto… seleccione un servicio.</p> }
             else
             {
                 <dl class="details" data-testid="deposit-summary">
                     <dt>Precio total</dt><dd>@Selected.ReferencePrice.ToString("C0", Colombia)</dd>
-                    <dt>¿Requiere adelanto?</dt><dd>@(Selected.RequiresDeposit ? "Sí" : "No")</dd>
+                    <dt>Adelanto</dt><dd>@(Selected.RequiresDeposit ? "Sí, este servicio pide adelanto" : "No, pagas todo en el establecimiento")</dd>
                     @if (Selected.RequiresDeposit)
                     {
                         <dt>Tipo</dt>
@@ -65,7 +80,7 @@ else
             }
         </fieldset>
         @if (error is not null) { <p class="error" role="alert">@error</p> }
-        <button class="primary" disabled="@(!interactiveReady || loadingSlots || submitting)">@(submitting ? "Creando cita…" : "Enviar solicitud")</button>
+        <button class="primary btn-grande" disabled="@(!interactiveReady || loadingSlots || submitting)">@(submitting ? "Creando cita…" : "Enviar solicitud")</button>
         </fieldset>
     </EditForm>
 }
@@ -132,4 +147,20 @@ else
     }
     private static string LocalTime(DateTimeOffset value) =>
         TimeZoneInfo.ConvertTime(value, TimeZoneInfo.FindSystemTimeZoneById("America/Bogota")).ToString("hh:mm tt");
+
+    /// <summary>
+    /// Agrupa las horas disponibles por momento del día. Sólo cambia cómo se presentan: las horas y
+    /// su orden son exactamente las que devolvió el servidor.
+    /// </summary>
+    private static IEnumerable<(string Titulo, List<SlotDto> Horas)> Franjas(List<SlotDto> disponibles)
+    {
+        static int HoraLocal(DateTimeOffset value) =>
+            TimeZoneInfo.ConvertTime(value, TimeZoneInfo.FindSystemTimeZoneById("America/Bogota")).Hour;
+        var manana = disponibles.Where(x => HoraLocal(x.Start) < 12).ToList();
+        var tarde = disponibles.Where(x => HoraLocal(x.Start) is >= 12 and < 18).ToList();
+        var noche = disponibles.Where(x => HoraLocal(x.Start) >= 18).ToList();
+        if (manana.Count > 0) yield return ("Mañana", manana);
+        if (tarde.Count > 0) yield return ("Tarde", tarde);
+        if (noche.Count > 0) yield return ("Noche", noche);
+    }
 }

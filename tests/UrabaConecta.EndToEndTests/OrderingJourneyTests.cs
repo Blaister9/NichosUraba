@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using UrabaConecta.Infrastructure.Persistence;
 
@@ -20,7 +21,10 @@ public sealed class OrderingJourneyTests(BrowserFixture fixture) : IClassFixture
 
         // 2. Menú por categorías y carrito recalculado.
         await Expect(visitor.GetByRole(AriaRole.Heading, new() { Name = "Hamburguesas" })).ToBeVisibleAsync();
-        await visitor.Locator("[data-testid=product-card]").First.GetByRole(AriaRole.Button, new() { Name = "+" }).ClickAsync();
+        // El contador dejó de ser dos botones rotulados "+" y "−": ahora cada uno dice de qué
+        // producto habla, así que el nombre accesible es "Agregar uno de …".
+        await visitor.Locator("[data-testid=product-card]").First
+            .GetByRole(AriaRole.Button, new() { NameRegex = new Regex("^Agregar uno de ") }).ClickAsync();
         await Expect(visitor.GetByText("1 unidades")).ToBeVisibleAsync();
 
         // 3. Datos mínimos, consentimiento y franja.
