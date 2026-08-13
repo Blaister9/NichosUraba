@@ -20,9 +20,9 @@
             <div>
                 <p class="ficha-meta">
                     <span class="tag">@Profile.Category.Name</span>
-                    @if (Profile.OpenStatus is { Length: > 0 } estado)
+                    @if (Profile.OpenStatus is { Length: > 0 })
                     {
-                        <span class="@(EstaAbierto ? "abierto" : "cerrado")">@estado ahora</span>
+                        <span class="@(EstaAbierto ? "abierto" : "cerrado")">@EstadoTexto</span>
                     }
                 </p>
                 <h1>@Profile.Name</h1>
@@ -183,6 +183,14 @@
 
     /// <summary>El estado ya viene resuelto por el servidor; aquí sólo se decide cómo se pinta.</summary>
     private bool EstaAbierto => Profile.OpenStatus?.StartsWith("Abierto", StringComparison.OrdinalIgnoreCase) == true;
+
+    /// <summary>
+    /// "Abierto" y "Cerrado" a secas se leen mejor con el "ahora". El estado largo —"Cerrado
+    /// temporalmente · abre a las 8:00 a. m."— ya dice cuándo, y añadírselo lo dejaba en
+    /// "…abre a las 8:00 a. m. ahora".
+    /// </summary>
+    private string EstadoTexto => Profile.OpenStatus is "Abierto" or "Cerrado"
+        ? $"{Profile.OpenStatus} ahora" : Profile.OpenStatus ?? "";
 
     /// <summary>
     /// Muchos negocios repiten la descripción corta en la larga. Mostrar las dos deja la ficha

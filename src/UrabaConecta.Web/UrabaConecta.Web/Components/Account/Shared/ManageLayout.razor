@@ -1,17 +1,15 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 @layout UrabaConecta.Web.Client.Layout.MainLayout
 
-<h1>Manage your account</h1>
-
-<div>
-    <h2>Change your account settings</h2>
-    <hr />
-    <div class="row">
-        <div class="col-lg-3">
-            <ManageNavMenu />
-        </div>
-        <div class="col-lg-9">
-            @Body
-        </div>
-    </div>
+@* "Cuenta" es un enlace del encabezado, así que un demo llega aquí en un clic. Estaba tal como lo
+   dejó el andamiaje de Identity: en inglés y con clases de Bootstrap que este producto no carga. *@
+<a class="back-link" href="/panel">← Mis negocios</a>
+<div class="panel-header">
+    <p class="eyebrow">Tu acceso</p>
+    <h1>Mi cuenta</h1>
+    <p class="meta">Tus datos de ingreso. No son los datos públicos del negocio: ésos viven en su
+        configuración.</p>
 </div>
+
+<ManageNavMenu />
+<div class="config-form">@Body</div>

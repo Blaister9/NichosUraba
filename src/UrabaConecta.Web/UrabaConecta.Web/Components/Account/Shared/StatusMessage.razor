@@ -1,9 +1,11 @@
-﻿@if (!string.IsNullOrEmpty(DisplayMessage))
+﻿@* alert/alert-danger venían de Bootstrap, que este producto no carga: el aviso salía como texto
+   plano, sin distinguir un error de una confirmación. *@
+@if (!string.IsNullOrEmpty(DisplayMessage))
 {
-    var statusMessageClass = DisplayMessage.StartsWith("Error") ? "danger" : "success";
-    <div class="alert alert-@statusMessageClass" role="alert">
+    var esError = DisplayMessage.StartsWith("Error");
+    <p class="@(esError ? "error" : "success")" role="@(esError ? "alert" : "status")">
         @DisplayMessage
-    </div>
+    </p>
 }
 
 @code {

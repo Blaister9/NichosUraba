@@ -8,29 +8,25 @@
 @inject SignInManager<ApplicationUser> SignInManager
 @inject IdentityRedirectManager RedirectManager
 
-<PageTitle>Profile</PageTitle>
+<PageTitle>Datos de ingreso | UrabáConecta</PageTitle>
 
-<h3>Profile</h3>
+<h2>Datos de ingreso</h2>
 <StatusMessage />
 
-<div class="row">
-    <div class="col-xl-6">
-        <EditForm Model="Input" FormName="profile" OnValidSubmit="OnValidSubmitAsync" method="post">
-            <DataAnnotationsValidator />
-            <ValidationSummary class="text-danger" role="alert" />
-            <div class="form-floating mb-3">
-                <input type="text" value="@username" id="username" class="form-control" placeholder="Choose your username." disabled />
-                <label for="username" class="form-label">Username</label>
-            </div>
-            <div class="form-floating mb-3">
-                <InputText @bind-Value="Input.PhoneNumber" id="Input.PhoneNumber" class="form-control" placeholder="Enter your phone number" />
-                <label for="Input.PhoneNumber" class="form-label">Phone number</label>
-                <ValidationMessage For="() => Input.PhoneNumber" class="text-danger" />
-            </div>
-            <button type="submit" class="w-100 btn btn-lg btn-primary">Save</button>
-        </EditForm>
-    </div>
-</div>
+<EditForm Model="Input" FormName="profile" OnValidSubmit="OnValidSubmitAsync" method="post">
+    <DataAnnotationsValidator />
+    <ValidationSummary role="alert" />
+    <label>Correo con el que ingresas
+        <input type="text" value="@username" id="username" disabled />
+        <span class="field-hint">Lo asigna la administración. Escríbenos si necesitas cambiarlo.</span>
+    </label>
+    <label>Teléfono de contacto
+        <InputText @bind-Value="Input.PhoneNumber" id="Input.PhoneNumber" inputmode="tel" autocomplete="tel" />
+        <span class="field-hint">Es para que la plataforma te ubique. No aparece en tu ficha pública.</span>
+        <ValidationMessage For="() => Input.PhoneNumber" />
+    </label>
+    <button type="submit" class="primary">Guardar cambios</button>
+</EditForm>
 
 @code {
     private ApplicationUser? user;
@@ -73,19 +69,19 @@
             var setPhoneResult = await UserManager.SetPhoneNumberAsync(user, Input.PhoneNumber);
             if (!setPhoneResult.Succeeded)
             {
-                RedirectManager.RedirectToCurrentPageWithStatus("Error: Failed to set phone number.", HttpContext);
+                RedirectManager.RedirectToCurrentPageWithStatus("Error: no pudimos guardar el teléfono.", HttpContext);
                 return;
             }
         }
 
         await SignInManager.RefreshSignInAsync(user);
-        RedirectManager.RedirectToCurrentPageWithStatus("Your profile has been updated", HttpContext);
+        RedirectManager.RedirectToCurrentPageWithStatus("Guardamos tu teléfono de contacto.", HttpContext);
     }
 
     private sealed class InputModel
     {
-        [Phone]
-        [Display(Name = "Phone number")]
+        [Phone(ErrorMessage = "Escribe un teléfono válido.")]
+        [Display(Name = "Teléfono de contacto")]
         public string? PhoneNumber { get; set; }
     }
 }

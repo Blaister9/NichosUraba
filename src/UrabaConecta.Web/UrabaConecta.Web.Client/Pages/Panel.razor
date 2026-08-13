@@ -65,9 +65,9 @@ else
                                 <ul class="pending-list" data-testid="negocio-faltantes">
                                     @foreach (var item in faltantes) { <li>@item</li> }
                                 </ul>
-                                @if (MissingCount(business) > faltantes.Count)
+                                @if (MissingCount(business) - faltantes.Count is > 0 and var restantes)
                                 {
-                                    <p class="meta">y @(MissingCount(business) - faltantes.Count) requisito(s) más.</p>
+                                    <p class="meta">y @restantes @(restantes == 1 ? "requisito más" : "requisitos más").</p>
                                 }
                             }
                             else if (business.IsReady && BusinessStatusText.IsInPreparation(business.Status))

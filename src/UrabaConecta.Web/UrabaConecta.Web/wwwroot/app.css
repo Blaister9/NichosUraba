@@ -714,9 +714,19 @@ progress::-moz-progress-bar { background: var(--marca-700); border-radius: var(-
 /* =============================================================================================
    Móvil — 375-430 px es el ancho comercial de referencia
    ============================================================================================= */
+/* Con la rejilla de filtros a varias columnas, el botón heredaba una columna entera y quedaba tan
+   ancho como el campo de búsqueda. En una sola columna sí ocupa todo, que es lo que se toca. */
+@media (min-width: 901px) {
+    .search-panel > button, .filters > button { max-width: 11rem }
+}
+
 @media (max-width: 900px) {
-    .config-grid, .form-grid, .hours-editor, .team-create-grid, .two-columns, .filters,
-    .search-panel { grid-template-columns: 1fr }
+    .config-grid, .form-grid, .hours-editor, .team-create-grid, .two-columns, .filters
+        { grid-template-columns: 1fr }
+    /* En tableta todavía caben dos columnas de filtros; apilarlos ahí regalaba media pantalla
+       antes del primer negocio. */
+    .search-panel { grid-template-columns: 1fr 1fr }
+    .search-panel > label:first-child { grid-column: 1 / -1 }
     .permission-set { grid-template-columns: repeat(2, minmax(0, 1fr)) }
 }
 
@@ -734,7 +744,7 @@ progress::-moz-progress-bar { background: var(--marca-700); border-radius: var(-
 
     .hero-home { padding: var(--e4) var(--e4) var(--e5); margin-inline: calc(var(--e4) * -1) ;
         border-radius: 0 }
-    .search-panel { padding: var(--e3); gap: var(--e2) }
+    .search-panel { grid-template-columns: 1fr; padding: var(--e3); gap: var(--e2) }
     .search-panel button { margin-top: .2rem }
     .capability-grid { grid-template-columns: 1fr; gap: .5rem }
     .capability-grid div { padding: .8rem 1rem }
