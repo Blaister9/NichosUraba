@@ -110,6 +110,45 @@ public sealed partial class ConfigurationApiTests(PostgresWebFactory factory) : 
         });
     }
 
+    /// <summary>
+    /// El fallo que dejó a Studio Laura sin horas: un servicio activo, con horario comercial y con
+    /// una duración que cabe en la jornada, no ofrece ni una hora mientras nadie lo preste. El
+    /// motor lo resuelve en silencio devolviendo una lista vacía, así que la única señal es esta.
+    /// </summary>
+    [Fact]
+    public async Task An_active_service_that_nobody_provides_offers_no_hours_until_staff_is_assigned()
+    {
+        using var owner = factory.CreateClient(new() { AllowAutoRedirect = false, HandleCookies = true });
+        using var visitor = factory.CreateClient();
+        await Login(owner, DevelopmentSeeder.BellaOwnerEmail);
+
+        var service = (await (await owner.PostAsJsonAsync(
+            $"/api/v1/businesses/{DevelopmentSeeder.BellaBusinessId}/services",
+            new CreateServiceRequest { Name = $"Sin personal {Guid.NewGuid():N}"[..24], DurationMinutes = 60,
+                ReferencePrice = 60000 }, Json)).Content.ReadFromJsonAsync<ServiceDto>(Json))!;
+
+        var date = NextMonday(21);
+        var slotsUrl = "/api/v1/public/businesses/salon-bella-uraba/appointment-slots" +
+                       $"?serviceId={service.Id}&date={date:yyyy-MM-dd}";
+        var sinPersonal = await visitor.GetFromJsonAsync<SlotListDto>(slotsUrl, Json);
+        Assert.Empty(sinPersonal!.Slots);
+        // El día está abierto: lo que falta no es el horario.
+        var hours = await owner.GetFromJsonAsync<List<BusinessHourAdminDto>>(
+            $"/api/v1/businesses/{DevelopmentSeeder.BellaBusinessId}/hours", Json);
+        Assert.Contains(hours!, x => x.Day == DayOfWeek.Monday && x.OpensAt < x.ClosesAt);
+
+        Assert.Equal(HttpStatusCode.Created, (await owner.PostAsJsonAsync(
+            $"/api/v1/businesses/{DevelopmentSeeder.BellaBusinessId}/staff",
+            new SaveStaffMemberRequest { DisplayName = $"Quien lo presta {Guid.NewGuid():N}"[..24],
+                IsActive = true, ParticipatesInAvailability = true, ServiceIds = [service.Id] }, Json)).StatusCode);
+
+        var conPersonal = await visitor.GetFromJsonAsync<SlotListDto>(slotsUrl, Json);
+        Assert.NotEmpty(conPersonal!.Slots);
+        Assert.Equal("America/Bogota", conPersonal.BusinessTimeZone);
+        // La duración del servicio manda: cada hora ofrecida deja sitio para los sesenta minutos.
+        Assert.All(conPersonal.Slots, slot => Assert.Equal(60, (slot.End - slot.Start).TotalMinutes));
+    }
+
     [Fact]
     public async Task Configuration_authorization_matrix_blocks_cross_business_and_unprivileged_users()
     {

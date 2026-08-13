@@ -10,12 +10,27 @@ using UrabaConecta.Infrastructure.Identity;
 namespace UrabaConecta.Infrastructure.Persistence;
 
 /// <summary>
-/// Recuperación excepcional y de una sola ejecución para la cuenta administrativa de Demo.
-/// No expone endpoints ni registra la contraseña.
+/// Recuperación excepcional para la cuenta administrativa de Demo. No expone endpoints ni
+/// registra la contraseña.
+///
+/// Se ejecuta una sola vez <b>por señal</b>, no una sola vez en la vida del ambiente. Dejar la
+/// variable puesta no repone la contraseña en cada despliegue —que es lo que la guarda evita—,
+/// pero perder el acceso tampoco deja la demostración sin puerta de entrada para siempre: se
+/// declara una señal nueva en <c>DemoBootstrap__Token</c> y la recuperación vuelve a correr una
+/// vez. Cada ejecución añade su propia entrada de auditoría; ninguna borra la anterior, así que el
+/// rastro de quién reinició el acceso y cuándo se conserva completo.
 /// </summary>
 public static class DemoAdminBootstrap
 {
     public const string ExpectedAdminEmail = "admin@urabaconecta.demo";
+    public const string TokenKey = "DemoBootstrap:Token";
+    private const string DefaultToken = "inicial";
+
+    /// <summary>
+    /// Marca que se guarda en el resumen auditado. La señal es una etiqueta operativa, nunca la
+    /// contraseña: sirve para distinguir una recuperación de la siguiente.
+    /// </summary>
+    private static string Marker(string token) => $"[señal:{token}]";
 
     public static async Task BootstrapDemoAdminAsync(this IServiceProvider services,
         IHostEnvironment environment, IConfiguration? configuration = null,
@@ -28,13 +43,16 @@ public static class DemoAdminBootstrap
 
         await using var scope = services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var token = configuration[TokenKey]?.Trim() is { Length: > 0 } declared ? declared : DefaultToken;
+        var marker = Marker(token);
         if (await db.PlatformAccessAudits.AnyAsync(
-                x => x.Action == PlatformAccessAction.DemoAdministratorBootstrap, cancellationToken))
+                x => x.Action == PlatformAccessAction.DemoAdministratorBootstrap &&
+                     x.Summary.Contains(marker), cancellationToken))
             return;
 
         var email = configuration["DemoBootstrap:AdminEmail"]?.Trim();
         var password = configuration["DemoBootstrap:AdminPassword"];
-        Validate(email, password);
+        Validate(email, password, token);
 
         var roles = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
         if (!await roles.RoleExistsAsync("PlatformAdmin"))
@@ -60,8 +78,8 @@ public static class DemoAdminBootstrap
         }
         else
         {
-            var token = await users.GeneratePasswordResetTokenAsync(admin);
-            EnsureSucceeded(await users.ResetPasswordAsync(admin, token, password!));
+            var reset = await users.GeneratePasswordResetTokenAsync(admin);
+            EnsureSucceeded(await users.ResetPasswordAsync(admin, reset, password!));
             admin.EmailConfirmed = true;
             admin.MustChangePassword = true;
             EnsureSucceeded(await users.UpdateAsync(admin));
@@ -75,7 +93,7 @@ public static class DemoAdminBootstrap
 
         db.PlatformAccessAudits.Add(new PlatformAccessAudit(Guid.NewGuid(), admin.Id,
             PlatformAccessAction.DemoAdministratorBootstrap, nameof(ApplicationUser), admin.Id.ToString(),
-            null, "Se normalizó una vez el acceso administrativo del ambiente Demo.", null,
+            null, $"Se normalizó el acceso administrativo del ambiente Demo. {marker}", null,
             DateTimeOffset.UtcNow));
         await db.SaveChangesAsync(cancellationToken);
 
@@ -83,11 +101,16 @@ public static class DemoAdminBootstrap
             .LogWarning("Se realizó el reinicio administrativo de una sola ejecución para Demo.");
     }
 
-    private static void Validate(string? email, string? password)
+    private static void Validate(string? email, string? password, string token)
     {
         if (!string.Equals(email, ExpectedAdminEmail, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException(
                 $"DemoBootstrap__AdminEmail debe ser {ExpectedAdminEmail}.");
+        // La señal viaja a una columna de 400 caracteres y se busca por coincidencia parcial: se
+        // acota a una etiqueta corta y sin corchetes, que son los delimitadores de la marca.
+        if (token.Length > 40 || token.Contains('[') || token.Contains(']'))
+            throw new InvalidOperationException(
+                "DemoBootstrap__Token debe ser una etiqueta corta, sin corchetes.");
         if (password is null || password.Length < 16 ||
             !password.Any(char.IsUpper) || !password.Any(char.IsLower) ||
             !password.Any(char.IsDigit) || password.All(char.IsLetterOrDigit) ||

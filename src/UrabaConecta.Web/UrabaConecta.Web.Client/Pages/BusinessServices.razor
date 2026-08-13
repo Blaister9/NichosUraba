@@ -75,6 +75,16 @@ else
                     <div><div class="row-title"><h2>@service.Name</h2><span class="status @(service.IsActive ? "confirmed" : "cancelled")">@(service.IsActive ? "Activo" : "Inactivo")</span></div>
                         @if (!string.IsNullOrWhiteSpace(service.Description)) { <p>@service.Description</p> }
                         <p class="meta">@service.DurationMinutes min · @service.ReferencePrice.ToString("C0", Colombia) · orden @service.DisplayOrder · @service.FutureAppointmentCount cita(s) futura(s)</p>
+                        @* Sin alguien que lo preste, un servicio activo no produce ni una hora, y
+                           el cliente sólo ve "No hay horas disponibles". El aviso vive aquí porque
+                           es aquí donde se cree haber terminado de publicar el servicio. *@
+                        @if (service.IsActive && !TienePersonal(service.Id))
+                        {
+                            <p class="error" role="status" data-testid="service-sin-personal">
+                                Nadie tiene asignado este servicio, así que no ofrece horas para reservar.
+                                Asígnelo en <a href="/panel/@BusinessId/configuracion/personal">Personal</a>.
+                            </p>
+                        }
                         <p class="meta" data-testid="service-deposit">
                             @if (service.RequiresDeposit)
                             {
@@ -101,6 +111,7 @@ else
     private static readonly System.Globalization.CultureInfo Colombia = new("es-CO");
     [Parameter] public Guid BusinessId { get; set; }
     private IReadOnlyList<ServiceDto> services = [];
+    private IReadOnlyList<StaffMemberDto> staff = [];
     private ServiceForm form = new();
     private Guid? editingId;
     private bool loading = true, saving, interactiveReady;
@@ -112,10 +123,23 @@ else
     private async Task Load()
     {
         loading = true; error = null;
-        try { services = await Api.GetServicesAsync(BusinessId); }
+        try
+        {
+            // Secuencial: con InteractiveServer las dos llamadas comparten el AppDbContext del
+            // circuito y en paralelo lanzarían InvalidOperationException.
+            services = await Api.GetServicesAsync(BusinessId);
+            staff = await Api.GetStaffAsync(BusinessId);
+        }
         catch (ApiException ex) { error = Friendly(ex); }
         finally { loading = false; }
     }
+
+    /// <summary>
+    /// Si alguien activo y que participa en la agenda presta el servicio. Es la misma condición que
+    /// exige el motor de disponibilidad, así que responde lo que el cliente verá.
+    /// </summary>
+    private bool TienePersonal(Guid serviceId) => staff.Any(x =>
+        x.IsActive && x.ParticipatesInAvailability && x.ServiceIds.Contains(serviceId));
     private void Edit(ServiceDto service)
     {
         editingId = service.Id;

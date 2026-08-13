@@ -25,7 +25,10 @@
 <main class="page-shell">@Body</main>
 <footer>
     <p><strong>UrabáConecta</strong> · Apartadó · Carepa · Chigorodó · Turbo</p>
-    <p>Demostración con negocios y datos ficticios.</p>
+    @* El aviso se escribe siempre y lo muestra el CSS sólo en los ambientes de demostración: la
+       marca del ambiente la pone el servidor en <body>, así que la línea no puede quedarse pegada
+       en Production, donde los negocios y las citas son reales. *@
+    <p class="aviso-demostracion">Demostración con negocios y datos ficticios.</p>
     <nav aria-label="Información legal">
         <a href="/legal/politica-de-datos">Política de datos</a>
         <a href="/legal/aviso-de-privacidad">Aviso de privacidad</a>

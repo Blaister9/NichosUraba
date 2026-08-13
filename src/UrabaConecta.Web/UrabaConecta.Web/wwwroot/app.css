@@ -131,6 +131,11 @@ footer {
 }
 footer nav { display: flex; flex-wrap: wrap; gap: .4rem 1rem; justify-content: center; margin-top: .6rem }
 footer a { color: var(--texto-suave) }
+/* El aviso de demostración se oculta por omisión y sólo reaparece donde los datos son ficticios.
+   Al depender del ambiente que marca el servidor, olvidarlo en Production es imposible. */
+.aviso-demostracion { display: none }
+body[data-ambiente="Demo"] .aviso-demostracion,
+body[data-ambiente="Development"] .aviso-demostracion { display: block }
 
 /* --- Tipografía --------------------------------------------------------------------------- */
 h1 {
@@ -731,14 +736,14 @@ progress::-moz-progress-bar { background: var(--marca-700); border-radius: var(-
 }
 
 @media (max-width: 720px) {
-    .site-header { padding: .5rem var(--e4); gap: .35rem }
+    /* La barra ya no es una tira que se desplaza. Desplazarla dejaba el último enlace cortado
+       contra el borde sin ningún indicio de que hubiera más, y en una pantalla táctil ese gesto
+       compite con el desplazamiento de la página. Ahora los enlaces que no caben junto al
+       logotipo bajan a una línea propia: la barra crece, pero se lee entera. */
+    .site-header { padding: .5rem var(--e4); gap: .35rem; flex-wrap: wrap }
     .brand { font-size: .98rem; gap: .4rem }
     .brand span { width: 1.75rem; height: 1.75rem; font-size: .85rem }
-    /* flex:0 1 auto con inicio a la izquierda: cuando los enlaces caben, el space-between del
-       encabezado los deja a la derecha; cuando no caben, el desplazamiento empieza por el primero
-       en vez de esconderlo. */
-    .site-header nav { overflow-x: auto; scrollbar-width: none; justify-content: flex-start; flex: 0 1 auto }
-    .site-header nav::-webkit-scrollbar { display: none }
+    .site-header nav { flex: 1 1 auto; flex-wrap: wrap; justify-content: flex-end; gap: .15rem }
     .site-header nav a { padding: .4rem .45rem; font-size: .86rem }
     .page-shell { padding: var(--e4) var(--e4) var(--e6) }
 

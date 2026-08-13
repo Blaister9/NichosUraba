@@ -11,7 +11,7 @@
     <HeadOutlet @rendermode="PageRenderMode" />
 </head>
 
-<body>
+<body data-ambiente="@Environment.EnvironmentName">
     <Routes @rendermode="PageRenderMode" />
     <ReconnectModal />
     <script src="@Assets["_framework/blazor.web.js"]"></script>
@@ -19,6 +19,8 @@
 </body>
 
 </html>
+
+@inject IWebHostEnvironment Environment
 
 @code {
     [CascadingParameter]
