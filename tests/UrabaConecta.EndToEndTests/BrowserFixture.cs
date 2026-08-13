@@ -65,11 +65,25 @@ public sealed class BrowserFixture : IAsyncLifetime
     /// <summary>Últimas líneas del registro de la aplicación, para diagnosticar un fallo del servidor.</summary>
     public string RecentLog => string.Join(Environment.NewLine, _log);
 
+    /// <summary>
+    /// Cuántas veces aparece un fragmento en el registro. Sirve para contar sentencias SQL de una
+    /// carga real de página: es la única forma de observar juntas las dos fases de InteractiveServer
+    /// —prerender y circuito—, que desde una prueba de integración no se pueden provocar a la vez.
+    /// </summary>
+    public int CountInLog(string needle)
+    {
+        var total = 0;
+        foreach (var line in _log) if (line.Contains(needle, StringComparison.Ordinal)) total++;
+        return total;
+    }
+
     private void Capture(string? line)
     {
         if (line is null) return;
         _log.Enqueue(line);
-        while (_log.Count > 400) _log.TryDequeue(out _);
+        // Holgado a propósito: una carga de /panel escribe cientos de líneas y el conteo de
+        // sentencias dejaría de ser fiable si el registro se recortara a mitad de la medición.
+        while (_log.Count > 20000) _log.TryDequeue(out _);
     }
 
     public async Task DisposeAsync()

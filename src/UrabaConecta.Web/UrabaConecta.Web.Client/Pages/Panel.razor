@@ -1,8 +1,10 @@
 @page "/panel"
 @rendermode InteractiveServer
 @attribute [Authorize]
+@implements IDisposable
 @inject IUrabaConectaApi Api
 @inject AuthenticationStateProvider AuthenticationState
+@inject PersistentComponentState PanelState
 
 <PageTitle>Panel | UrabáConecta</PageTitle>
 <p class="eyebrow">Área privada</p>
@@ -166,6 +168,14 @@ else
 
     private enum DashboardState { Loading, Loaded, Error }
 
+    /// <summary>
+    /// El resumen que el prerender deja escrito en la página para que el circuito no lo vuelva a
+    /// pedir. Es exactamente el mismo DTO que ya se está pintando: no viaja nada que la persona no
+    /// tenga delante, ni identificadores de sesión, ni datos de clientes.
+    /// </summary>
+    private const string DashboardStateKey = "panel.resumen-operativo";
+    private PersistingComponentStateSubscription persistence;
+
     private OwnerDashboardSummaryDto? SummaryOf(Guid businessId)
         => summaries.GetValueOrDefault(businessId);
 
@@ -174,6 +184,9 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        // Se registra antes de cargar nada: el guardado ocurre al terminar el prerender, así que la
+        // suscripción tiene que existir aunque la carga falle.
+        persistence = PanelState.RegisterOnPersisting(PersistDashboard);
         var user = (await AuthenticationState.GetAuthenticationStateAsync()).User;
         isOperator = user.IsInRole("PartnerOperator") || user.IsInRole("PlatformAdmin");
         try
@@ -191,9 +204,35 @@ else
         }
         finally { loading = false; }
 
-        if (memberships is { Count: > 0 }) await LoadDashboardAsync();
-        else dashboard = DashboardState.Loaded;
+        if (memberships is not { Count: > 0 }) { dashboard = DashboardState.Loaded; return; }
+
+        // InteractiveServer inicializa el componente dos veces: una al prerenderizar el HTML y otra
+        // al abrir el circuito. Sin esto, el resumen se resolvía entero las dos veces y la mitad del
+        // trabajo del pipeline se iba en repetir lo que la página ya tenía delante.
+        if (PanelState.TryTakeFromJson<OwnerDashboardSummaryDto[]>(DashboardStateKey, out var prerenderizado)
+            && prerenderizado is not null)
+        {
+            summaries = prerenderizado.ToDictionary(x => x.BusinessId);
+            dashboard = DashboardState.Loaded;
+            return;
+        }
+
+        await LoadDashboardAsync();
     }
+
+    /// <summary>
+    /// Guarda el resumen del prerender para que el circuito lo reciba hecho. Sólo viaja un resultado
+    /// bueno: persistir un fallo dejaría al circuito heredando el error sin haberlo intentado nunca,
+    /// y una caída pasajera del prerender se volvería permanente hasta recargar.
+    /// </summary>
+    private Task PersistDashboard()
+    {
+        if (dashboard == DashboardState.Loaded)
+            PanelState.PersistAsJson(DashboardStateKey, summaries.Values.ToArray());
+        return Task.CompletedTask;
+    }
+
+    public void Dispose() => persistence.Dispose();
 
     /// <summary>
     /// Una sola llamada para todos los negocios. Si falla, la página sigue siendo utilizable: se

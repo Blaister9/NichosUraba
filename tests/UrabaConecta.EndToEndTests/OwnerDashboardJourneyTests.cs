@@ -97,6 +97,136 @@ public sealed class OwnerDashboardJourneyTests(BrowserFixture fixture) : IClassF
             .Locator("[data-testid=primary-operation-action]")).ToBeVisibleAsync();
     }
 
+    // ------------------------------------------------------------------ una sola carga
+
+    /// <summary>
+    /// InteractiveServer inicializa el componente dos veces —al prerenderizar y al abrir el circuito—
+    /// y el resumen se resolvía entero las dos. Aquí se cuenta el SQL de una carga real de navegador:
+    /// tiene que haber UNA agregación de cada familia, no dos.
+    ///
+    /// Es la prueba más cercana posible a las dos fases juntas: una prueba de integración sólo puede
+    /// provocar el prerender, porque no abre circuito.
+    /// </summary>
+    [Fact]
+    public async Task Handing_over_from_prerender_to_the_circuit_does_not_ask_for_the_summary_again()
+    {
+        var context = await fixture.Browser.NewContextAsync(
+            new() { ViewportSize = new() { Width = 1366, Height = 768 } });
+        var page = await context.NewPageAsync();
+        await LoginAsync(page, DevelopmentSeeder.CorteOwnerEmail);
+
+        var antes = fixture.CountInLog(TurnosSql);
+        // Esperar la negociación confirma que el circuito llegó a abrirse: sin eso la prueba pasaría
+        // sola, contando una única carga porque la interactividad nunca arrancó.
+        var negociacion = page.WaitForResponseAsync(r => r.Url.Contains("/_blazor/negotiate"));
+        await page.GotoAsync($"{fixture.BaseUrl}/panel");
+        await negociacion;
+        await Expect(Card(page, DevelopmentSeeder.CorteBusinessId)).ToBeVisibleAsync();
+        await page.WaitForFunctionAsync("() => window.Blazor !== undefined");
+        // El registro llega por otro hilo, así que primero se espera a ver la consulta del prerender
+        // y sólo después se deja el margen en el que antes aparecía la segunda.
+        await WaitForLogAsync(TurnosSql, antes + 1);
+        await page.WaitForTimeoutAsync(2500);
+
+        var consultas = fixture.CountInLog(TurnosSql) - antes;
+        Assert.Equal(1, consultas);
+
+        // Y el resumen sigue en pantalla después de hidratar: ni "Cargando…" otra vez ni ceros nuevos.
+        await Expect(page.Locator("[data-testid=dashboard-loading]")).ToHaveCountAsync(0);
+        await Expect(page.Locator("[data-testid=dashboard-error]")).ToHaveCountAsync(0);
+        await Expect(Card(page, DevelopmentSeeder.CorteBusinessId)
+            .Locator("[data-testid=queues-summary]")).ToBeVisibleAsync();
+    }
+
+    /// <summary>
+    /// Un fallo del resumen no puede quedar congelado: el reintento tiene que volver a consultar de
+    /// verdad. La avería se provoca escondiendo la tabla de turnos, que es la que alimenta la única
+    /// familia de este negocio, y se deshace antes de reintentar.
+    /// </summary>
+    [Fact]
+    public async Task A_failed_summary_can_be_retried_and_recovers()
+    {
+        var context = await fixture.Browser.NewContextAsync(
+            new() { ViewportSize = new() { Width = 1366, Height = 768 } });
+        var page = await context.NewPageAsync();
+        await LoginAsync(page, DevelopmentSeeder.CorteOwnerEmail);
+
+        var intentosAlEmpezar = fixture.CountInLog(TurnosSql);
+        await HideQueueTicketsAsync(hide: true);
+        try
+        {
+            await page.GotoAsync($"{fixture.BaseUrl}/panel");
+            await Expect(page.Locator("[data-testid=dashboard-error]")).ToBeVisibleAsync();
+            // La página sigue siendo utilizable: el negocio y sus accesos no desaparecen.
+            await Expect(Card(page, DevelopmentSeeder.CorteBusinessId)).ToBeVisibleAsync();
+            await Expect(page.Locator("[data-testid=queues-summary]")).ToHaveCountAsync(0);
+
+            // Se deja que el circuito arranque con la avería todavía puesta. Que vuelva a intentarlo
+            // —dos intentos, no uno— es la prueba de que un prerender fallido no se guardó como si
+            // hubiera ido bien: si se hubiera persistido, el circuito habría heredado el error sin
+            // tocar la base y no habría forma de salir de ahí.
+            await page.WaitForFunctionAsync("() => window.Blazor !== undefined");
+            Assert.True(await WaitForLogAsync(TurnosSql, intentosAlEmpezar + 2),
+                "El circuito no reintentó tras el fallo del prerender.");
+            await Expect(page.Locator("[data-testid=dashboard-error]")).ToBeVisibleAsync();
+        }
+        finally
+        {
+            await HideQueueTicketsAsync(hide: false);
+        }
+
+        // Con la avería resuelta, reintentar tiene que consultar de nuevo. Que aparezcan los turnos lo
+        // demuestra por sí solo: el estado anterior no tenía resumen de este negocio, así que esas
+        // cifras no pueden venir de nada guardado —sólo de una consulta que acaba de ocurrir—.
+        Assert.True(await QueueTicketsExistsAsync(), "La tabla no volvió a su sitio antes del reintento.");
+        await page.Locator("[data-testid=dashboard-retry]").ClickAsync();
+        await Expect(Card(page, DevelopmentSeeder.CorteBusinessId)
+            .Locator("[data-testid=queues-summary]")).ToBeVisibleAsync();
+        await Expect(page.Locator("[data-testid=dashboard-error]")).ToHaveCountAsync(0);
+    }
+
+    /// <summary>Fragmento que identifica la agregación de turnos en el registro de EF.</summary>
+    private const string TurnosSql = "AS \"ServedToday\"";
+
+    /// <summary>
+    /// Espera a que el registro alcance ese número de apariciones. La aplicación escribe su salida
+    /// por otro hilo, así que contar justo después de ver la pantalla puede leer una línea que aún no
+    /// ha llegado; sin esta espera la medición fallaría por el reloj, no por el comportamiento.
+    /// </summary>
+    private async Task<bool> WaitForLogAsync(string needle, int atLeast, int timeoutMs = 10000)
+    {
+        var limit = Environment.TickCount64 + timeoutMs;
+        while (Environment.TickCount64 < limit)
+        {
+            if (fixture.CountInLog(needle) >= atLeast) return true;
+            await Task.Delay(100);
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Esconde y repone la tabla de turnos. Los nombres van literales —un identificador no se puede
+    /// parametrizar— y son constantes de la prueba, nunca entrada de nadie.
+    /// </summary>
+    private async Task<bool> QueueTicketsExistsAsync()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(fixture.ConnectionString).Options;
+        await using var db = new AppDbContext(options);
+        await using var command = db.Database.GetDbConnection().CreateCommand();
+        command.CommandText = "SELECT to_regclass('public.queue_tickets') IS NOT NULL;";
+        await db.Database.OpenConnectionAsync();
+        return (bool)(await command.ExecuteScalarAsync())!;
+    }
+
+    private async Task HideQueueTicketsAsync(bool hide)
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(fixture.ConnectionString).Options;
+        await using var db = new AppDbContext(options);
+        await db.Database.ExecuteSqlRawAsync(hide
+            ? "ALTER TABLE IF EXISTS queue_tickets RENAME TO queue_tickets_oculta;"
+            : "ALTER TABLE IF EXISTS queue_tickets_oculta RENAME TO queue_tickets;");
+    }
+
     // ------------------------------------------------------------------ apoyos
 
     private static ILocator Card(IPage page, Guid businessId)
@@ -107,13 +237,18 @@ public sealed class OwnerDashboardJourneyTests(BrowserFixture fixture) : IClassF
         var context = await fixture.Browser.NewContextAsync(
             new() { ViewportSize = new() { Width = width, Height = height } });
         var page = await context.NewPageAsync();
+        await LoginAsync(page, email);
+        await page.GotoAsync($"{fixture.BaseUrl}/panel");
+        return page;
+    }
+
+    private async Task LoginAsync(IPage page, string email)
+    {
         await page.GotoAsync($"{fixture.BaseUrl}/Account/Login");
         await page.GetByLabel("Correo").FillAsync(email);
         await page.GetByLabel("Contraseña").FillAsync(DevelopmentSeeder.DemoPassword);
         await page.GetByRole(AriaRole.Button, new() { Name = "Ingresar" }).ClickAsync();
         await page.WaitForURLAsync(url => url.Contains("/panel") || url.Contains("/Account/ChangeTemporaryPassword"));
-        await page.GotoAsync($"{fixture.BaseUrl}/panel");
-        return page;
     }
 
     /// <summary>
