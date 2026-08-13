@@ -6,6 +6,8 @@
 <PageTitle>Pedidos | UrabáConecta</PageTitle>
 <a class="back-link" href="/panel">← Establecimientos</a>
 <p class="eyebrow">Operación</p><h1>Pedidos para recoger</h1>
+@* El nombre del establecimiento, para quien llega por dirección directa. *@
+<p class="operation-business" data-testid="business-name">@businessName</p>
 <div class="actions">
     <button class="secondary" @onclick="Load" disabled="@(!interactiveReady || busy || loading)">@(loading ? "Actualizando…" : "Actualizar")</button>
     <a class="button-link secondary" href="/panel/@BusinessId/configuracion/pedidos">Configurar catálogo</a>
@@ -19,7 +21,8 @@
     <article class="queue-row" data-testid="admin-order">
         <div class="ticket-badge">#@order.OrderNumber</div>
         <div><strong>@order.CustomerAlias · @order.Total.ToString("C0", Colombia)</strong>
-            <br /><span class="meta">@Label(order.Status) · @Local(order.PickupStart) · @order.Phone</span>
+            <br /><span class="meta"><span data-testid="order-status">@OperationalStatusText.Order(order.Status)</span>
+                · Recoge @Local(order.PickupStart) · @order.Phone</span>
             @foreach (var line in order.Lines) { <div>@line.Quantity × @line.ProductName</div> }
         </div>
         <div class="actions">
@@ -40,6 +43,7 @@
 @code {
     [Parameter] public Guid BusinessId { get; set; }
     private IReadOnlyList<PickupOrderAdminDto> orders = []; private string? error, message;
+    private string businessName = "", timeZoneId = "America/Bogota";
     private bool interactiveReady, busy, loading = true;
     private bool Blocked => !interactiveReady || busy || loading;
     private static readonly System.Globalization.CultureInfo Colombia = new("es-CO");
@@ -52,7 +56,14 @@
     private async Task Load()
     {
         loading = true;
-        try { error = null; orders = await Api.GetPickupOrdersAsync(BusinessId); }
+        try
+        {
+            error = null;
+            var board = await Api.GetPickupOrdersAsync(BusinessId);
+            orders = board.Items;
+            businessName = board.BusinessName;
+            timeZoneId = board.TimeZoneId;
+        }
         catch (ApiException ex) { error = ex.Message; }
         catch (Exception) { error = "No pudimos cargar los pedidos. Intente de nuevo."; }
         finally { loading = false; }
@@ -80,9 +91,9 @@
     private Task Ready(PickupOrderAdminDto o) => Act(o, "ready", "listo para recoger.");
     private Task Deliver(PickupOrderAdminDto o) => Act(o, "deliver", "entregado.");
     private Task Cancel(PickupOrderAdminDto o) => Act(o, "cancel", "cancelado.", "Cancelado por el establecimiento");
-    private static string Label(string s) => s switch { "Pending" => "Pendiente", "Accepted" => "Aceptado",
-        "Preparing" => "En preparación", "ReadyForPickup" => "Listo para recoger", "Delivered" => "Entregado",
-        "Rejected" => "Rechazado", _ => "Cancelado" };
-    private static string Local(DateTimeOffset value) => TimeZoneInfo.ConvertTime(value,
-        TimeZoneInfo.FindSystemTimeZoneById("America/Bogota")).ToString("g");
+    /// <summary>
+    /// La hora del establecimiento. Antes se convertía siempre a Bogotá y con formato corto del
+    /// sistema; ahora sale de la zona que el servidor dice tener configurada para este negocio.
+    /// </summary>
+    private string Local(DateTimeOffset value) => BusinessDateTimeText.DateAndTime(value, timeZoneId);
 }

@@ -50,9 +50,9 @@ public sealed class HttpUrabaConectaApi(HttpClient http) : IUrabaConectaApi
     public Task<IReadOnlyList<OwnerDashboardSummaryDto>> GetOwnerDashboardAsync(
         CancellationToken cancellationToken = default)
         => Get<IReadOnlyList<OwnerDashboardSummaryDto>>("api/v1/businesses/dashboard", cancellationToken);
-    public Task<IReadOnlyList<AppointmentAdminDto>> GetAppointmentsAsync(Guid businessId, DateOnly? date = null,
+    public Task<AppointmentBoardDto> GetAppointmentsAsync(Guid businessId, DateOnly? date = null,
         string? status = null, CancellationToken cancellationToken = default)
-        => Get<IReadOnlyList<AppointmentAdminDto>>($"api/v1/businesses/{businessId}/appointments?date={date:yyyy-MM-dd}&status={E(status)}", cancellationToken);
+        => Get<AppointmentBoardDto>($"api/v1/businesses/{businessId}/appointments?date={date:yyyy-MM-dd}&status={E(status)}", cancellationToken);
     public async Task<AppointmentAdminDto> ChangeAppointmentStatusAsync(Guid businessId, Guid appointmentId,
         ChangeAppointmentStatusRequest request, CancellationToken cancellationToken = default)
         => await Read<AppointmentAdminDto>(await http.PostAsJsonAsync($"api/v1/businesses/{businessId}/appointments/{appointmentId}/status",
@@ -224,9 +224,9 @@ public sealed class HttpUrabaConectaApi(HttpClient http) : IUrabaConectaApi
         => await Read<ProductDto>(productId.HasValue
             ? await http.PutAsJsonAsync($"api/v1/businesses/{businessId}/products/{productId}", request, Json, cancellationToken)
             : await http.PostAsJsonAsync($"api/v1/businesses/{businessId}/products", request, Json, cancellationToken), cancellationToken);
-    public Task<IReadOnlyList<PickupOrderAdminDto>> GetPickupOrdersAsync(Guid businessId, string? status = null,
+    public Task<PickupOrderBoardDto> GetPickupOrdersAsync(Guid businessId, string? status = null,
         DateOnly? date = null, CancellationToken cancellationToken = default)
-        => Get<IReadOnlyList<PickupOrderAdminDto>>(
+        => Get<PickupOrderBoardDto>(
             $"api/v1/businesses/{businessId}/orders?status={E(status)}&date={date:yyyy-MM-dd}", cancellationToken);
     public async Task<PickupOrderAdminDto> ChangePickupOrderAsync(Guid businessId, Guid orderId, string action,
         PickupOrderCommandRequest request, CancellationToken cancellationToken = default)

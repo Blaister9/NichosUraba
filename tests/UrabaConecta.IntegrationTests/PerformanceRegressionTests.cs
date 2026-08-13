@@ -134,7 +134,7 @@ public sealed class PerformanceRegressionTests(PostgresWebFactory factory) : ICl
         Assert.True(seeded > 0, "No se pudo crear la cita inicial de prueba.");
 
         Counter.Reset();
-        var before = await owner.GetFromJsonAsync<List<AppointmentAdminDto>>(route, Json);
+        var before = await owner.GetFromJsonAsync<AppointmentBoardDto>(route, Json);
         var queriesBefore = Counter.Count;
 
         var created = 0;
@@ -143,10 +143,10 @@ public sealed class PerformanceRegressionTests(PostgresWebFactory factory) : ICl
         Assert.True(created > 0, "No se pudo crear ninguna cita adicional.");
 
         Counter.Reset();
-        var after = await owner.GetFromJsonAsync<List<AppointmentAdminDto>>(route, Json);
+        var after = await owner.GetFromJsonAsync<AppointmentBoardDto>(route, Json);
         var queriesAfter = Counter.Count;
 
-        Assert.Equal(before!.Count + created, after!.Count);
+        Assert.Equal(before!.Items.Count + created, after!.Items.Count);
         // Antes cada cita añadía dos sentencias: negocio y consentimiento, una por fila. Lo que
         // protege esta prueba es que el coste no crezca con el número de citas, y eso se sigue
         // cumpliendo.

@@ -45,7 +45,7 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
         CancellationToken cancellationToken = default)
         => await dashboard.SummarizeAsync(
             await useCases.GetMyBusinessesAsync(await UserId(), cancellationToken), cancellationToken);
-    public async Task<IReadOnlyList<AppointmentAdminDto>> GetAppointmentsAsync(Guid businessId, DateOnly? date = null,
+    public async Task<AppointmentBoardDto> GetAppointmentsAsync(Guid businessId, DateOnly? date = null,
         string? status = null, CancellationToken cancellationToken = default)
         => await useCases.GetAppointmentsAsync(await UserId(), businessId, date, status, cancellationToken);
     public async Task<AppointmentAdminDto> ChangeAppointmentStatusAsync(Guid businessId, Guid appointmentId,
@@ -173,7 +173,7 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
     public async Task<ProductDto> SaveProductAsync(Guid businessId, Guid? productId, SaveProductRequest request,
         CancellationToken cancellationToken = default)
         => await orders.SaveProductAsync(await UserId(), businessId, productId, request, cancellationToken);
-    public async Task<IReadOnlyList<PickupOrderAdminDto>> GetPickupOrdersAsync(Guid businessId, string? status = null,
+    public async Task<PickupOrderBoardDto> GetPickupOrdersAsync(Guid businessId, string? status = null,
         DateOnly? date = null, CancellationToken cancellationToken = default)
         => await orders.ListOrdersAsync(await UserId(), businessId, status, date, cancellationToken);
     public async Task<PickupOrderAdminDto> ChangePickupOrderAsync(Guid businessId, Guid orderId, string action,

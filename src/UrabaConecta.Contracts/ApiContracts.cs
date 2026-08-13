@@ -133,7 +133,7 @@ public sealed record MembershipAuditDto(Guid Id, string Action, Guid ActorUserId
 
 public sealed record QueueDefinitionDto(Guid Id, Guid BusinessId, string BusinessName, string BusinessSlug,
     string Name, int AverageDurationMinutes, int MaximumWaiting, string PublicMessage,
-    bool IsEnabled, long Version);
+    bool IsEnabled, long Version, string TimeZoneId = "America/Bogota");
 public sealed record QueuePublicStatusDto(string BusinessName, string BusinessSlug, string QueueName,
     string PublicMessage, bool IsEnabled, string SessionStatus, int? CurrentNumber,
     int WaitingCount, int ApproximateWaitMinutes, bool CanJoin, long Version);
@@ -176,6 +176,15 @@ public sealed record AppointmentAdminDto(Guid Id, Guid BusinessId, string Servic
     string DepositStatusLabel = "", string DepositInstructions = "", string DepositWhatsAppNumber = "",
     DateTimeOffset? DepositReportedAt = null, DateTimeOffset? DepositVerifiedAt = null,
     string? DepositVerifiedBy = null, string? DepositRejectionReason = null);
+/// <summary>
+/// El listado de citas junto con el negocio al que pertenece. El nombre y la zona viajan una vez por
+/// pantalla y no por fila: quien entra directo por dirección tiene que saber qué establecimiento
+/// está operando aunque ese día no haya ninguna cita, y con el dato dentro de cada fila una lista
+/// vacía no podría decirlo.
+/// </summary>
+public sealed record AppointmentBoardDto(Guid BusinessId, string BusinessName, string TimeZoneId,
+    IReadOnlyList<AppointmentAdminDto> Items);
+
 public sealed record AppointmentDepositAuditDto(Guid Id, Guid AppointmentId, string ActorKind,
     Guid? ActorUserId, string PreviousStatus, string NewStatus, DateTimeOffset OccurredAtUtc, string? Reason);
 public sealed class ChangeAppointmentStatusRequest
@@ -332,6 +341,10 @@ public sealed record PickupOrderAdminDto(Guid Id, int OrderNumber, string Status
     string Phone, string? Notes, DateTimeOffset PickupStart, decimal Total,
     IReadOnlyList<PickupOrderLineDto> Lines, string? CancellationReason,
     DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, long Version);
+/// <summary>Los pedidos junto con el negocio que los atiende, por la misma razón que las citas.</summary>
+public sealed record PickupOrderBoardDto(Guid BusinessId, string BusinessName, string TimeZoneId,
+    IReadOnlyList<PickupOrderAdminDto> Items);
+
 public sealed class PickupOrderCommandRequest
 {
     public long Version { get; set; }
@@ -451,7 +464,7 @@ public interface IUrabaConectaApi
     /// </summary>
     Task<IReadOnlyList<OwnerDashboardSummaryDto>> GetOwnerDashboardAsync(
         CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<AppointmentAdminDto>> GetAppointmentsAsync(Guid businessId, DateOnly? date = null,
+    Task<AppointmentBoardDto> GetAppointmentsAsync(Guid businessId, DateOnly? date = null,
         string? status = null, CancellationToken cancellationToken = default);
     Task<AppointmentAdminDto> ChangeAppointmentStatusAsync(Guid businessId, Guid appointmentId,
         ChangeAppointmentStatusRequest request, CancellationToken cancellationToken = default);
@@ -527,7 +540,7 @@ public interface IUrabaConectaApi
     Task<IReadOnlyList<ProductDto>> GetProductsAsync(Guid businessId, CancellationToken cancellationToken = default);
     Task<ProductDto> SaveProductAsync(Guid businessId, Guid? productId, SaveProductRequest request,
         CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<PickupOrderAdminDto>> GetPickupOrdersAsync(Guid businessId, string? status = null,
+    Task<PickupOrderBoardDto> GetPickupOrdersAsync(Guid businessId, string? status = null,
         DateOnly? date = null, CancellationToken cancellationToken = default);
     Task<PickupOrderAdminDto> ChangePickupOrderAsync(Guid businessId, Guid orderId, string action,
         PickupOrderCommandRequest request, CancellationToken cancellationToken = default);

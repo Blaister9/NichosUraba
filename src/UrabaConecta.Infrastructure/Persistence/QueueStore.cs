@@ -74,10 +74,14 @@ public sealed class QueueStore(AppDbContext db) : IQueueStore
     public Task<bool> IsBusinessActiveAsync(Guid businessId, CancellationToken ct)
         => db.Businesses.AnyAsync(x => x.Id == businessId &&
             x.Status == BusinessStatus.Active && x.IsPublished, ct);
-    public async Task<(string BusinessName, string BusinessSlug)?> GetBusinessNameAsync(Guid businessId, CancellationToken ct)
+    public async Task<(string BusinessName, string BusinessSlug, string TimeZoneId)?> GetBusinessNameAsync(
+        Guid businessId, CancellationToken ct)
     {
-        var x = await db.Businesses.Where(b => b.Id == businessId).Select(b => new { b.Name, b.Slug }).SingleOrDefaultAsync(ct);
-        return x is null ? null : (x.Name, x.Slug);
+        // La zona viaja en la misma proyección que ya traía nombre y slug: mostrar las horas del
+        // turno en la hora del local no cuesta ni una consulta más.
+        var x = await db.Businesses.Where(b => b.Id == businessId)
+            .Select(b => new { b.Name, b.Slug, b.TimeZoneId }).SingleOrDefaultAsync(ct);
+        return x is null ? null : (x.Name, x.Slug, x.TimeZoneId);
     }
     public void AddDefinition(QueueDefinition x) => db.Add(x);
     public void AddSession(QueueSession x) => db.Add(x);

@@ -75,8 +75,8 @@ public sealed class DepositApiTests(PostgresWebFactory factory) : IClassFixture<
     /// pruebas pueden caer en la misma fecha cuando el desplazamiento aterriza en domingo.
     /// </summary>
     private async Task<AppointmentAdminDto> CitaAdminAsync(HttpClient owner, AppointmentCreatedDto creada)
-        => (await owner.GetFromJsonAsync<List<AppointmentAdminDto>>(
-            $"/api/v1/businesses/{DevelopmentSeeder.BellaBusinessId}/appointments", Json))!
+        => (await owner.GetFromJsonAsync<AppointmentBoardDto>(
+            $"/api/v1/businesses/{DevelopmentSeeder.BellaBusinessId}/appointments", Json))!.Items
             .Single(x => x.Start.ToUniversalTime() == creada.Start.ToUniversalTime()
                 && x.ServiceName == creada.ServiceName);
 

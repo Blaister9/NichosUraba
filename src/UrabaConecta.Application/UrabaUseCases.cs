@@ -170,13 +170,16 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
     public Task<IReadOnlyList<MyBusinessDto>> GetMyBusinessesAsync(Guid userId, CancellationToken cancellationToken = default)
         => store.GetMembershipsAsync(userId, cancellationToken);
 
-    public async Task<IReadOnlyList<AppointmentAdminDto>> GetAppointmentsAsync(Guid userId, Guid businessId,
+    public async Task<AppointmentBoardDto> GetAppointmentsAsync(Guid userId, Guid businessId,
         DateOnly? date, string? status, CancellationToken cancellationToken = default)
     {
         await DemandAppointmentAccess(userId, businessId, cancellationToken);
         AppointmentStatus? parsed = Enum.TryParse<AppointmentStatus>(status, true, out var value) ? value : null;
-        var records = await store.GetAppointmentsAsync(businessId, date, parsed, cancellationToken);
-        return records.Select(ToAdmin).ToArray();
+        var board = await store.GetAppointmentsAsync(businessId, date, parsed, cancellationToken);
+        // El nombre y la zona salen del mismo negocio que la consulta ya resolvió: la pantalla no
+        // tiene que pedirlos aparte para poder decir de quién es la agenda y en qué hora se lee.
+        return new(businessId, board.Business.Name, board.Business.TimeZoneId,
+            board.Appointments.Select(ToAdmin).ToArray());
     }
 
     public async Task<AppointmentAdminDto> ChangeStatusAsync(Guid userId, Guid businessId, Guid appointmentId,

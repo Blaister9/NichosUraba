@@ -193,11 +193,17 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
         await store.SaveChangesAsync(ct); return ProductDto(product);
     }
 
-    public async Task<IReadOnlyList<PickupOrderAdminDto>> ListOrdersAsync(Guid userId, Guid businessId,
+    public async Task<PickupOrderBoardDto> ListOrdersAsync(Guid userId, Guid businessId,
         string? status, DateOnly? date, CancellationToken ct = default)
     {
         await DemandOrders(userId, businessId, ct);
-        return (await store.ListOrdersAsync(businessId, status, date, ct)).Select(AdminDto).ToList();
+        // A diferencia de citas y turnos, aquí el negocio no estaba resuelto: es una lectura más por
+        // pantalla —no por pedido— y es lo que permite que quien entra directo por dirección sepa a
+        // qué establecimiento pertenecen estos pedidos y en qué hora está leyendo las recogidas.
+        var business = await store.GetBusinessAsync(businessId, ct)
+            ?? throw new ApiException("BUSINESS_NOT_FOUND", "No encontramos el establecimiento.", 404);
+        var orders = await store.ListOrdersAsync(businessId, status, date, ct);
+        return new(businessId, business.Name, business.TimeZoneId, orders.Select(AdminDto).ToList());
     }
     public async Task<PickupOrderAdminDto> ChangeStatusAsync(Guid userId, Guid businessId, Guid orderId,
         string action, PickupOrderCommandRequest request, CancellationToken ct = default)

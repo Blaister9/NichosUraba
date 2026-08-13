@@ -55,7 +55,7 @@
                     {
                         <p class="next-up" data-testid="next-appointment">
                             <span class="meta">Próxima cita</span>
-                            <strong>@OwnerDashboardText.Time(cuando, Summary.TimeZoneId)</strong>
+                            <strong>@BusinessDateTimeText.Time(cuando, Summary.TimeZoneId)</strong>
                             @if (!string.IsNullOrWhiteSpace(citas.NextAppointmentServiceName))
                             {
                                 <span class="next-service">@citas.NextAppointmentServiceName</span>

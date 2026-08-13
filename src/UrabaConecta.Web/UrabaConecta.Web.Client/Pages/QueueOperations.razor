@@ -13,7 +13,7 @@
 else if (data is not null)
 {
     <section class="queue-toolbar">
-        <div><strong>@data.Definition.BusinessName</strong><br /><span>@data.Definition.Name · @SessionLabel(data.SessionStatus)</span></div>
+        <div><strong data-testid="business-name">@data.Definition.BusinessName</strong><br /><span>@data.Definition.Name · @SessionLabel(data.SessionStatus)</span></div>
         <div class="actions">
             <a class="secondary button-link" href="/panel/@BusinessId/configuracion/turnos">Configurar</a>
             @if (data.SessionStatus == "Closed") { <button class="primary" @onclick="Open" disabled="@(!interactiveReady || busy)">Abrir jornada</button> }
@@ -42,7 +42,9 @@ else if (data is not null)
         {
             <article class="queue-row" data-ticket="@ticket.Number">
                 <div class="ticket-badge">@ticket.Number</div>
-                <div><strong>@(ticket.Alias ?? "Sin alias")</strong><br /><span class="meta">@StatusLabel(ticket.Status) · @(ticket.Source == "WalkIn" ? "Presencial" : "En línea")</span></div>
+                <div><strong>@(ticket.Alias ?? "Sin alias")</strong><br /><span class="meta"><span data-testid="ticket-status">@OperationalStatusText.QueueTicket(ticket.Status)</span>
+                    · @(ticket.Source == "WalkIn" ? "Presencial" : "En línea")
+                    · Llegó @BusinessDateTimeText.Time(ticket.CreatedAtUtc, data!.Definition.TimeZoneId)</span></div>
                 <div class="actions">
                     @if (ticket.Status == "Called") { <button class="secondary" disabled="@(!interactiveReady || busy)" @onclick="() => Recall(ticket)">Volver a llamar</button><button class="primary" disabled="@(!interactiveReady || busy)" @onclick="() => Start(ticket)">Iniciar atención</button><button class="secondary" disabled="@(!interactiveReady || busy)" @onclick="() => Skip(ticket)">No se presentó</button> }
                     @if (ticket.Status == "InService") { <button class="primary" disabled="@(!interactiveReady || busy)" @onclick="() => Complete(ticket)">Completar</button> }
@@ -97,8 +99,5 @@ else if (data is not null)
         finally { busy = false; }
     }
     private static string SessionLabel(string s) => s switch { "Open" => "Abierta", "Paused" => "Pausada", _ => "Cerrada" };
-    private static string StatusLabel(string s) => s switch { "Waiting" => "Esperando", "Called" => "Te estamos llamando",
-        "InService" => "En atención", "Skipped" => "Omitido", "Completed" => "Completado",
-        "Cancelled" => "Cancelado", _ => s };
     public async ValueTask DisposeAsync() { if (hub is not null) await hub.DisposeAsync(); }
 }

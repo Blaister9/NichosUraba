@@ -54,7 +54,9 @@ public sealed class QueueJourneyTests(BrowserFixture fixture) : IClassFixture<Br
 
         // 4. Llamado desde el panel operativo.
         await operations.GetByRole(AriaRole.Button, new() { Name = "Llamar siguiente" }).ClickAsync();
-        await Expect(operations.Locator(".queue-row").Filter(new() { HasTextString = "Te estamos llamando" })).ToBeVisibleAsync();
+        // En el tablero del negocio el turno está "Llamado"; "Te estamos llamando" es la frase que lee
+        // el cliente en su seguimiento, y en esta pantalla se leía como si el turno hablara solo.
+        await Expect(operations.Locator(".queue-row").Filter(new() { HasTextString = "Llamado" })).ToBeVisibleAsync();
         await ticketChanged.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
         // 5. Atención y cierre de turno.

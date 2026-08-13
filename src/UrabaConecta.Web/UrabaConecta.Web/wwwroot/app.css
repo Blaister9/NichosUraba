@@ -112,3 +112,7 @@ footer nav{display:flex;flex-wrap:wrap;gap:.75rem;justify-content:center;margin-
   .metric dd{font-size:1.4rem}
   .operation-actions .button-link{width:100%}
 }
+
+/* El nombre del establecimiento bajo el título de cada operación. Va pegado al h1 y con menos peso:
+   contesta "¿de quién es esto?" sin competir con el título de la pantalla. */
+.operation-business{margin:-.35rem 0 1rem;font-weight:750;color:#2c6b56;overflow-wrap:anywhere}

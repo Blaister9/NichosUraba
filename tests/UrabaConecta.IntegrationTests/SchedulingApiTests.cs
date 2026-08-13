@@ -78,9 +78,9 @@ public sealed partial class SchedulingApiTests(PostgresWebFactory factory) : ICl
         Assert.Equal(HttpStatusCode.Forbidden,
             (await bella.GetAsync($"/api/v1/businesses/{DevelopmentSeeder.OtherBusinessId}/appointments")).StatusCode);
 
-        var appointments = await bella.GetFromJsonAsync<List<AppointmentAdminDto>>(
+        var appointments = await bella.GetFromJsonAsync<AppointmentBoardDto>(
             $"/api/v1/businesses/{DevelopmentSeeder.BellaBusinessId}/appointments", Json);
-        var appointment = appointments!.Single(x => x.Start.ToUniversalTime() == created.Start.ToUniversalTime()
+        var appointment = appointments!.Items.Single(x => x.Start.ToUniversalTime() == created.Start.ToUniversalTime()
             && x.Status == "Pending");
         var confirm = await bella.PostAsJsonAsync(
             $"/api/v1/businesses/{DevelopmentSeeder.BellaBusinessId}/appointments/{appointment.Id}/status",
@@ -150,9 +150,9 @@ public sealed partial class SchedulingApiTests(PostgresWebFactory factory) : ICl
 
         using var owner = factory.CreateClient(new() { AllowAutoRedirect = false, HandleCookies = true });
         await Login(owner, DevelopmentSeeder.BellaOwnerEmail, DevelopmentSeeder.DemoPassword);
-        var completed = await owner.GetFromJsonAsync<List<AppointmentAdminDto>>(
+        var completed = await owner.GetFromJsonAsync<AppointmentBoardDto>(
             $"/api/v1/businesses/{DevelopmentSeeder.BellaBusinessId}/appointments?status=Completed", Json);
-        Assert.All(completed!, x => Assert.Equal("Completed", x.Status));
+        Assert.All(completed!.Items, x => Assert.Equal("Completed", x.Status));
     }
 
     private static async Task<AppointmentCreatedDto> CreateAppointment(HttpClient client, int days)

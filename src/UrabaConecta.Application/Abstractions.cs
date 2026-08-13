@@ -11,6 +11,9 @@ public sealed record SchedulingContext(Business Business, Service Service, IRead
 /// <paramref name="DepositVerifiedByName"/> se resuelve en la consulta para no pedir el nombre de
 /// la persona verificadora una vez por fila.
 /// </summary>
+/// <summary>El listado de citas de un negocio, con el negocio resuelto una sola vez.</summary>
+public sealed record AppointmentBoardRecord(Business Business, IReadOnlyList<AppointmentRecord> Appointments);
+
 public sealed record AppointmentRecord(Appointment Appointment, Business Business, ConsentReceipt Consent,
     string? DepositVerifiedByName = null);
 public sealed record IdentityAccount(Guid UserId, string Email, string DisplayName, bool MustChangePassword = false);
@@ -67,7 +70,7 @@ public interface IOrderingUseCases
     Task<IReadOnlyList<ProductDto>> GetProductsAsync(Guid userId, Guid businessId, CancellationToken cancellationToken = default);
     Task<ProductDto> SaveProductAsync(Guid userId, Guid businessId, Guid? productId,
         SaveProductRequest request, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<PickupOrderAdminDto>> ListOrdersAsync(Guid userId, Guid businessId, string? status,
+    Task<PickupOrderBoardDto> ListOrdersAsync(Guid userId, Guid businessId, string? status,
         DateOnly? date, CancellationToken cancellationToken = default);
     Task<PickupOrderAdminDto> ChangeStatusAsync(Guid userId, Guid businessId, Guid orderId, string action,
         PickupOrderCommandRequest request, CancellationToken cancellationToken = default);
@@ -209,7 +212,11 @@ public interface IUrabaStore
     /// <summary>Un permiso no habilita un módulo que el negocio no tiene contratado.</summary>
     Task<bool> IsModuleEnabledAsync(Guid businessId, BusinessModuleKind module, CancellationToken cancellationToken);
     Task<IReadOnlyList<MyBusinessDto>> GetMembershipsAsync(Guid userId, CancellationToken cancellationToken);
-    Task<IReadOnlyList<AppointmentRecord>> GetAppointmentsAsync(Guid businessId, DateOnly? date,
+    /// <summary>
+    /// Las citas y el negocio al que pertenecen. El negocio viaja aunque no haya ninguna cita: la
+    /// pantalla tiene que poder decir qué establecimiento se está operando también en un día vacío.
+    /// </summary>
+    Task<AppointmentBoardRecord> GetAppointmentsAsync(Guid businessId, DateOnly? date,
         AppointmentStatus? status, CancellationToken cancellationToken);
     Task<AppointmentRecord?> GetAppointmentAsync(Guid businessId, Guid appointmentId, CancellationToken cancellationToken);
     void AddDepositAudit(AppointmentDepositAudit entry);
@@ -269,7 +276,7 @@ public interface IQueueStore
     Task<bool> CanManageQueuesAsync(Guid userId, Guid businessId, CancellationToken cancellationToken);
     Task<bool> IsModuleEnabledAsync(Guid businessId, BusinessModuleKind module, CancellationToken cancellationToken);
     Task<bool> IsBusinessActiveAsync(Guid businessId, CancellationToken cancellationToken);
-    Task<(string BusinessName, string BusinessSlug)?> GetBusinessNameAsync(Guid businessId, CancellationToken cancellationToken);
+    Task<(string BusinessName, string BusinessSlug, string TimeZoneId)?> GetBusinessNameAsync(Guid businessId, CancellationToken cancellationToken);
     void AddDefinition(QueueDefinition definition);
     void AddSession(QueueSession session);
     void AddTicket(QueueTicket ticket);
@@ -318,7 +325,7 @@ public interface IUrabaUseCases
     Task<IReadOnlyList<AppointmentDepositAuditDto>> GetDepositAuditAsync(Guid appointmentId,
         CancellationToken cancellationToken = default);
     Task<IReadOnlyList<MyBusinessDto>> GetMyBusinessesAsync(Guid userId, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<AppointmentAdminDto>> GetAppointmentsAsync(Guid userId, Guid businessId, DateOnly? date,
+    Task<AppointmentBoardDto> GetAppointmentsAsync(Guid userId, Guid businessId, DateOnly? date,
         string? status, CancellationToken cancellationToken = default);
     Task<AppointmentAdminDto> ChangeStatusAsync(Guid userId, Guid businessId, Guid appointmentId,
         ChangeAppointmentStatusRequest request, CancellationToken cancellationToken = default);

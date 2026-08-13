@@ -247,7 +247,7 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
                           m.Module == BusinessModuleKind.PickupOrders && m.IsEnabled)))
             .ToListAsync(cancellationToken);
 
-    public async Task<IReadOnlyList<AppointmentRecord>> GetAppointmentsAsync(Guid businessId, DateOnly? date,
+    public async Task<AppointmentBoardRecord> GetAppointmentsAsync(Guid businessId, DateOnly? date,
         AppointmentStatus? status, CancellationToken cancellationToken)
     {
         // Todas las citas del listado pertenecen al mismo negocio, así que se lee una sola vez.
@@ -262,14 +262,16 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
             query = query.Where(x => x.StartAtUtc >= start && x.StartAtUtc < end);
         }
         var appointments = await query.OrderByDescending(x => x.StartAtUtc).Take(200).ToListAsync(cancellationToken);
-        if (appointments.Count == 0) return [];
+        // El negocio ya está leído arriba, así que un día sin citas no cuesta una consulta extra ni
+        // deja a la pantalla sin saber de quién es la agenda que está mostrando.
+        if (appointments.Count == 0) return new(business, []);
         // Los consentimientos se traen en bloque: uno por cita costaba una ida y vuelta por fila.
         var consentIds = appointments.Select(x => x.ConsentReceiptId).Distinct().ToList();
         var consents = await db.ConsentReceipts.AsNoTracking().Where(x => consentIds.Contains(x.Id))
             .ToDictionaryAsync(x => x.Id, cancellationToken);
         var verifiers = await VerifierNamesAsync(appointments, cancellationToken);
-        return appointments.Select(x => new AppointmentRecord(x, business, consents[x.ConsentReceiptId],
-            Verifier(verifiers, x))).ToList();
+        return new(business, appointments.Select(x => new AppointmentRecord(x, business,
+            consents[x.ConsentReceiptId], Verifier(verifiers, x))).ToList());
     }
 
     /// <summary>

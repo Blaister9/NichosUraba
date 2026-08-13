@@ -78,7 +78,7 @@ public sealed class QueueUseCases(IQueueStore store, IPublicCodeService codes, I
         await store.SaveChangesAsync(ct);
         await notifier.PublicChangedAsync(definition.Id, ct);
         await notifier.OperationsChangedAsync(businessId, ct);
-        return DefinitionDto(definition, business.BusinessName, business.BusinessSlug);
+        return DefinitionDto(definition, business.BusinessName, business.BusinessSlug, business.TimeZoneId);
     }
 
     public async Task<QueueAdminDto> OpenAsync(Guid userId, Guid businessId, CancellationToken ct = default)
@@ -224,7 +224,7 @@ public sealed class QueueUseCases(IQueueStore store, IPublicCodeService codes, I
             ?? throw new ApiException("BUSINESS_NOT_FOUND", "No encontramos el establecimiento.", 404);
         var session = await store.GetCurrentSessionAsync(businessId, ct);
         var tickets = session is null ? [] : await store.GetSessionTicketsAsync(businessId, session.Id, ct);
-        return new(DefinitionDto(definition, business.BusinessName, business.BusinessSlug),
+        return new(DefinitionDto(definition, business.BusinessName, business.BusinessSlug, business.TimeZoneId),
             session?.Status.ToString() ?? QueueSessionStatus.Closed.ToString(), session?.Id, session?.Version,
             tickets.Where(x => x.Status is QueueTicketStatus.Called or QueueTicketStatus.InService)
                 .OrderBy(x => x.Number).Select(x => (int?)x.Number).FirstOrDefault(),
@@ -235,9 +235,9 @@ public sealed class QueueUseCases(IQueueStore store, IPublicCodeService codes, I
     private QueueTicketAdminDto AdminTicket(QueueTicket t) => new(t.Id, t.Number,
         t.ProtectedAlias is null ? null : protector.Unprotect(t.ProtectedAlias), t.Source.ToString(),
         t.Status.ToString(), t.CallCount, t.RestoreCount, t.CreatedAtUtc, t.UpdatedAtUtc, t.Version);
-    private static QueueDefinitionDto DefinitionDto(QueueDefinition q, string name, string slug)
+    private static QueueDefinitionDto DefinitionDto(QueueDefinition q, string name, string slug, string timeZoneId)
         => new(q.Id, q.BusinessId, name, slug, q.Name, q.AverageDurationMinutes, q.MaximumWaiting,
-            q.PublicMessage, q.IsEnabled, q.Version);
+            q.PublicMessage, q.IsEnabled, q.Version, timeZoneId);
     private static QueuePublicStatusDto PublicDto(QueueDefinition q, Business b, QueueSession? s,
         IReadOnlyList<QueueTicket> tickets)
     {

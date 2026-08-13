@@ -4,10 +4,19 @@
 @inject IUrabaConectaApi Api
 
 <PageTitle>Citas | Panel UrabáConecta</PageTitle>
-<a class="back-link" href="/panel">← Mis establecimientos</a><p class="eyebrow">Panel del negocio</p><h1>Citas</h1>
+<a class="back-link" href="/panel">← Mis establecimientos</a><p class="eyebrow">Panel del negocio</p>
+<h1>Citas</h1>
+@* Quien entra por dirección directa tiene que saber de qué establecimiento es esta agenda. *@
+<p class="operation-business" data-testid="business-name">@businessName</p>
 <fieldset class="search-panel" disabled="@(!interactiveReady)">
     <label>Fecha<InputDate @bind-Value="date" /></label>
-    <label>Estado<InputSelect @bind-Value="status"><option value="">Todos</option><option>Pending</option><option>Confirmed</option><option>Rejected</option><option>Cancelled</option><option>Completed</option><option>NoShow</option></InputSelect></label>
+    <label>Estado<InputSelect @bind-Value="status" data-testid="status-filter">
+        <option value="">Todos los estados</option>
+        @foreach (var value in FilterStatuses)
+        {
+            <option value="@value">@OperationalStatusText.Appointment(value)</option>
+        }
+    </InputSelect></label>
     <button class="primary" @onclick="Load" disabled="@(!interactiveReady || working)">Filtrar</button>
 </fieldset>
 @* El error de una acción se muestra sobre la lista: antes la reemplazaba, y quien no podía
@@ -22,11 +31,13 @@ else
         @foreach (var item in appointments)
         {
             <article class="appointment-card" data-testid="appointment-card">
-                <header><div><strong>@item.ServiceName</strong><p>@LocalDate(item.Start)</p></div><span class="status @item.Status.ToLowerInvariant()">@Label(item.Status)</span></header>
+                <header><div><strong>@item.ServiceName</strong>
+                        <p data-testid="appointment-start">@Local(item.Start) — @BusinessDateTimeText.Time(item.End, timeZoneId)</p></div>
+                    <span class="status @item.Status.ToLowerInvariant()" data-testid="appointment-status">@OperationalStatusText.Appointment(item.Status)</span></header>
                 <dl class="details"><dt>Solicitante</dt><dd>@item.CustomerAlias</dd><dt>Teléfono</dt><dd>@item.Phone</dd>
                     <dt>Observación</dt><dd>@(string.IsNullOrWhiteSpace(item.Notes) ? "Sin observación" : item.Notes)</dd>
-                    <dt>Consentimiento</dt><dd>@item.ConsentNoticeVersion · @item.ConsentAcceptedAt.ToString("dd/MM/yyyy HH:mm") UTC</dd>
-                    <dt>Creada</dt><dd>@item.CreatedAt.ToString("dd/MM/yyyy HH:mm") UTC</dd>
+                    <dt>Consentimiento</dt><dd>@item.ConsentNoticeVersion · @Local(item.ConsentAcceptedAt)</dd>
+                    <dt>Creada</dt><dd>@Local(item.CreatedAt)</dd>
                     <dt>Precio</dt><dd>@item.ServicePrice.ToString("C0", Colombia)</dd>
                     <dt>Adelanto</dt>
                     <dd data-testid="deposit-amount">
@@ -42,9 +53,9 @@ else
                         <dt>Estado del adelanto</dt>
                         <dd><span class="status @item.DepositStatus.ToLowerInvariant()" data-testid="deposit-status">@item.DepositStatusLabel</span></dd>
                         <dt>Comprobante reportado</dt>
-                        <dd>@(item.DepositReportedAt?.ToString("dd/MM/yyyy HH:mm") is { } reported ? $"{reported} UTC" : "Sin reportar")</dd>
+                        <dd>@(item.DepositReportedAt is { } reported ? Local(reported) : "Sin reportar")</dd>
                         <dt>Verificado</dt>
-                        <dd>@(item.DepositVerifiedAt?.ToString("dd/MM/yyyy HH:mm") is { } verified ? $"{verified} UTC" : "Sin verificar")</dd>
+                        <dd>@(item.DepositVerifiedAt is { } verified ? Local(verified) : "Sin verificar")</dd>
                         <dt>Verificado por</dt><dd>@(item.DepositVerifiedBy ?? "—")</dd>
                         @if (!string.IsNullOrWhiteSpace(item.DepositRejectionReason))
                         {
@@ -82,6 +93,11 @@ else
     private string? error, actionError, busyAction;
     private bool loading = true, working, interactiveReady;
     private IReadOnlyList<AppointmentAdminDto> appointments = [];
+    private string businessName = "", timeZoneId = "America/Bogota";
+
+    /// <summary>Los estados que el filtro ofrece. El valor viaja como enum; la etiqueta, en español.</summary>
+    private static readonly string[] FilterStatuses =
+        ["Pending", "Confirmed", "Rejected", "Cancelled", "Completed", "NoShow"];
     protected override async Task OnParametersSetAsync() => await Load();
     protected override void OnAfterRender(bool firstRender)
     {
@@ -92,7 +108,13 @@ else
     private async Task Load()
     {
         loading = true; error = null;
-        try { appointments = await Api.GetAppointmentsAsync(BusinessId, date, status); }
+        try
+        {
+            var board = await Api.GetAppointmentsAsync(BusinessId, date, status);
+            appointments = board.Items;
+            businessName = board.BusinessName;
+            timeZoneId = board.TimeZoneId;
+        }
         catch (ApiException ex) { error = ex.StatusCode == 403 ? "No tiene acceso a este establecimiento." : ex.Message; }
         finally { loading = false; }
     }
@@ -119,7 +141,7 @@ else
     private static IEnumerable<(string Value, string Label)> Actions(string current) => current switch
     {
         "Pending" => [("Confirmed", "Confirmar"), ("Rejected", "Rechazar")],
-        "Confirmed" => [("Completed", "Completar"), ("NoShow", "Marcar ausente")],
+        "Confirmed" => [("Completed", "Completar"), ("NoShow", "Marcar como no asistió")],
         _ => []
     };
     /// <summary>Verificado es definitivo para el negocio: sólo la plataforma puede deshacerlo.</summary>
@@ -130,8 +152,9 @@ else
         "Rejected" => [("reopen", "Volver a pendiente"), ("report", "Marcar comprobante reportado"), ("verify", "Verificar adelanto")],
         _ => []
     };
-    private static string Label(string value) => value switch
-    { "Pending" => "Pendiente", "Confirmed" => "Confirmada", "Rejected" => "Rechazada", "Cancelled" => "Cancelada", "Completed" => "Completada", "NoShow" => "No asistió", _ => value };
-    private static string LocalDate(DateTimeOffset value) =>
-        value.ToOffset(TimeSpan.FromHours(-5)).ToString("dd/MM/yyyy · h:mm tt");
+    /// <summary>
+    /// La hora del negocio, no la del servidor ni la de quien mira. Antes se restaban cinco horas a
+    /// mano, que funciona sólo mientras todos los establecimientos estén en el mismo huso.
+    /// </summary>
+    private string Local(DateTimeOffset value) => BusinessDateTimeText.DateAndTime(value, timeZoneId);
 }

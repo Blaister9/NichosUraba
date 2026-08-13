@@ -179,9 +179,9 @@ public sealed class FounderProductionJourneyTests(BrowserFixture fixture) : ICla
             $"La cita devolvió {appointmentResponse.Status}: {appointmentResponse.Body}" +
             Environment.NewLine + fixture.RecentLog);
 
-        var appointments = JsonSerializer.Deserialize<List<AppointmentAdminDto>>(
+        var appointments = JsonSerializer.Deserialize<AppointmentBoardDto>(
             (await Fetch(owner, "GET", $"/api/v1/businesses/{businessId}/appointments")).Body, Json)!;
-        var appointment = Assert.Single(appointments);
+        var appointment = Assert.Single(appointments.Items);
         Assert.Equal(legal.PolicyVersion, appointment.ConsentNoticeVersion);
         var confirmed = await Fetch(owner, "POST",
             $"/api/v1/businesses/{businessId}/appointments/{appointment.Id}/status",

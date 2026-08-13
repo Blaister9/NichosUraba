@@ -88,9 +88,9 @@ public sealed partial class OrderingApiTests(PostgresWebFactory factory) : IClas
             "/api/v1/public/businesses/restaurante-sazon-local/menu", Json);
         var created = await Create(publicClient, "Estado", menu!.Products[0].Id);
         await Login(owner, DevelopmentSeeder.SazonOwnerEmail);
-        var orders = await owner.GetFromJsonAsync<IReadOnlyList<PickupOrderAdminDto>>(
+        var board = await owner.GetFromJsonAsync<PickupOrderBoardDto>(
             $"/api/v1/businesses/{DevelopmentSeeder.SazonBusinessId}/orders", Json);
-        var order = orders!.Single(x => x.OrderNumber == created.OrderNumber);
+        var order = board!.Items.Single(x => x.OrderNumber == created.OrderNumber);
         Assert.Equal(HttpStatusCode.Conflict, (await owner.PostAsJsonAsync(
             $"/api/v1/businesses/{DevelopmentSeeder.SazonBusinessId}/orders/{order.Id}/deliver",
             new PickupOrderCommandRequest { Version = order.Version }, Json)).StatusCode);

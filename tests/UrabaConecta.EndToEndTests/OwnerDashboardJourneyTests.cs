@@ -32,6 +32,14 @@ public sealed class OwnerDashboardJourneyTests(BrowserFixture fixture) : IClassF
         await operar.ClickAsync();
         await page.WaitForURLAsync(url => url.Contains($"/panel/{DevelopmentSeeder.BellaBusinessId}/citas"));
 
+        // Ya en la agenda: se sabe de quién es, el filtro habla español y no hay marcas de máquina.
+        await Expect(page.Locator("[data-testid=business-name]")).ToHaveTextAsync("Salón Bella Urabá");
+        await Expect(page.Locator("[data-testid=status-filter]")).ToContainTextAsync("Todos los estados");
+        await Expect(page.Locator("[data-testid=status-filter]")).ToContainTextAsync("No asistió");
+        var agenda = await page.Locator("body").InnerTextAsync();
+        Assert.DoesNotContain("UTC", agenda);
+        foreach (var crudo in new[] { "NoShow", "ReadyForPickup" }) Assert.DoesNotContain(crudo, agenda);
+
         // Y la configuración sigue estando, un escalón por debajo.
         await page.GoBackAsync();
         await Expect(Card(page, DevelopmentSeeder.BellaBusinessId)
@@ -52,6 +60,11 @@ public sealed class OwnerDashboardJourneyTests(BrowserFixture fixture) : IClassF
         await Expect(operar).ToHaveTextAsync("Operar turnos");
         await operar.ClickAsync();
         await page.WaitForURLAsync(url => url.Contains($"/panel/{DevelopmentSeeder.CorteBusinessId}/turnos"));
+
+        await Expect(page.Locator("[data-testid=business-name]")).ToHaveTextAsync("Barbería El Corte");
+        var tablero = await page.Locator("body").InnerTextAsync();
+        Assert.DoesNotContain("UTC", tablero);
+        foreach (var crudo in new[] { "InService", "Waiting", "Skipped" }) Assert.DoesNotContain(crudo, tablero);
     }
 
     [Fact]
@@ -68,6 +81,13 @@ public sealed class OwnerDashboardJourneyTests(BrowserFixture fixture) : IClassF
         await Expect(operar).ToHaveTextAsync("Operar pedidos");
         await operar.ClickAsync();
         await page.WaitForURLAsync(url => url.Contains($"/panel/{DevelopmentSeeder.SazonBusinessId}/pedidos"));
+
+        await Expect(page.Locator("[data-testid=business-name]")).ToHaveTextAsync("Restaurante Sazón Local");
+        await Expect(page.Locator("[data-testid=order-status]").First).ToHaveTextAsync("Entregado");
+        var pedidos = await page.Locator("body").InnerTextAsync();
+        Assert.DoesNotContain("UTC", pedidos);
+        foreach (var crudo in new[] { "ReadyForPickup", "Delivered", "Preparing" })
+            Assert.DoesNotContain(crudo, pedidos);
     }
 
     [Fact]
