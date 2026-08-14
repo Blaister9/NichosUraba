@@ -14,6 +14,10 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
         string? category, CancellationToken cancellationToken = default)
         => store.FindBusinessesAsync(search?.Trim(), municipality, category, cancellationToken);
 
+    public Task<IReadOnlyList<CategoryCardDto>> GetCategoriesAsync(string? municipality,
+        CancellationToken cancellationToken = default)
+        => store.FindCategoriesAsync(municipality, cancellationToken);
+
     public Task<BusinessProfileDto?> GetBusinessAsync(string slug, CancellationToken cancellationToken = default)
         => store.GetBusinessProfileAsync(slug, requirePublished: true, cancellationToken);
 

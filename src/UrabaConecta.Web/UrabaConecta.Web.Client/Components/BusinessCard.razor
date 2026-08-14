@@ -1,0 +1,84 @@
+@* La tarjeta del directorio, en un solo sitio.
+
+   Home, Explorar y las páginas de categoría mostraban la misma cosa con tres marcados distintos, y
+   eso es lo que hace que un producto se sienta cosido a mano: la misma tarjeta cambiaba de alto
+   según por dónde se hubiera llegado.
+
+   Una sola acción dominante, elegida por lo que ese negocio realmente hace. Tres botones apilados
+   convertían la tarjeta en un menú de funciones y dejaban la decisión al visitante. *@
+<article class="negocio-card" data-tono="@CategoryLook.Tone(Business.Category.Slug)">
+    <a class="card-media @(Business.CoverUrl is { Length: > 0 } ? null : "sin-foto")"
+       href="@($"/negocios/{Business.Slug}")" aria-label="@($"Ver {Business.Name}")" tabindex="-1">
+        @if (Business.CoverUrl is { Length: > 0 } cover)
+        {
+            @* Dimensiones fijas para reservar el espacio y evitar saltos al cargar. La portada de la
+               primera tarjeta suele ser el elemento LCP: se pide con prioridad y sin diferir. *@
+            <img class="card-cover" src="@cover" alt="@(Business.CoverAltText ?? $"Portada de {Business.Name}")"
+                 width="640" height="400"
+                 loading="@(Priority ? "eager" : "lazy")" fetchpriority="@(Priority ? "high" : "auto")" />
+        }
+        else
+        {
+            <Icon Name="@CategoryLook.Icon(Business.Category.Slug)" Size="46" />
+        }
+        @if (Business.LogoUrl is { Length: > 0 } logo)
+        {
+            <img class="card-logo" src="@logo" alt="@(Business.LogoAltText ?? $"Logo de {Business.Name}")"
+                 width="58" height="58" loading="lazy" />
+        }
+    </a>
+    <div class="card-body">
+        <p class="card-meta">
+            <span class="tag">@Business.Category.Name</span>
+            <span class="meta">@Business.Municipality.Name</span>
+        </p>
+        <h3><a class="card-titulo" href="@($"/negocios/{Business.Slug}")">@Business.Name</a></h3>
+        <p class="card-desc">
+            @(string.IsNullOrWhiteSpace(Business.ShortDescription) ? Business.Description : Business.ShortDescription)
+        </p>
+
+        @* Lo que decide antes de entrar: desde cuánto, y si ahora mismo está atendiendo. *@
+        <p class="card-señales">
+            @if (Business.PriceFrom is > 0 and { } desde)
+            {
+                <span class="precio-desde"><small>desde</small> @Dinero(desde)</span>
+            }
+            @if (Business.QueueIsOpen)
+            {
+                <span class="senal-fila">Fila abierta</span>
+            }
+            else if (Business.OpenStatus is { Length: > 0 } estado)
+            {
+                <span class="@(estado.StartsWith("Abierto") ? "senal-abierto" : "senal-cerrado")">
+                    @(estado.StartsWith("Abierto") ? "Abierto ahora" : "Cerrado")
+                </span>
+            }
+        </p>
+
+        <a class="button-link" href="@Destino">@Verbo</a>
+    </div>
+</article>
+
+@code {
+    [Parameter, EditorRequired] public BusinessCardDto Business { get; set; } = default!;
+
+    /// <summary>
+    /// La primera tarjeta de la primera franja carga su portada sin diferir. Marcar más de una
+    /// anularía el efecto: si todo es prioritario, nada lo es.
+    /// </summary>
+    [Parameter] public bool Priority { get; set; }
+
+    private string Destino => Business.HasPickupOrdering ? $"/negocios/{Business.Slug}/pedidos"
+        : Business.HasVirtualQueue ? $"/negocios/{Business.Slug}/turnos"
+        : Business.HasScheduling ? $"/negocios/{Business.Slug}/citas"
+        : $"/negocios/{Business.Slug}";
+
+    private string Verbo => Business.HasPickupOrdering ? "Pedir para recoger"
+        : Business.HasVirtualQueue ? "Tomar turno"
+        : Business.HasScheduling ? "Reservar cita"
+        : "Ver negocio";
+
+    /// <summary>Pesos colombianos sin decimales: nadie cotiza un corte en centavos.</summary>
+    internal static string Dinero(decimal valor)
+        => valor.ToString("C0", System.Globalization.CultureInfo.GetCultureInfo("es-CO"));
+}

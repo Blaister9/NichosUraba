@@ -16,6 +16,9 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
     public Task<IReadOnlyList<BusinessCardDto>> GetBusinessesAsync(string? search = null, string? municipality = null,
         string? category = null, CancellationToken cancellationToken = default)
         => useCases.GetBusinessesAsync(search, municipality, category, cancellationToken);
+    public Task<IReadOnlyList<CategoryCardDto>> GetCategoriesAsync(string? municipality = null,
+        CancellationToken cancellationToken = default)
+        => useCases.GetCategoriesAsync(municipality, cancellationToken);
     public Task<BusinessProfileDto?> GetBusinessAsync(string slug, CancellationToken cancellationToken = default)
         => useCases.GetBusinessAsync(slug, cancellationToken);
     public Task<SlotListDto> GetSlotsAsync(string slug, Guid serviceId, DateOnly date, CancellationToken cancellationToken = default)

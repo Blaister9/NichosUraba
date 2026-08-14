@@ -1,0 +1,95 @@
+@page "/categorias"
+@rendermode InteractiveServer
+@inject IUrabaConectaApi Api
+
+@* El índice de categorías. Es una pantalla de una sola decisión, así que se resuelve con una
+   rejilla de destinos grandes y nada más.
+
+   Sólo aparecen categorías con negocios publicados detrás: el conteo lo calcula el servidor con el
+   mismo filtro del directorio, de modo que ninguna promete resultados que luego no existen. *@
+<PageTitle>Categorías | UrabáConecta</PageTitle>
+
+<section class="explorar-head">
+    <h1>Categorías</h1>
+    <p class="hero-sub">Todo lo que puedes encontrar en Urabá, por tipo de negocio.</p>
+</section>
+
+@* El municipio acota los conteos: en Turbo importa cuántas barberías hay en Turbo. *@
+<div class="chip-row" role="group" aria-label="Filtrar categorías por municipio">
+    <button type="button" class="chip @(municipio == "" ? "activo" : null)" aria-pressed="@(municipio == "")"
+            disabled="@cargando" @onclick='() => Filtrar("")'>Todo Urabá</button>
+    @foreach (var (slug, nombre) in Municipios)
+    {
+        <button type="button" class="chip @(municipio == slug ? "activo" : null)" aria-pressed="@(municipio == slug)"
+                disabled="@cargando" @onclick="() => Filtrar(slug)">@nombre</button>
+    }
+</div>
+
+@if (cargando)
+{
+    <div class="categoria-grid" aria-hidden="true">
+        @for (var i = 0; i < 6; i++) { <div class="skeleton" style="height:8.5rem;border-radius:20px"></div> }
+    </div>
+    <p class="visually-hidden" role="status">Cargando categorías…</p>
+}
+else if (error is not null)
+{
+    <p class="error" role="alert">@error</p>
+}
+else if (categorias.Count == 0)
+{
+    <div class="empty">
+        <h2>Todavía no hay categorías con negocios @Ambito</h2>
+        <p class="meta">Prueba en otro municipio o mira todo Urabá.</p>
+        <a class="button-link secondary" href="/explorar">Ver todos los negocios</a>
+    </div>
+}
+else
+{
+    <div class="categoria-grid">
+        @foreach (var categoria in categorias)
+        {
+            <a class="categoria-card" data-tono="@CategoryLook.Tone(categoria.Slug)" href="@Destino(categoria)">
+                <span class="marca-icono"><Icon Name="@CategoryLook.Icon(categoria.Slug)" Size="24" /></span>
+                <strong>@categoria.Name</strong>
+                <span>@categoria.BusinessCount @(categoria.BusinessCount == 1 ? "negocio" : "negocios")</span>
+            </a>
+        }
+    </div>
+}
+
+@code {
+    private string municipio = "";
+    private string? error;
+    private bool cargando = true;
+    private IReadOnlyList<CategoryCardDto> categorias = [];
+
+    private static readonly (string Slug, string Nombre)[] Municipios =
+    [
+        ("apartado", "Apartadó"), ("carepa", "Carepa"), ("chigorodo", "Chigorodó"), ("turbo", "Turbo"),
+    ];
+
+    private string Ambito => Municipios.FirstOrDefault(x => x.Slug == municipio) is { Nombre: { } nombre }
+        ? $"en {nombre}" : "en Urabá";
+
+    /// <summary>El municipio elegido viaja con el destino: perderlo al entrar sería empezar de cero.</summary>
+    private string Destino(CategoryCardDto categoria) => string.IsNullOrEmpty(municipio)
+        ? $"/categorias/{categoria.Slug}"
+        : $"/categorias/{categoria.Slug}?municipio={Uri.EscapeDataString(municipio)}";
+
+    protected override Task OnInitializedAsync() => Cargar();
+
+    private async Task Filtrar(string slug)
+    {
+        municipio = slug;
+        await Cargar();
+    }
+
+    private async Task Cargar()
+    {
+        cargando = true; error = null;
+        try { categorias = await Api.GetCategoriesAsync(municipio); }
+        catch (ApiException ex) { error = ex.Message; }
+        finally { cargando = false; }
+    }
+}

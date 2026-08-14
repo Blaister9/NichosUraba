@@ -268,6 +268,8 @@ app.MapHealthChecks("/health/ready", new() { Predicate = check => check.Tags.Con
 var publicApi = app.MapGroup("/api/v1/public");
 publicApi.MapGet("/businesses", (string? q, string? municipality, string? category, IUrabaUseCases useCases, CancellationToken ct)
     => useCases.GetBusinessesAsync(q, municipality, category, ct));
+publicApi.MapGet("/categories", (string? municipality, IUrabaUseCases useCases, CancellationToken ct)
+    => useCases.GetCategoriesAsync(municipality, ct));
 publicApi.MapGet("/businesses/{slug}", async (string slug, IUrabaUseCases useCases, CancellationToken ct) =>
     await useCases.GetBusinessAsync(slug, ct) is { } business ? Results.Ok(business) : Results.NotFound());
 publicApi.MapGet("/businesses/{slug}/appointment-slots",

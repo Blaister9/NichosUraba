@@ -64,6 +64,9 @@
 
     --ancho: 1120px;
     --alto-control: 48px;
+    /* Alto reservado por la barra inferior. Vale cero en escritorio, donde esa barra no existe, y
+       lo consultan todas las superficies flotantes para apoyarse encima y no debajo. */
+    --alto-nav: 0px;
 
     font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
     color: var(--texto);
@@ -117,6 +120,17 @@ textarea:focus-visible, summary:focus-visible {
     white-space: nowrap;
 }
 .site-header nav a:hover { background: var(--marca-050) }
+/* La barra superior es el mapa en escritorio: el destino actual va pintado, no sólo subrayado al
+   pasar por encima. */
+.nav-escritorio { flex: 1 1 auto; margin-left: var(--e4) }
+.nav-escritorio a.activo { background: var(--marca-050); color: var(--marca-900) }
+.nav-identidad { gap: .3rem }
+.boton-identidad {
+    display: inline-flex; align-items: center; gap: .4rem;
+    border: 1px solid var(--borde-fuerte); padding: .4rem .75rem !important;
+}
+.boton-identidad:hover { border-color: var(--marca-600) }
+.icono { flex: 0 0 auto; display: block }
 
 .page-shell {
     width: min(var(--ancho), 100%);
@@ -124,6 +138,10 @@ textarea:focus-visible, summary:focus-visible {
     margin: auto;
     padding: var(--e5) var(--e4) var(--e7);
 }
+
+/* La barra inferior no existe en escritorio: allí la superior ya dice todo y una segunda barra
+   flotante sólo robaría alto útil. */
+.nav-inferior { display: none }
 footer {
     padding: var(--e5) var(--e4) var(--e6);
     border-top: 1px solid var(--borde);
@@ -287,11 +305,46 @@ progress::-moz-progress-bar { background: var(--marca-700); border-radius: var(-
 }
 .chip-row::-webkit-scrollbar { display: none }
 .chip {
+    display: inline-flex; align-items: center; justify-content: center;
     flex: 0 0 auto; min-height: 40px; padding: .45rem .9rem;
     background: var(--superficie); border: 1px solid var(--borde-fuerte); border-radius: var(--radio-pill);
     color: var(--marca-800); font-size: .92rem; font-weight: 650; white-space: nowrap;
+    text-decoration: none;
 }
-.chip[aria-pressed="true"] { background: var(--marca-700); border-color: var(--marca-700); color: #fff }
+.chip[aria-pressed="true"], .chip.activo { background: var(--marca-700); border-color: var(--marca-700); color: #fff }
+.chip:hover { border-color: var(--marca-600) }
+
+/* Buscador del hero: un solo campo con la lupa dentro y el botón pegado. Es la primera cosa que se
+   toca, así que se comporta como una barra y no como un formulario de tres controles. */
+.buscador-hero {
+    display: flex; align-items: center; gap: .5rem; margin-top: var(--e4); padding: .4rem .4rem .4rem .9rem;
+    background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio-pill);
+    box-shadow: var(--sombra);
+}
+.buscador-hero > .icono { color: var(--texto-suave) }
+.buscador-hero input {
+    flex: 1 1 auto; min-height: 44px; padding: .3rem 0; border: 0; background: none;
+}
+.buscador-hero input:focus-visible { outline: none }
+.buscador-hero:focus-within { border-color: var(--marca-600); box-shadow: var(--sombra), 0 0 0 3px var(--marca-100) }
+.buscador-hero button { flex: 0 0 auto; min-height: 44px; border-radius: var(--radio-pill); padding: .6rem 1.25rem }
+
+/* Encabezado de las pantallas de listado. Más contenido y menos aire que el hero de la Home:
+   aquí ya se está buscando algo y la pantalla no tiene que volver a presentarse. */
+.explorar-head { margin: 0 0 var(--e4) }
+.explorar-head h1 { margin: 0 0 .3rem; font-size: clamp(1.6rem, 5.5vw, 2.2rem) }
+.explorar-head .hero-sub { font-size: 1rem }
+
+/* Filtros puestos: cada uno se quita solo y el conjunto se limpia de una vez. */
+.filtros-activos { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin: 0 0 var(--e4) }
+.filtro-quitar {
+    display: inline-flex; align-items: center; gap: .4rem;
+    min-height: 36px; padding: .3rem .5rem .3rem .8rem; border-radius: var(--radio-pill);
+    background: var(--marca-050); border: 1px solid var(--marca-100);
+    color: var(--marca-800); font-size: .88rem; font-weight: 650;
+}
+.filtro-quitar:hover { background: var(--marca-100); border-color: var(--marca-600) }
+.filtro-quitar span[aria-hidden] { font-size: 1.15rem; line-height: 1; opacity: .65 }
 
 .resultados-head {
     display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
@@ -331,7 +384,12 @@ progress::-moz-progress-bar { background: var(--marca-700); border-radius: var(-
 }
 .card-body { display: flex; flex-direction: column; flex: 1; gap: .35rem; padding: var(--e4) }
 .card-media + .card-body { padding-top: calc(var(--e4) + var(--e3)) }
-.card-body h2 { margin: 0; font-size: 1.22rem }
+.card-body h2, .card-body h3 { margin: 0; font-size: 1.22rem; line-height: 1.2; letter-spacing: -.015em }
+/* El título es enlace pero no se pinta como tal: la tarjeta entera ya se ve tocable, y un azul
+   subrayado dentro de ella competía con la acción de abajo. */
+.card-titulo { color: inherit; text-decoration: none }
+.card-titulo:hover { text-decoration: underline; text-underline-offset: 2px }
+a.card-media { display: block; color: inherit }
 .card-body .card-desc {
     margin: 0; color: var(--texto-suave);
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
@@ -344,6 +402,153 @@ progress::-moz-progress-bar { background: var(--marca-700); border-radius: var(-
     padding: .22rem .6rem; border-radius: var(--radio-pill);
     background: var(--calido-100); color: var(--calido-700); font-size: .8rem; font-weight: 700;
 }
+
+/* --- Secciones de descubrimiento -------------------------------------------------------------
+   La Home dejó de ser una lista y pasó a ser varias franjas temáticas. Cada una se anuncia con un
+   título y, cuando hay más de lo que cabe, un enlace que lleva al listado completo en vez de
+   alargar la página. */
+.seccion { margin: var(--e6) 0 0 }
+.seccion:first-of-type { margin-top: var(--e5) }
+.seccion-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: var(--e3);
+    margin: 0 0 var(--e3);
+}
+.seccion-head h2 { margin: 0; font-size: clamp(1.15rem, 3.4vw, 1.45rem) }
+.seccion-head p { margin: .15rem 0 0; color: var(--texto-suave); font-size: .92rem }
+.seccion-head a { flex: 0 0 auto; font-weight: 700; font-size: .92rem; text-decoration: none }
+.seccion-head a:hover { text-decoration: underline }
+
+/* Franja horizontal: en móvil se desliza con el pulgar y deja ver que hay más a la derecha; en
+   escritorio se convierte en rejilla, porque allí el desplazamiento lateral es un gesto extraño.
+   El relleno lateral negativo hace que la primera tarjeta empiece en el borde de la pantalla. */
+.fila-scroll {
+    display: grid; grid-auto-flow: column; grid-auto-columns: minmax(258px, 1fr);
+    gap: var(--e3); overflow-x: auto; scroll-snap-type: x mandatory;
+    margin-inline: calc(var(--e4) * -1); padding: .25rem var(--e4) var(--e3);
+    scrollbar-width: none;
+}
+.fila-scroll::-webkit-scrollbar { display: none }
+.fila-scroll > * { scroll-snap-align: start }
+
+/* --- Categorías -------------------------------------------------------------------------------
+   Cada categoría lleva icono y una familia de color propia. El color no es decoración: es lo que
+   permite reconocer "barbería" de un vistazo en una rejilla de ocho, sin leer las ocho. */
+.categoria-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--e3) }
+.categoria-card {
+    display: flex; flex-direction: column; gap: .15rem; padding: var(--e4);
+    background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio-lg);
+    color: var(--texto); text-decoration: none; box-shadow: var(--sombra-sm);
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+}
+.categoria-card:hover { transform: translateY(-2px); box-shadow: var(--sombra); border-color: var(--tono-borde) }
+.categoria-card .marca-icono {
+    display: grid; place-items: center; width: 2.9rem; height: 2.9rem; margin-bottom: .5rem;
+    border-radius: var(--radio); background: var(--tono-fondo); color: var(--tono-texto);
+}
+.categoria-card strong { font-size: 1rem; line-height: 1.2; letter-spacing: -.01em }
+.categoria-card span { color: var(--texto-suave); font-size: .85rem }
+/* Variante compacta para la franja de la Home: una píldora que se desliza. */
+.categoria-chip {
+    display: inline-flex; align-items: center; gap: .45rem; flex: 0 0 auto;
+    padding: .5rem .9rem .5rem .55rem; border-radius: var(--radio-pill);
+    background: var(--superficie); border: 1px solid var(--borde-fuerte);
+    color: var(--marca-900); font-weight: 650; font-size: .92rem; text-decoration: none;
+    white-space: nowrap;
+}
+.categoria-chip .marca-icono {
+    display: grid; place-items: center; width: 1.9rem; height: 1.9rem; border-radius: 50%;
+    background: var(--tono-fondo); color: var(--tono-texto);
+}
+.categoria-chip:hover { border-color: var(--tono-borde); background: var(--tono-fondo) }
+
+/* Familias de color por categoría. El atributo lo pone la interfaz desde el slug, así que una
+   categoría nueva sin entrada cae en el neutro y sigue siendo legible. */
+[data-tono] { --tono-fondo: var(--marca-050); --tono-texto: var(--marca-700); --tono-borde: var(--marca-600) }
+[data-tono="barberia"] { --tono-fondo: #e4ecf6; --tono-texto: #1d4f7c; --tono-borde: #4b7fae }
+[data-tono="belleza"] { --tono-fondo: #fbe6ef; --tono-texto: #98356a; --tono-borde: #c76fa0 }
+[data-tono="producto"] { --tono-fondo: var(--calido-100); --tono-texto: var(--calido-700); --tono-borde: var(--calido-500) }
+[data-tono="comida"] { --tono-fondo: #fdeccd; --tono-texto: #8a5510; --tono-borde: #c08a37 }
+[data-tono="mascotas"] { --tono-fondo: #e6efdc; --tono-texto: #4a6626; --tono-borde: #7f9d55 }
+[data-tono="salud"] { --tono-fondo: #dceef0; --tono-texto: #185f68; --tono-borde: #4b929c }
+[data-tono="servicios"] { --tono-fondo: #e8e7f3; --tono-texto: #494073; --tono-borde: #8279b8 }
+
+/* --- Señales de la tarjeta de negocio --------------------------------------------------------- */
+/* Una línea con lo que decide: desde cuánto cuesta y si está abierto ahora. */
+.card-señales { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .7rem; margin: .1rem 0 }
+.precio-desde { font-weight: 800; color: var(--marca-800); font-size: .98rem }
+.precio-desde small { font-weight: 600; color: var(--texto-suave); font-size: .8rem }
+.senal-abierto, .senal-cerrado {
+    display: inline-flex; align-items: center; gap: .35rem; font-size: .85rem; font-weight: 700;
+}
+.senal-abierto { color: var(--exito-700) }
+.senal-cerrado { color: var(--texto-suave) }
+.senal-abierto::before, .senal-cerrado::before {
+    content: ""; width: .45rem; height: .45rem; border-radius: 50%; background: currentColor;
+}
+/* La fila abierta late: es la única señal del directorio que cambia sola, y verla moverse es lo
+   que distingue "hay gente atendiendo ahora" de una etiqueta impresa. */
+.senal-fila {
+    display: inline-flex; align-items: center; gap: .4rem;
+    padding: .22rem .6rem .22rem .5rem; border-radius: var(--radio-pill);
+    background: var(--exito-100); color: var(--exito-700); font-size: .8rem; font-weight: 750;
+}
+.senal-fila::before {
+    content: ""; width: .5rem; height: .5rem; border-radius: 50%; background: currentColor;
+    animation: latido 2s ease-in-out infinite;
+}
+@keyframes latido { 0%, 100% { opacity: 1; transform: scale(1) } 50% { opacity: .45; transform: scale(.8) } }
+
+/* Portada ausente: un tapiz de la familia de la categoría con su icono, en vez de un rectángulo
+   gris. Un negocio sin foto todavía se ve como parte del producto. */
+.card-media.sin-foto, .cover-vacia {
+    display: grid; place-items: center; aspect-ratio: 16 / 10;
+    background: linear-gradient(150deg, var(--tono-fondo), var(--superficie) 85%);
+    color: var(--tono-texto);
+}
+.cover-vacia { aspect-ratio: 16 / 9; border-radius: var(--radio-lg) }
+
+/* --- Catálogo visual: servicios y productos ---------------------------------------------------
+   La misma anatomía para los dos: foto a la izquierda, nombre y detalle en el centro, precio y
+   acción a la derecha. Cambia el verbo —reservar o agregar—, no la forma, porque quien ya entendió
+   una lista no debería tener que aprender la otra. */
+.catalogo { display: grid; gap: var(--e3) }
+.catalogo-item {
+    display: grid; grid-template-columns: 92px minmax(0, 1fr) auto; gap: var(--e3); align-items: center;
+    padding: var(--e3); background: var(--superficie); border: 1px solid var(--borde);
+    border-radius: var(--radio); transition: border-color .15s ease, box-shadow .15s ease;
+}
+.catalogo-item:hover { border-color: var(--borde-fuerte); box-shadow: var(--sombra-sm) }
+.catalogo-foto {
+    width: 92px; height: 92px; object-fit: cover; border-radius: var(--radio-sm);
+    background: var(--superficie-2);
+}
+.catalogo-foto.sin-foto { display: grid; place-items: center; background: var(--tono-fondo); color: var(--tono-texto) }
+.catalogo-cuerpo { display: grid; gap: .2rem; min-width: 0 }
+.catalogo-cuerpo h3 { margin: 0; font-size: 1.02rem; line-height: 1.25 }
+.catalogo-cuerpo p {
+    margin: 0; color: var(--texto-suave); font-size: .89rem;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.catalogo-datos { display: flex; flex-wrap: wrap; gap: .3rem .6rem; color: var(--texto-suave); font-size: .85rem }
+.catalogo-datos .duracion { display: inline-flex; align-items: center; gap: .25rem }
+.catalogo-accion { display: grid; justify-items: end; gap: .35rem; text-align: right }
+.catalogo-accion .precio { font-size: 1.08rem; font-weight: 850; color: var(--marca-800); white-space: nowrap }
+.catalogo-accion .button-link, .catalogo-accion button { min-height: 42px; padding: .5rem .9rem }
+
+/* --- Carga: esqueletos en vez de un párrafo que dice "cargando" -------------------------------
+   Reservan exactamente el sitio que ocupará el contenido, así que al llegar los negocios nada
+   salta. */
+.skeleton {
+    background: linear-gradient(90deg, var(--superficie-2) 25%, #e7eee9 50%, var(--superficie-2) 75%);
+    background-size: 200% 100%; animation: brillo-carga 1.3s ease-in-out infinite;
+    border-radius: var(--radio-sm);
+}
+@keyframes brillo-carga { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }
+.skeleton-card { overflow: hidden; border: 1px solid var(--borde); border-radius: var(--radio-lg); background: var(--superficie) }
+.skeleton-card .skeleton-media { aspect-ratio: 16 / 10; border-radius: 0 }
+.skeleton-card .skeleton-linea { height: .85rem; margin: var(--e3) var(--e4) 0 }
+.skeleton-card .skeleton-linea.corta { width: 45% }
+.skeleton-card .skeleton-linea:last-child { margin-bottom: var(--e4) }
 
 /* Cómo funciona: explica el producto sin robarle la pantalla a los negocios. */
 .capability-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--e3); margin: var(--e6) 0 0 }
@@ -464,6 +669,21 @@ progress::-moz-progress-bar { background: var(--marca-700); border-radius: var(-
     font-size: .95rem; font-weight: 650;
 }
 .slot.selected { background: var(--marca-700); border-color: var(--marca-700); color: #fff }
+
+/* Control segmentado: dos o tres opciones excluyentes que caben a la vista. Sustituye a un
+   desplegable cuando las opciones son pocas y la elección cambia lo que se pide debajo. */
+.segmentado {
+    display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: .25rem;
+    margin: 0 0 var(--e4); padding: .25rem;
+    background: var(--superficie-2); border-radius: var(--radio-pill);
+}
+.segmentado button {
+    min-height: 42px; padding: .45rem .5rem; border-radius: var(--radio-pill);
+    background: none; border: 0; color: var(--texto-suave); font-size: .92rem; font-weight: 700;
+}
+.segmentado button.activo {
+    background: var(--superficie); color: var(--marca-800); box-shadow: var(--sombra-sm);
+}
 
 /* Contador de unidades: un control compacto, no tres bloques apilados. */
 .stepper { display: flex; align-items: center; gap: .2rem; margin-top: auto }
@@ -735,17 +955,50 @@ progress::-moz-progress-bar { background: var(--marca-700); border-radius: var(-
     .permission-set { grid-template-columns: repeat(2, minmax(0, 1fr)) }
 }
 
+@media (max-width: 900px) {
+    /* En móvil el recorrido baja al pulgar y la barra superior se queda sólo con la marca y la
+       identidad. Antes los enlaces se apretaban arriba, lejos de la mano y compitiendo entre sí
+       por un ancho que no existía. */
+    :root { --alto-nav: calc(4.05rem + env(safe-area-inset-bottom)) }
+    .nav-escritorio, .solo-escritorio { display: none }
+    .nav-inferior {
+        display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+        position: fixed; inset: auto 0 0; z-index: 30;
+        padding: .35rem .25rem calc(.35rem + env(safe-area-inset-bottom));
+        background: rgb(255 255 255 / 96%); backdrop-filter: blur(10px);
+        border-top: 1px solid var(--borde);
+    }
+    .nav-inferior a {
+        display: grid; justify-items: center; gap: .15rem; padding: .35rem .2rem;
+        min-height: 52px; border-radius: var(--radio-sm);
+        color: var(--texto-suave); font-size: .72rem; font-weight: 700; text-decoration: none;
+    }
+    .nav-inferior a.activo { color: var(--marca-700) }
+    .nav-inferior a.activo .icono { transform: translateY(-1px) }
+    .nav-inferior a:active { background: var(--marca-050) }
+    .nav-inferior span { letter-spacing: -.01em }
+    /* El alto de la barra inferior se descuenta del pie: sin esto tapaba los enlaces legales. */
+    footer { padding-bottom: calc(var(--e6) + var(--alto-nav)) }
+}
+
 @media (max-width: 720px) {
-    /* La barra ya no es una tira que se desplaza. Desplazarla dejaba el último enlace cortado
-       contra el borde sin ningún indicio de que hubiera más, y en una pantalla táctil ese gesto
-       compite con el desplazamiento de la página. Ahora los enlaces que no caben junto al
-       logotipo bajan a una línea propia: la barra crece, pero se lee entera. */
-    .site-header { padding: .5rem var(--e4); gap: .35rem; flex-wrap: wrap }
+    .site-header { padding: .5rem var(--e4); gap: .35rem }
     .brand { font-size: .98rem; gap: .4rem }
     .brand span { width: 1.75rem; height: 1.75rem; font-size: .85rem }
-    .site-header nav { flex: 1 1 auto; flex-wrap: wrap; justify-content: flex-end; gap: .15rem }
+    .site-header nav { flex: 0 0 auto; gap: .15rem }
     .site-header nav a { padding: .4rem .45rem; font-size: .86rem }
     .page-shell { padding: var(--e4) var(--e4) var(--e6) }
+    .categoria-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--e2) }
+    .categoria-card { padding: var(--e3) }
+    .catalogo-item { grid-template-columns: 74px minmax(0, 1fr); gap: var(--e3) .8rem }
+    .catalogo-foto { width: 74px; height: 74px }
+    /* El precio y la acción bajan a una fila propia y la acción ocupa el ancho: a 375 px, tres
+       columnas dejaban el botón en dos letras. */
+    .catalogo-accion {
+        grid-column: 1 / -1; grid-auto-flow: column; justify-items: stretch;
+        align-items: center; justify-content: space-between; text-align: left;
+    }
+    .catalogo-accion .button-link, .catalogo-accion button { min-width: 8.5rem }
 
     .hero-home { padding: var(--e4) var(--e4) var(--e5); margin-inline: calc(var(--e4) * -1) ;
         border-radius: 0 }
@@ -762,14 +1015,16 @@ progress::-moz-progress-bar { background: var(--marca-700); border-radius: var(-
     .bloque, .contact-block, .legal-document, .queue-promo, .narrow { padding: var(--e4) }
     .ficha-acciones .button-link { flex: 1 1 100% }
     .contacto-lista dfn { flex: 0 0 100% }
-    /* La acción dominante viaja con el visitante. */
+    /* La acción dominante viaja con el visitante, apoyada justo encima de la barra inferior en
+       lugar de quedar debajo de ella. --alto-nav es ese apoyo y lo comparten las dos barras
+       flotantes que existen: la acción de la ficha y el resumen del pedido. */
     .ficha-sticky {
-        display: block; position: sticky; bottom: 0; z-index: 15;
-        margin: var(--e5) calc(var(--e4) * -1) 0; padding: .6rem var(--e4)
-            calc(.6rem + env(safe-area-inset-bottom));
+        display: block; position: sticky; bottom: var(--alto-nav); z-index: 15;
+        margin: var(--e5) calc(var(--e4) * -1) 0; padding: .6rem var(--e4);
         background: rgb(255 255 255 / 95%); backdrop-filter: blur(8px);
         border-top: 1px solid var(--borde);
     }
+    .resumen-pedido { bottom: var(--alto-nav) }
     .ficha-sticky .button-link { width: 100%; min-height: 52px; font-size: 1.05rem }
 
     .appointment-form fieldset { padding: var(--e4) }

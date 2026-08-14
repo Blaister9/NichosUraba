@@ -11,6 +11,9 @@ public sealed class HttpUrabaConectaApi(HttpClient http) : IUrabaConectaApi
     public Task<IReadOnlyList<BusinessCardDto>> GetBusinessesAsync(string? search = null, string? municipality = null,
         string? category = null, CancellationToken cancellationToken = default)
         => Get<IReadOnlyList<BusinessCardDto>>($"api/v1/public/businesses?q={E(search)}&municipality={E(municipality)}&category={E(category)}", cancellationToken);
+    public Task<IReadOnlyList<CategoryCardDto>> GetCategoriesAsync(string? municipality = null,
+        CancellationToken cancellationToken = default)
+        => Get<IReadOnlyList<CategoryCardDto>>($"api/v1/public/categories?municipality={E(municipality)}", cancellationToken);
     public async Task<BusinessProfileDto?> GetBusinessAsync(string slug, CancellationToken cancellationToken = default)
     {
         var response = await http.GetAsync($"api/v1/public/businesses/{Uri.EscapeDataString(slug)}", cancellationToken);

@@ -41,14 +41,54 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
             Logo = db.BusinessImages.Where(i => i.BusinessId == x.b.Id && !i.IsDeleted && i.Kind == BusinessImageKind.Logo)
                 .Select(i => new { i.StorageKey, i.AltText }).FirstOrDefault(),
             Cover = db.BusinessImages.Where(i => i.BusinessId == x.b.Id && !i.IsDeleted && i.Kind == BusinessImageKind.Cover)
-                .Select(i => new { i.StorageKey, i.AltText }).FirstOrDefault()
+                .Select(i => new { i.StorageKey, i.AltText }).FirstOrDefault(),
+            // "Desde $25.000" contesta antes de entrar la pregunta que trae la mayoría. Nullable
+            // a propósito: sin servicios con precio, Min sobre una lista vacía sería 0 y "desde $0"
+            // afirmaría algo que no es cierto.
+            PriceFrom = db.Services.Where(s => s.BusinessId == x.b.Id && s.IsActive)
+                .Select(s => (decimal?)s.ReferencePrice).Min(),
+            QueueIsOpen = db.QueueSessions.Any(q => q.BusinessId == x.b.Id && q.Status == QueueSessionStatus.Open),
+            x.b.TimeZoneId,
+            Hours = db.BusinessHours.Where(h => h.BusinessId == x.b.Id)
+                .Select(h => new { h.Day, h.OpensAt, h.ClosesAt }).ToList()
         }).ToListAsync(cancellationToken);
         return rows.Select(x => new BusinessCardDto(x.Slug, x.Name,
             new(x.CategorySlug, x.CategoryName), new(x.MunicipalitySlug, x.MunicipalityName),
             x.Description, x.Address, x.HasQueue, x.HasOrders, x.HasAppointments,
             x.Logo is null ? null : storage.PublicUrl(x.Logo.StorageKey),
             x.Cover is null ? null : storage.PublicUrl(x.Cover.StorageKey),
-            x.Logo?.AltText, x.Cover?.AltText, x.ShortDescription)).ToList();
+            x.Logo?.AltText, x.Cover?.AltText, x.ShortDescription,
+            x.HasAppointments ? x.PriceFrom : null,
+            x.HasQueue && x.QueueIsOpen,
+            OpenStatus(x.TimeZoneId, x.Hours
+                .Select(h => new BusinessHourDto(h.Day, h.OpensAt.ToString("HH:mm"), h.ClosesAt.ToString("HH:mm")))
+                .ToList()))).ToList();
+    }
+
+    /// <summary>
+    /// Categorías con negocios publicados, de la más poblada a la menos. Se calcula sobre el mismo
+    /// filtro que el directorio —activo, publicado, municipio y categoría vigentes— para que el
+    /// conteo que se promete coincida con lo que aparece al entrar.
+    /// </summary>
+    public Task<IReadOnlyList<CategoryCardDto>> FindCategoriesAsync(string? municipality,
+        CancellationToken cancellationToken)
+        => publicCache.GetOrCreateAsync($"categorias|{municipality}",
+            ct => QueryCategoriesAsync(municipality, ct), cancellationToken);
+
+    private async Task<IReadOnlyList<CategoryCardDto>> QueryCategoriesAsync(string? municipality,
+        CancellationToken cancellationToken)
+    {
+        var query = from b in db.Businesses.AsNoTracking()
+                    join m in db.Municipalities on b.MunicipalityId equals m.Id
+                    join c in db.Categories on b.CategoryId equals c.Id
+                    where b.Status == BusinessStatus.Active && b.IsPublished && m.IsActive && c.IsActive
+                    select new { b, m, c };
+        if (!string.IsNullOrWhiteSpace(municipality)) query = query.Where(x => x.m.Slug == municipality);
+        var rows = await query.GroupBy(x => new { x.c.Slug, x.c.Name })
+            .Select(g => new { g.Key.Slug, g.Key.Name, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+        return rows.OrderByDescending(x => x.Count).ThenBy(x => x.Name)
+            .Select(x => new CategoryCardDto(x.Slug, x.Name, x.Count)).ToList();
     }
 
     public Task<BusinessProfileDto?> GetBusinessProfileAsync(string slug, bool requirePublished,

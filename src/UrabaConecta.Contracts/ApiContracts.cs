@@ -3,10 +3,27 @@ using System.ComponentModel.DataAnnotations;
 namespace UrabaConecta.Contracts;
 
 public sealed record OptionDto(string Slug, string Name);
+
+/// <summary>
+/// Una categoría del directorio con cuántos negocios publicados tiene. El conteo es lo que decide
+/// si vale la pena ofrecerla: una categoría vacía enviada a una pantalla sin resultados es peor que
+/// no mostrarla.
+/// </summary>
+public sealed record CategoryCardDto(string Slug, string Name, int BusinessCount);
+
+/// <param name="PriceFrom">
+/// Precio del servicio activo más barato. Nulo cuando el negocio no agenda o no tiene servicios con
+/// precio: un "desde $0" diría algo distinto de lo que ocurre.
+/// </param>
+/// <param name="QueueIsOpen">
+/// Si la fila está recibiendo gente ahora. Es una señal de estado, no un conteo: el directorio se
+/// cachea un minuto y "3 esperando" envejece mal, mientras que "fila abierta" sigue siendo cierto.
+/// </param>
 public sealed record BusinessCardDto(string Slug, string Name, OptionDto Category, OptionDto Municipality,
     string Description, string Address, bool HasVirtualQueue = false, bool HasPickupOrdering = false,
     bool HasScheduling = false, string? LogoUrl = null, string? CoverUrl = null,
-    string? LogoAltText = null, string? CoverAltText = null, string ShortDescription = "");
+    string? LogoAltText = null, string? CoverAltText = null, string ShortDescription = "",
+    decimal? PriceFrom = null, bool QueueIsOpen = false, string? OpenStatus = null);
 public sealed record BusinessHourDto(DayOfWeek Day, string OpensAt, string ClosesAt);
 /// <summary>
 /// <paramref name="DepositAmount"/> llega ya calculado por el servidor: el cliente nunca repite la
@@ -445,6 +462,9 @@ public interface IUrabaConectaApi
 {
     Task<IReadOnlyList<BusinessCardDto>> GetBusinessesAsync(string? search = null, string? municipality = null,
         string? category = null, CancellationToken cancellationToken = default);
+    /// <summary>Categorías con negocios publicados. Opcionalmente acotadas a un municipio.</summary>
+    Task<IReadOnlyList<CategoryCardDto>> GetCategoriesAsync(string? municipality = null,
+        CancellationToken cancellationToken = default);
     Task<BusinessProfileDto?> GetBusinessAsync(string slug, CancellationToken cancellationToken = default);
     Task<SlotListDto> GetSlotsAsync(string slug, Guid serviceId, DateOnly date, CancellationToken cancellationToken = default);
     Task<AppointmentCreatedDto> CreateAppointmentAsync(string slug, CreateAppointmentRequest request,

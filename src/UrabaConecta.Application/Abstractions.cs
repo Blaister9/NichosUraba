@@ -206,6 +206,8 @@ public interface IMembershipAdministrationStore
 
 public interface IUrabaStore
 {
+    Task<IReadOnlyList<CategoryCardDto>> FindCategoriesAsync(string? municipality,
+        CancellationToken cancellationToken);
     Task<IReadOnlyList<BusinessCardDto>> FindBusinessesAsync(string? search, string? municipality, string? category,
         CancellationToken cancellationToken);
     /// <summary>Ficha pública. Con <paramref name="requirePublished"/> en false sirve la vista previa administrativa.</summary>
@@ -320,6 +322,8 @@ public interface IQueueUseCases
 public interface IUrabaUseCases
 {
     Task<IReadOnlyList<BusinessCardDto>> GetBusinessesAsync(string? search, string? municipality, string? category,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<CategoryCardDto>> GetCategoriesAsync(string? municipality,
         CancellationToken cancellationToken = default);
     Task<BusinessProfileDto?> GetBusinessAsync(string slug, CancellationToken cancellationToken = default);
     Task<SlotListDto> GetSlotsAsync(string slug, Guid serviceId, DateOnly date, CancellationToken cancellationToken = default);

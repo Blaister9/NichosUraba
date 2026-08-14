@@ -1,23 +1,83 @@
+@page "/seguimiento"
 @page "/seguimiento/citas"
 @rendermode InteractiveServer
 @inject NavigationManager Navigation
 
-<PageTitle>Consultar cita | UrabáConecta</PageTitle>
-<section class="narrow">
-    <p class="eyebrow">Seguimiento público</p><h1>Consulte su cita</h1>
-    <p>Escriba el código recibido al enviar la solicitud.</p>
-    <label>Código de seguimiento<InputText @bind-Value="code" autocomplete="off" /></label>
-    <button class="primary" @onclick="Open" disabled="@(!interactiveReady || code.Trim().Length < 20)">Consultar</button>
-    @if (!interactiveReady) { <p class="notice" role="status">Preparando la consulta…</p> }
+@* "Mi actividad": la puerta única a los tres seguimientos.
+
+   Antes había una consulta por operación y ninguna estaba enlazada desde la navegación, así que
+   volver a una reserva exigía guardar la dirección exacta. Ahora la barra inferior lleva aquí y
+   aquí se elige qué se está consultando; /seguimiento/citas se conserva porque es la dirección que
+   ya circula en los mensajes de confirmación enviados. *@
+<PageTitle>Mi actividad | UrabáConecta</PageTitle>
+
+<section class="explorar-head">
+    <h1>Mi actividad</h1>
+    <p class="hero-sub">Consulta tu reserva, tu turno o tu pedido con el código que recibiste.</p>
 </section>
+
+<section class="narrow">
+    <div class="segmentado" role="group" aria-label="Qué quieres consultar">
+        @foreach (var opcion in Opciones)
+        {
+            <button type="button" class="@(tipo == opcion.Clave ? "activo" : null)"
+                    aria-pressed="@(tipo == opcion.Clave)" @onclick="() => tipo = opcion.Clave">
+                <Icon Name="@opcion.Icono" Size="18" /> @opcion.Etiqueta
+            </button>
+        }
+    </div>
+
+    <label>Código de seguimiento
+        <input @bind-value="codigo" @bind-value:event="oninput" @onkeydown="AlTeclear"
+               autocomplete="off" spellcheck="false" placeholder="Pega aquí tu código" />
+        <span class="field-hint">Te lo mostramos al confirmar. @Pista</span>
+    </label>
+
+    <button class="primary btn-grande" @onclick="Abrir" disabled="@(!listo || !CodigoValido)">Consultar</button>
+
+    @if (!listo) { <p class="notice" role="status">Preparando la consulta…</p> }
+    else if (intentado && !CodigoValido) { <p class="error" role="alert">Ese código está incompleto.</p> }
+</section>
+
 @code {
-    private string code = "";
-    private bool interactiveReady;
+    private string tipo = "citas", codigo = "";
+    private bool listo, intentado;
+
+    private sealed record Opcion(string Clave, string Etiqueta, string Icono);
+
+    private static readonly Opcion[] Opciones =
+    [
+        new("citas", "Cita", "actividad"),
+        new("turnos", "Turno", "reloj"),
+        new("pedidos", "Pedido", "bolsa"),
+    ];
+
+    private string Pista => tipo switch
+    {
+        "turnos" => "Es el código del turno que tomaste.",
+        "pedidos" => "Es el código que acompaña al número de tu pedido.",
+        _ => "Es el código que acompaña a tu reserva."
+    };
+
+    // Los tres códigos los emite el mismo servicio, así que comparten longitud mínima.
+    private bool CodigoValido => codigo.Trim().Length >= 20;
+
     protected override void OnAfterRender(bool firstRender)
     {
         if (!firstRender) return;
-        interactiveReady = true;
+        listo = true;
         StateHasChanged();
     }
-    private void Open() => Navigation.NavigateTo($"/seguimiento/citas/{Uri.EscapeDataString(code.Trim())}");
+
+    private void AlTeclear(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") Abrir();
+    }
+
+    private void Abrir()
+    {
+        intentado = true;
+        if (!CodigoValido) return;
+        Navigation.NavigateTo($"/seguimiento/{tipo}/{Uri.EscapeDataString(codigo.Trim())}");
+    }
 }

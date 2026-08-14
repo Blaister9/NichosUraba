@@ -1,28 +1,42 @@
 @inherits LayoutComponentBase
+@implements IDisposable
+@inject NavigationManager Nav
 
+@* Dos navegaciones para un mismo producto, no una comprimida en la otra.
+
+   En escritorio manda la barra superior. En móvil la barra superior se queda sólo con la marca y la
+   identidad, y el recorrido se mueve abajo, al alcance del pulgar: Inicio, Explorar, Categorías y lo
+   propio de cada quien. Antes había que conocer las direcciones o volver con el botón atrás, que es
+   justamente lo que hace que algo se sienta una página suelta y no una aplicación. *@
 <header class="site-header">
-    <a class="brand" href="/"><span>U</span> UrabáConecta</a>
-    @* El logotipo ya lleva al directorio: repetirlo como enlace sólo restaba espacio en móvil.
-       Y como no existe registro público, quien entra con sesión siempre viene a trabajar: su barra
-       arranca por "Panel" y no comparte sitio con el seguimiento de un cliente. *@
-    <nav aria-label="Navegación principal">
+    <a class="brand" href="/"><span aria-hidden="true">U</span> UrabáConecta</a>
+    <nav class="nav-escritorio" aria-label="Navegación principal">
+        @foreach (var item in Publicas)
+        {
+            <a href="@item.Href" class="@(EsActiva(item.Href) ? "activo" : null)"
+               aria-current="@(EsActiva(item.Href) ? "page" : null)">@item.Label</a>
+        }
+    </nav>
+    <nav class="nav-identidad" aria-label="Tu cuenta">
         <AuthorizeView>
-            <Authorized><a href="/panel">Panel</a></Authorized>
-            <NotAuthorized><a href="/seguimiento/citas">Mi reserva</a></NotAuthorized>
-        </AuthorizeView>
-        <AuthorizeView Roles="PlatformAdmin,PartnerOperator">
-            <Authorized><a href="/admin/negocios">Negocios Fundadores</a></Authorized>
-        </AuthorizeView>
-        <AuthorizeView Roles="PlatformAdmin">
-            <Authorized><a href="/admin/accesos">Accesos</a><a href="/admin/salud">Salud</a></Authorized>
-        </AuthorizeView>
-        <AuthorizeView>
-            <Authorized><a href="/Account/Manage" target="_self">Cuenta</a></Authorized>
-            <NotAuthorized><a href="/Account/Login" target="_self">Ingresar</a></NotAuthorized>
+            <Authorized>
+                <a class="solo-escritorio" href="/panel">Panel</a>
+                <a href="/Account/Manage" target="_self" class="boton-identidad">
+                    <Icon Name="cuenta" Size="20" /><span class="solo-escritorio">Cuenta</span>
+                </a>
+            </Authorized>
+            <NotAuthorized>
+                <a class="solo-escritorio" href="/para-negocios">Para negocios</a>
+                <a href="/Account/Login" target="_self" class="boton-identidad">
+                    <Icon Name="cuenta" Size="20" /><span class="solo-escritorio">Ingresar</span>
+                </a>
+            </NotAuthorized>
         </AuthorizeView>
     </nav>
 </header>
+
 <main class="page-shell">@Body</main>
+
 <footer>
     <p><strong>UrabáConecta</strong> · Apartadó · Carepa · Chigorodó · Turbo</p>
     @* El aviso se escribe siempre y lo muestra el CSS sólo en los ambientes de demostración: la
@@ -37,6 +51,75 @@
         <a href="/legal/reclamos">Consultas y reclamos</a>
     </nav>
 </footer>
+
+@* La barra inferior sólo existe en móvil. Se marca con aria-current para que un lector de pantalla
+   anuncie dónde está quien navega, no sólo qué puede tocar. *@
+<nav class="nav-inferior" aria-label="Navegación">
+    @foreach (var item in Publicas)
+    {
+        <a href="@item.Href" class="@(EsActiva(item.Href) ? "activo" : null)"
+           aria-current="@(EsActiva(item.Href) ? "page" : null)">
+            <Icon Name="@item.Icono" Size="22" /><span>@item.Label</span>
+        </a>
+    }
+    <AuthorizeView>
+        <Authorized>
+            <a href="/panel" class="@(EsActiva("/panel") ? "activo" : null)"
+               aria-current="@(EsActiva("/panel") ? "page" : null)">
+                <Icon Name="panel" Size="22" /><span>Panel</span>
+            </a>
+        </Authorized>
+        <NotAuthorized>
+            <a href="/seguimiento" class="@(EsActiva("/seguimiento") ? "activo" : null)"
+               aria-current="@(EsActiva("/seguimiento") ? "page" : null)">
+                <Icon Name="actividad" Size="22" /><span>Mi actividad</span>
+            </a>
+        </NotAuthorized>
+    </AuthorizeView>
+</nav>
+
 <div id="blazor-error-ui" data-nosnippet>
     Ocurrió un error inesperado. <a href="." class="reload">Recargar</a><span class="dismiss">×</span>
 </div>
+
+@code {
+    /// <param name="Tambien">
+    /// Rutas que pertenecen a este destino aunque no cuelguen de su dirección. La ficha de un
+    /// negocio vive en /negocios pero se llega a ella explorando: dejar la barra apagada allí haría
+    /// perder el hilo justo en la pantalla donde se decide reservar.
+    /// </param>
+    private sealed record Destino(string Href, string Label, string Icono, string[]? Tambien = null);
+
+    private static readonly Destino[] Publicas =
+    [
+        new("/", "Inicio", "inicio"),
+        new("/explorar", "Explorar", "explorar", ["/negocios"]),
+        new("/categorias", "Categorías", "categorias"),
+    ];
+
+    protected override void OnInitialized() => Nav.LocationChanged += AlNavegar;
+
+    private void AlNavegar(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+        => StateHasChanged();
+
+    /// <summary>
+    /// La raíz sólo se marca en la raíz exacta; el resto cubre además sus subrutas y las rutas que
+    /// se le hayan adscrito. Sin la comparación exacta para "/", Inicio quedaba encendido en todas
+    /// las pantallas y la barra dejaba de informar nada.
+    /// </summary>
+    private bool EsActiva(string href)
+    {
+        var actual = Ruta();
+        if (href == "/") return actual == "/";
+        if (Cubre(href, actual)) return true;
+        return Publicas.FirstOrDefault(x => x.Href == href)?.Tambien?.Any(p => Cubre(p, actual)) == true;
+    }
+
+    private string Ruta()
+        => "/" + Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0].Split('#')[0].TrimEnd('/');
+
+    private static bool Cubre(string prefijo, string actual)
+        => actual == prefijo || actual.StartsWith(prefijo + "/", StringComparison.OrdinalIgnoreCase);
+
+    public void Dispose() => Nav.LocationChanged -= AlNavegar;
+}
