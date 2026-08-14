@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 192 192" role="img" aria-label="UrabáConecta">
+  <rect width="192" height="192" rx="42" fill="#075d52"/>
+  <path d="M45 48v55c0 29 20 46 51 46s51-17 51-46V48h-29v54c0 14-7 21-22 21s-22-7-22-21V48z" fill="#fff7e8"/>
+  <circle cx="143" cy="43" r="16" fill="#f3b33d"/>
+  <path d="M55 139c20 17 62 17 82 0" fill="none" stroke="#79c8b7" stroke-width="9" stroke-linecap="round"/>
+</svg>
