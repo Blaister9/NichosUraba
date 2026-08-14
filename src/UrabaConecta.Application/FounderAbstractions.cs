@@ -73,6 +73,9 @@ public static class ImagePolicy
         BusinessImageKind.Logo => 320,
         // La portada se muestra a 640 px en la tarjeta y a ancho completo en la ficha.
         BusinessImageKind.Cover => 1280,
+        // Servicio y producto viven en tarjetas de catálogo: unos 400 px en móvil, el doble en
+        // pantallas densas. Guardarlos a 1600 px sólo alarga la descarga de una lista larga.
+        BusinessImageKind.Service or BusinessImageKind.Product => 800,
         _ => MaximumLongestSide
     };
 }
@@ -153,6 +156,12 @@ public interface IBusinessImageStore
     Task<IReadOnlyList<BusinessImage>> ListAsync(Guid businessId, CancellationToken cancellationToken);
     Task<BusinessImage?> GetAsync(Guid businessId, Guid imageId, CancellationToken cancellationToken);
     Task<Business?> GetBusinessAsync(Guid businessId, CancellationToken cancellationToken);
+    /// <summary>
+    /// Confirma que la fila del catálogo existe y pertenece a ese negocio. Sin esta comprobación,
+    /// un identificador ajeno colgaría una foto del servicio de otro establecimiento.
+    /// </summary>
+    Task<bool> CatalogTargetExistsAsync(Guid businessId, BusinessImageKind kind, Guid targetId,
+        CancellationToken cancellationToken);
     void Add(BusinessImage image);
     void AddAudit(PlatformAuditEntry audit);
     Task SaveChangesAsync(CancellationToken cancellationToken);
@@ -164,8 +173,12 @@ public interface IBusinessImageUseCases
 {
     Task<IReadOnlyList<BusinessImageDto>> ListAsync(PlatformActor actor, Guid businessId,
         CancellationToken cancellationToken = default);
+    /// <summary>
+    /// <paramref name="targetId"/> identifica la fila del catálogo cuando el tipo es Service o
+    /// Product; para logo, portada y galería no se envía.
+    /// </summary>
     Task<BusinessImageDto> UploadAsync(PlatformActor actor, Guid businessId, string kind, UploadedImage file,
-        string? altText, CancellationToken cancellationToken = default);
+        string? altText, Guid? targetId = null, CancellationToken cancellationToken = default);
     Task<BusinessImageDto> DescribeAsync(PlatformActor actor, Guid businessId, Guid imageId,
         UpdateBusinessImageRequest request, CancellationToken cancellationToken = default);
     Task RemoveAsync(PlatformActor actor, Guid businessId, Guid imageId, long version,

@@ -96,6 +96,13 @@ public sealed class BusinessImageStore(AppDbContext db) : IBusinessImageStore
     public Task<Business?> GetBusinessAsync(Guid businessId, CancellationToken cancellationToken)
         => db.Businesses.SingleOrDefaultAsync(x => x.Id == businessId, cancellationToken);
 
+    /// <summary>El filtro por negocio es la frontera: sin él bastaría un identificador ajeno.</summary>
+    public Task<bool> CatalogTargetExistsAsync(Guid businessId, BusinessImageKind kind, Guid targetId,
+        CancellationToken cancellationToken)
+        => kind == BusinessImageKind.Service
+            ? db.Services.AnyAsync(x => x.BusinessId == businessId && x.Id == targetId, cancellationToken)
+            : db.Products.AnyAsync(x => x.BusinessId == businessId && x.Id == targetId, cancellationToken);
+
     public void Add(BusinessImage image) => db.Add(image);
     public void AddAudit(PlatformAuditEntry audit) => db.Add(audit);
 

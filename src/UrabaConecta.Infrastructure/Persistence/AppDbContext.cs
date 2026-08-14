@@ -360,8 +360,16 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             // Logo y portada son únicos entre las imágenes vigentes de cada negocio.
             x.HasIndex(e => new { e.BusinessId, e.Kind }).IsUnique()
                 .HasFilter("\"IsDeleted\" = FALSE AND \"Kind\" IN ('Logo', 'Cover')");
+            // Y una sola foto vigente por fila del catálogo, por la misma razón: la tarjeta de un
+            // servicio muestra una, y con dos vigentes cuál gana dependería del orden de lectura.
+            x.HasIndex(e => e.ServiceId).IsUnique().HasFilter("\"IsDeleted\" = FALSE AND \"ServiceId\" IS NOT NULL");
+            x.HasIndex(e => e.ProductId).IsUnique().HasFilter("\"IsDeleted\" = FALSE AND \"ProductId\" IS NOT NULL");
             x.HasIndex(e => e.StorageKey).IsUnique();
             x.Property(e => e.Kind).HasConversion<string>().HasMaxLength(16);
+            // Borrar un servicio o un producto se lleva su foto: dejarla huérfana sólo acumularía
+            // objetos que ya nadie sabe a qué pertenecían.
+            x.HasOne<Service>().WithMany().HasForeignKey(e => e.ServiceId).OnDelete(DeleteBehavior.Cascade);
+            x.HasOne<Product>().WithMany().HasForeignKey(e => e.ProductId).OnDelete(DeleteBehavior.Cascade);
             x.Property(e => e.StorageKey).HasMaxLength(400);
             x.Property(e => e.ContentType).HasMaxLength(60);
             x.Property(e => e.AltText).HasMaxLength(160);

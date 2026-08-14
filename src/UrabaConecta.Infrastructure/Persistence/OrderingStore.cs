@@ -39,6 +39,12 @@ public sealed class OrderingStore(AppDbContext db) : IOrderingStore
     public async Task<IReadOnlyList<Product>> GetProductsAsync(Guid businessId, bool activeOnly, CancellationToken ct)
         => await db.Products.Where(x => x.BusinessId == businessId && (!activeOnly || x.IsActive))
             .OrderBy(x => x.DisplayOrder).ThenBy(x => x.Name).ToListAsync(ct);
+    public async Task<IReadOnlyDictionary<Guid, CatalogPhoto>> GetProductPhotosAsync(Guid businessId,
+        CancellationToken ct)
+        => await db.BusinessImages
+            .Where(x => x.BusinessId == businessId && !x.IsDeleted && x.ProductId != null)
+            .Select(x => new { Product = x.ProductId!.Value, x.StorageKey, x.AltText })
+            .ToDictionaryAsync(x => x.Product, x => new CatalogPhoto(x.StorageKey, x.AltText), ct);
     public Task<ProductCategory?> GetCategoryAsync(Guid businessId, Guid id, CancellationToken ct)
         => db.ProductCategories.SingleOrDefaultAsync(x => x.BusinessId == businessId && x.Id == id, ct);
     public Task<Product?> GetProductAsync(Guid businessId, Guid id, CancellationToken ct)

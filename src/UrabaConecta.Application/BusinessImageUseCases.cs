@@ -20,10 +20,18 @@ public sealed class BusinessImageUseCases(
     }
 
     public async Task<BusinessImageDto> UploadAsync(PlatformActor actor, Guid businessId, string kind,
-        UploadedImage file, string? altText, CancellationToken cancellationToken = default)
+        UploadedImage file, string? altText, Guid? targetId = null,
+        CancellationToken cancellationToken = default)
     {
         await EnsureScopeAsync(actor, businessId, cancellationToken);
         var imageKind = ParseKind(kind);
+        var isCatalog = imageKind is BusinessImageKind.Service or BusinessImageKind.Product;
+        if (isCatalog && targetId.GetValueOrDefault() == Guid.Empty)
+            throw new ApiException("TARGET_REQUIRED",
+                "Indique el servicio o el producto al que pertenece la fotografía.");
+        if (!isCatalog && targetId is not null)
+            throw new ApiException("TARGET_NOT_ALLOWED",
+                "Sólo las fotografías de servicio o producto se asocian a una fila del catálogo.");
         if (file.Content.Length == 0)
             throw new ApiException("EMPTY_FILE", "El archivo está vacío.");
         if (file.Content.Length > ImagePolicy.MaximumOriginalBytes)
@@ -40,8 +48,20 @@ public sealed class BusinessImageUseCases(
         if (business.Status == BusinessStatus.Archived)
             throw new ApiException("BUSINESS_ARCHIVED", "Un negocio archivado no admite cambios.", 409);
 
-        var current = (await store.ListAsync(businessId, cancellationToken))
-            .Where(x => x.Kind == imageKind).ToList();
+        if (isCatalog && !await store.CatalogTargetExistsAsync(businessId, imageKind, targetId!.Value,
+                cancellationToken))
+            throw new ApiException("TARGET_NOT_FOUND",
+                imageKind == BusinessImageKind.Service
+                    ? "No encontramos ese servicio en el negocio."
+                    : "No encontramos ese producto en el negocio.", 404);
+
+        var all = await store.ListAsync(businessId, cancellationToken);
+        // Para el catálogo lo vigente es lo de ESA fila, no lo de todos los servicios del negocio:
+        // filtrar sólo por tipo habría borrado la foto de cada servicio al subir la del siguiente.
+        var current = (isCatalog
+            ? all.Where(x => x.Kind == imageKind &&
+                (imageKind == BusinessImageKind.Service ? x.ServiceId : x.ProductId) == targetId)
+            : all.Where(x => x.Kind == imageKind)).ToList();
         if (imageKind == BusinessImageKind.Gallery)
         {
             if (current.Count >= BusinessImage.MaximumGalleryImages)
@@ -50,7 +70,8 @@ public sealed class BusinessImageUseCases(
         }
         else if (current.Count > 0)
         {
-            // Logo y portada son únicos: el reemplazo elimina lógicamente el anterior.
+            // Logo, portada y cada fila del catálogo tienen una sola foto vigente: el reemplazo
+            // elimina lógicamente la anterior.
             foreach (var previous in current)
             {
                 previous.SoftDelete(now, previous.Version);
@@ -66,7 +87,9 @@ public sealed class BusinessImageUseCases(
             : 0;
         var image = TryDomain(() => new BusinessImage(Guid.NewGuid(), businessId, imageKind, key,
             normalized.ContentType, normalized.Width, normalized.Height, normalized.Content.LongLength,
-            altText, order, now));
+            altText, order, now,
+            imageKind == BusinessImageKind.Service ? targetId : null,
+            imageKind == BusinessImageKind.Product ? targetId : null));
         store.Add(image);
         Audit(businessId, actor, PlatformAuditAction.ImageUploaded, image, "carga", now);
         await store.SaveChangesAsync(cancellationToken);
@@ -144,7 +167,7 @@ public sealed class BusinessImageUseCases(
 
     private BusinessImageDto Map(BusinessImage image)
         => new(image.Id, image.Kind.ToString(), storage.PublicUrl(image.StorageKey), image.AltText,
-            image.Width, image.Height, image.DisplayOrder, image.Version);
+            image.Width, image.Height, image.DisplayOrder, image.Version, image.ServiceId, image.ProductId);
 
     private static BusinessImageKind ParseKind(string value)
         => Enum.TryParse<BusinessImageKind>(value, ignoreCase: true, out var kind)

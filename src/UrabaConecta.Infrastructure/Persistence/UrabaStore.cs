@@ -91,7 +91,8 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
                                   }).ToList(),
                               Images = db.BusinessImages.Where(x => x.BusinessId == b.Id && !x.IsDeleted)
                                   .OrderBy(x => x.Kind).ThenBy(x => x.DisplayOrder)
-                                  .Select(x => new { x.Id, x.Kind, x.StorageKey, x.AltText, x.Width, x.Height, x.DisplayOrder, x.Version })
+                                  .Select(x => new { x.Id, x.Kind, x.StorageKey, x.AltText, x.Width, x.Height,
+                                      x.DisplayOrder, x.Version, x.ServiceId, x.ProductId })
                                   .ToList(),
                           }).SingleOrDefaultAsync(cancellationToken);
         if (data is null) return null;
@@ -104,17 +105,28 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
         var hasAppointments = data.Modules.Contains(BusinessModuleKind.Appointments);
         // El adelanto se muestra antes de reservar, ya calculado. El WhatsApp del negocio no viaja
         // aquí: sólo hace falta después de crear la cita, y entonces sale de la copia congelada.
+        // La foto de cada servicio se resuelve una vez y se busca por identificador: recorrer la
+        // lista de imágenes por cada servicio convertía una ficha con quince servicios en quince
+        // recorridos completos.
+        var serviceImages = data.Images.Where(x => x.Kind == BusinessImageKind.Service && x.ServiceId is not null)
+            .ToDictionary(x => x.ServiceId!.Value);
         var services = data.Services.Select(x =>
         {
             var policy = x.RequiresDeposit
                 ? new DepositPolicy(true, x.DepositType, x.DepositValue, x.DepositInstructions, "")
                 : DepositPolicy.None;
+            var photo = serviceImages.GetValueOrDefault(x.Id);
             return new ServiceDto(x.Id, x.Name, x.Description, x.DurationMinutes, x.ReferencePrice,
                 x.DisplayOrder, x.IsActive, 0, x.Version, x.RequiresDeposit, x.DepositType.ToString(),
-                x.DepositValue, policy.CalculateFor(x.ReferencePrice), x.DepositInstructions, "");
+                x.DepositValue, policy.CalculateFor(x.ReferencePrice), x.DepositInstructions, "",
+                photo is null ? null : storage.PublicUrl(photo.StorageKey), photo?.AltText);
         }).ToList();
-        var images = data.Images.Select(x => new BusinessImageDto(x.Id, x.Kind.ToString(),
-            storage.PublicUrl(x.StorageKey), x.AltText, x.Width, x.Height, x.DisplayOrder, x.Version)).ToList();
+        // La galería de la ficha muestra el establecimiento; las fotos del catálogo ya viajan dentro
+        // de su servicio o de su producto y repetirlas aquí llenaría la galería de primeros planos.
+        var images = data.Images
+            .Where(x => x.Kind is BusinessImageKind.Logo or BusinessImageKind.Cover or BusinessImageKind.Gallery)
+            .Select(x => new BusinessImageDto(x.Id, x.Kind.ToString(),
+                storage.PublicUrl(x.StorageKey), x.AltText, x.Width, x.Height, x.DisplayOrder, x.Version)).ToList();
         return new(data.b.Slug, data.b.Name, data.b.Description, data.b.Address, data.b.PublicPhone,
             new(data.CategorySlug, data.CategoryName), new(data.MunicipalitySlug, data.MunicipalityName),
             publicHours, hasAppointments ? services : [],
@@ -326,7 +338,12 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
                 x.DepositWhatsAppNumber,
                 Future = db.Appointments.Count(a => a.BusinessId == businessId &&
                     a.ServiceId == x.Id && a.StartAtUtc > nowUtc &&
-                    (a.Status == AppointmentStatus.Pending || a.Status == AppointmentStatus.Confirmed))
+                    (a.Status == AppointmentStatus.Pending || a.Status == AppointmentStatus.Confirmed)),
+                // La foto viaja con el servicio para que el propietario vea desde el celular cuáles
+                // ya tienen imagen y cuáles no, que es la lista que necesita para completarlas.
+                Photo = db.BusinessImages
+                    .Where(i => i.ServiceId == x.Id && !i.IsDeleted)
+                    .Select(i => new { i.StorageKey, i.AltText }).FirstOrDefault()
             }).ToListAsync(cancellationToken);
         return rows.Select(x =>
         {
@@ -336,7 +353,8 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
             return new ServiceDto(x.Id, x.Name, x.Description, x.DurationMinutes, x.ReferencePrice,
                 x.DisplayOrder, x.IsActive, x.Future, x.Version, x.RequiresDeposit, x.DepositType.ToString(),
                 x.DepositValue, policy.CalculateFor(x.ReferencePrice), x.DepositInstructions,
-                x.DepositWhatsAppNumber);
+                x.DepositWhatsAppNumber,
+                x.Photo is null ? null : storage.PublicUrl(x.Photo.StorageKey), x.Photo?.AltText);
         }).ToList();
     }
     public Task<Service?> GetServiceAsync(Guid businessId, Guid serviceId, CancellationToken cancellationToken)

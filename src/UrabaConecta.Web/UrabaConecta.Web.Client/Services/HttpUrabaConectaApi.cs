@@ -315,17 +315,11 @@ public sealed class HttpUrabaConectaApi(HttpClient http) : IUrabaConectaApi
         CancellationToken cancellationToken = default)
         => Get<IReadOnlyList<BusinessImageDto>>($"api/v1/businesses/{businessId}/images", cancellationToken);
     public async Task<BusinessImageDto> UploadOwnerImageAsync(Guid businessId, string kind, string fileName,
-        string contentType, byte[] content, string? altText, CancellationToken cancellationToken = default)
-    {
-        using var form = new MultipartFormDataContent();
-        var part = new ByteArrayContent(content);
-        part.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
-        form.Add(part, "file", fileName);
-        form.Add(new StringContent(kind), "kind");
-        if (!string.IsNullOrWhiteSpace(altText)) form.Add(new StringContent(altText), "altText");
-        return await Read<BusinessImageDto>(await http.PostAsync(
-            $"api/v1/businesses/{businessId}/images", form, cancellationToken), cancellationToken);
-    }
+        string contentType, byte[] content, string? altText, Guid? targetId = null,
+        CancellationToken cancellationToken = default)
+        => await Read<BusinessImageDto>(await http.PostAsync($"api/v1/businesses/{businessId}/images",
+            ImageForm(kind, fileName, contentType, content, altText, targetId), cancellationToken),
+            cancellationToken);
     public async Task RemoveOwnerImageAsync(Guid businessId, Guid imageId, long version,
         CancellationToken cancellationToken = default)
         => await Ensure(await http.DeleteAsync(
@@ -336,16 +330,24 @@ public sealed class HttpUrabaConectaApi(HttpClient http) : IUrabaConectaApi
         CancellationToken cancellationToken = default)
         => Get<IReadOnlyList<BusinessImageDto>>($"api/v1/admin/businesses/{businessId}/images", cancellationToken);
     public async Task<BusinessImageDto> UploadBusinessImageAsync(Guid businessId, string kind, string fileName,
-        string contentType, byte[] content, string? altText, CancellationToken cancellationToken = default)
+        string contentType, byte[] content, string? altText, Guid? targetId = null,
+        CancellationToken cancellationToken = default)
+        => await Read<BusinessImageDto>(await http.PostAsync($"api/v1/admin/businesses/{businessId}/images",
+            ImageForm(kind, fileName, contentType, content, altText, targetId), cancellationToken),
+            cancellationToken);
+
+    /// <summary>El cuerpo multipart que esperan las dos rutas de subida, propietaria y administrativa.</summary>
+    private static MultipartFormDataContent ImageForm(string kind, string fileName, string contentType,
+        byte[] content, string? altText, Guid? targetId)
     {
-        using var form = new MultipartFormDataContent();
+        var form = new MultipartFormDataContent();
         var part = new ByteArrayContent(content);
         part.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
         form.Add(part, "file", fileName);
         form.Add(new StringContent(kind), "kind");
         if (!string.IsNullOrWhiteSpace(altText)) form.Add(new StringContent(altText), "altText");
-        return await Read<BusinessImageDto>(await http.PostAsync(
-            $"api/v1/admin/businesses/{businessId}/images", form, cancellationToken), cancellationToken);
+        if (targetId is { } target) form.Add(new StringContent(target.ToString()), "targetId");
+        return form;
     }
     public async Task<BusinessImageDto> UpdateBusinessImageAsync(Guid businessId, Guid imageId,
         UpdateBusinessImageRequest request, CancellationToken cancellationToken = default)

@@ -24,6 +24,9 @@ public interface IApplicationTransaction : IAsyncDisposable
     Task CommitAsync(CancellationToken cancellationToken);
 }
 
+/// <summary>Referencia de una imagen del catálogo antes de convertirse en URL pública.</summary>
+public sealed record CatalogPhoto(string StorageKey, string? AltText);
+
 public interface IOrderingStore
 {
     Task<IApplicationTransaction> BeginTransactionAsync(CancellationToken cancellationToken);
@@ -33,6 +36,12 @@ public interface IOrderingStore
     Task LockSlotAsync(Guid businessId, DateTimeOffset start, CancellationToken cancellationToken);
     Task<IReadOnlyList<ProductCategory>> GetCategoriesAsync(Guid businessId, bool activeOnly, CancellationToken cancellationToken);
     Task<IReadOnlyList<Product>> GetProductsAsync(Guid businessId, bool activeOnly, CancellationToken cancellationToken);
+    /// <summary>
+    /// Fotografía vigente de cada producto del negocio, indexada por producto. Se pide una vez por
+    /// carta y no una por línea: un catálogo de treinta productos son treinta consultas evitadas.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, CatalogPhoto>> GetProductPhotosAsync(Guid businessId,
+        CancellationToken cancellationToken);
     Task<ProductCategory?> GetCategoryAsync(Guid businessId, Guid id, CancellationToken cancellationToken);
     Task<Product?> GetProductAsync(Guid businessId, Guid id, CancellationToken cancellationToken);
     Task<Business?> GetBusinessAsync(Guid businessId, CancellationToken cancellationToken);

@@ -7,7 +7,8 @@ namespace UrabaConecta.Contracts;
 // ---------------------------------------------------------------------------
 
 public sealed record BusinessImageDto(Guid Id, string Kind, string Url, string? AltText,
-    int Width, int Height, int DisplayOrder, long Version);
+    int Width, int Height, int DisplayOrder, long Version,
+    Guid? ServiceId = null, Guid? ProductId = null);
 
 public sealed class UpdateBusinessImageRequest
 {

@@ -15,7 +15,8 @@ public sealed record BusinessHourDto(DayOfWeek Day, string OpensAt, string Close
 public sealed record ServiceDto(Guid Id, string Name, string Description, int DurationMinutes, decimal ReferencePrice,
     int DisplayOrder, bool IsActive, int FutureAppointmentCount = 0, long Version = 0,
     bool RequiresDeposit = false, string DepositType = "None", decimal DepositValue = 0,
-    decimal DepositAmount = 0, string DepositInstructions = "", string DepositWhatsAppNumber = "");
+    decimal DepositAmount = 0, string DepositInstructions = "", string DepositWhatsAppNumber = "",
+    string? ImageUrl = null, string? ImageAltText = null);
 public sealed record BusinessProfileDto(string Slug, string Name, string Description, string Address, string PublicPhone,
     OptionDto Category, OptionDto Municipality, IReadOnlyList<BusinessHourDto> Hours, IReadOnlyList<ServiceDto> Services,
     bool HasVirtualQueue = false, bool HasPickupOrdering = false,
@@ -278,7 +279,8 @@ public sealed class SaveAvailabilityExceptionRequest
 
 public sealed record ProductCategoryDto(Guid Id, string Name, int DisplayOrder, bool IsActive, long Version);
 public sealed record ProductDto(Guid Id, Guid CategoryId, string Name, string Description,
-    decimal ReferencePrice, int DisplayOrder, bool IsActive, long Version);
+    decimal ReferencePrice, int DisplayOrder, bool IsActive, long Version,
+    string? ImageUrl = null, string? ImageAltText = null);
 public sealed record PickupMenuDto(string BusinessName, string BusinessSlug, string PublicMessage,
     IReadOnlyList<ProductCategoryDto> Categories, IReadOnlyList<ProductDto> Products);
 public sealed record PickupSlotDto(DateTimeOffset Start, DateTimeOffset End, int RemainingCapacity);
@@ -565,8 +567,13 @@ public interface IUrabaConectaApi
         CancellationToken cancellationToken = default);
     Task<IReadOnlyList<BusinessImageDto>> GetOwnerImagesAsync(Guid businessId,
         CancellationToken cancellationToken = default);
+    /// <summary>
+    /// <paramref name="targetId"/> sólo viaja para las fotografías de un servicio o de un producto:
+    /// es la fila del catálogo a la que pertenece la imagen.
+    /// </summary>
     Task<BusinessImageDto> UploadOwnerImageAsync(Guid businessId, string kind, string fileName,
-        string contentType, byte[] content, string? altText, CancellationToken cancellationToken = default);
+        string contentType, byte[] content, string? altText, Guid? targetId = null,
+        CancellationToken cancellationToken = default);
     Task RemoveOwnerImageAsync(Guid businessId, Guid imageId, long version,
         CancellationToken cancellationToken = default);
     Task<PlatformBusinessDto> SubmitBusinessForReviewAsync(Guid businessId, SubmitForReviewRequest request,
@@ -593,7 +600,8 @@ public interface IUrabaConectaApi
     Task<IReadOnlyList<BusinessImageDto>> GetBusinessImagesAsync(Guid businessId,
         CancellationToken cancellationToken = default);
     Task<BusinessImageDto> UploadBusinessImageAsync(Guid businessId, string kind, string fileName,
-        string contentType, byte[] content, string? altText, CancellationToken cancellationToken = default);
+        string contentType, byte[] content, string? altText, Guid? targetId = null,
+        CancellationToken cancellationToken = default);
     Task<BusinessImageDto> UpdateBusinessImageAsync(Guid businessId, Guid imageId,
         UpdateBusinessImageRequest request, CancellationToken cancellationToken = default);
     Task RemoveBusinessImageAsync(Guid businessId, Guid imageId, long version,

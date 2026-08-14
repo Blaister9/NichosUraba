@@ -1,6 +1,11 @@
 namespace UrabaConecta.Domain;
 
-public enum BusinessImageKind { Logo, Cover, Gallery }
+/// <summary>
+/// Para qué sirve la imagen dentro del negocio. Logo, portada y galería describen al establecimiento;
+/// <see cref="Service"/> y <see cref="Product"/> cuelgan de una fila concreta del catálogo, que es lo
+/// que permite que un servicio o un producto se vean —y se deseen— antes de tocarlos.
+/// </summary>
+public enum BusinessImageKind { Logo, Cover, Gallery, Service, Product }
 
 /// <summary>Tipo de acceso que concede una invitación aceptada.</summary>
 public enum AccessGrantKind { PartnerOperator, BusinessOwner, BusinessStaff }
@@ -27,15 +32,27 @@ public sealed class BusinessImage : IBusinessOwned
 
     public BusinessImage(Guid id, Guid businessId, BusinessImageKind kind, string storageKey,
         string contentType, int width, int height, long byteSize, string? altText, int displayOrder,
-        DateTimeOffset now)
+        DateTimeOffset now, Guid? serviceId = null, Guid? productId = null)
     {
         if (string.IsNullOrWhiteSpace(storageKey) || storageKey.Length > 400)
             throw new DomainException("INVALID_IMAGE", "La referencia de almacenamiento no es válida.");
         if (width is < 1 or > 10000 || height is < 1 or > 10000 || byteSize <= 0)
             throw new DomainException("INVALID_IMAGE", "Las dimensiones de la imagen no son válidas.");
         if (displayOrder < 0) throw new DomainException("INVALID_IMAGE", "El orden no puede ser negativo.");
+        // La fila del catálogo y el tipo tienen que concordar en ambos sentidos. Sin la segunda
+        // mitad, una portada podía llegar con un ServiceId pegado y quedar colgada de un servicio
+        // que nadie volvería a mirar.
+        if (kind == BusinessImageKind.Service && serviceId is null)
+            throw new DomainException("INVALID_IMAGE", "La imagen de un servicio necesita el servicio.");
+        if (kind == BusinessImageKind.Product && productId is null)
+            throw new DomainException("INVALID_IMAGE", "La imagen de un producto necesita el producto.");
+        if (kind != BusinessImageKind.Service && serviceId is not null)
+            throw new DomainException("INVALID_IMAGE", "Sólo una imagen de servicio se asocia a un servicio.");
+        if (kind != BusinessImageKind.Product && productId is not null)
+            throw new DomainException("INVALID_IMAGE", "Sólo una imagen de producto se asocia a un producto.");
         (Id, BusinessId, Kind, StorageKey, ContentType) = (id, businessId, kind, storageKey.Trim(), contentType);
         (Width, Height, ByteSize, DisplayOrder) = (width, height, byteSize, displayOrder);
+        (ServiceId, ProductId) = (serviceId, productId);
         AltText = NormalizeAltText(altText);
         CreatedAtUtc = UpdatedAtUtc = now;
     }
@@ -43,6 +60,9 @@ public sealed class BusinessImage : IBusinessOwned
     public Guid Id { get; private set; }
     public Guid BusinessId { get; private set; }
     public BusinessImageKind Kind { get; private set; }
+    /// <summary>Fila del catálogo a la que pertenece la imagen. Nula salvo en su propio tipo.</summary>
+    public Guid? ServiceId { get; private set; }
+    public Guid? ProductId { get; private set; }
     public string StorageKey { get; private set; } = "";
     public string ContentType { get; private set; } = "";
     public int Width { get; private set; }

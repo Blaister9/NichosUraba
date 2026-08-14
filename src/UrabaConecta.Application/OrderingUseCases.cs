@@ -5,7 +5,7 @@ namespace UrabaConecta.Application;
 
 public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService codes,
     IPersonalDataProtector protector, IConsentPolicyProvider consentPolicy,
-    TimeProvider clock) : IOrderingUseCases
+    IObjectStorage storage, TimeProvider clock) : IOrderingUseCases
 {
     public async Task<PickupMenuDto?> GetMenuAsync(string slug, CancellationToken ct = default)
     {
@@ -14,8 +14,9 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
         var found = context.Value;
         var categories = await store.GetCategoriesAsync(found.Business.Id, true, ct);
         var products = await store.GetProductsAsync(found.Business.Id, true, ct);
+        var photos = await store.GetProductPhotosAsync(found.Business.Id, ct);
         return new(found.Business.Name, slug, found.Settings.PublicMessage,
-            categories.Select(CategoryDto).ToList(), products.Select(ProductDto).ToList());
+            categories.Select(CategoryDto).ToList(), products.Select(x => ProductDto(x, photos)).ToList());
     }
 
     public async Task<PickupSlotListDto> GetSlotsAsync(string slug, DateOnly? date = null, CancellationToken ct = default)
@@ -173,7 +174,9 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
         CancellationToken ct = default)
     {
         await DemandConfiguration(userId, businessId, ct);
-        return (await store.GetProductsAsync(businessId, false, ct)).Select(ProductDto).ToList();
+        var photos = await store.GetProductPhotosAsync(businessId, ct);
+        return (await store.GetProductsAsync(businessId, false, ct))
+            .Select(x => ProductDto(x, photos)).ToList();
     }
     public async Task<ProductDto> SaveProductAsync(Guid userId, Guid businessId, Guid? productId,
         SaveProductRequest request, CancellationToken ct = default)
@@ -260,7 +263,13 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
             throw new ApiException("MODULE_DISABLED", "Este establecimiento no tiene pedidos habilitados.", 403);
     }
     private static ProductCategoryDto CategoryDto(ProductCategory x) => new(x.Id, x.Name, x.DisplayOrder, x.IsActive, x.Version);
-    private static ProductDto ProductDto(Product x) => new(x.Id, x.ProductCategoryId, x.Name, x.Description, x.ReferencePrice, x.DisplayOrder, x.IsActive, x.Version);
+    private ProductDto ProductDto(Product x, IReadOnlyDictionary<Guid, CatalogPhoto>? photos = null)
+    {
+        var photo = photos?.GetValueOrDefault(x.Id);
+        return new(x.Id, x.ProductCategoryId, x.Name, x.Description, x.ReferencePrice, x.DisplayOrder,
+            x.IsActive, x.Version,
+            photo is null ? null : storage.PublicUrl(photo.StorageKey), photo?.AltText);
+    }
     private static PickupOrderSettingsDto SettingsDto(PickupOrderSettings x) => new(x.Id, x.BusinessId,
         x.IsEnabled, x.PublicMessage, x.MinimumPreparationMinutes, x.SlotIntervalMinutes,
         x.MaximumActivePerSlot, x.ReceivesFrom, x.ReceivesUntil, x.NextOrderNumber, x.Version);

@@ -283,9 +283,10 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
         CancellationToken cancellationToken = default)
         => await images.ListAsync(await Actor(), businessId, cancellationToken);
     public async Task<BusinessImageDto> UploadOwnerImageAsync(Guid businessId, string kind, string fileName,
-        string contentType, byte[] content, string? altText, CancellationToken cancellationToken = default)
+        string contentType, byte[] content, string? altText, Guid? targetId = null,
+        CancellationToken cancellationToken = default)
         => await images.UploadAsync(await Actor(), businessId, kind,
-            new UploadedImage(fileName, contentType, content), altText, cancellationToken);
+            new UploadedImage(fileName, contentType, content), altText, targetId, cancellationToken);
     public async Task RemoveOwnerImageAsync(Guid businessId, Guid imageId, long version,
         CancellationToken cancellationToken = default)
         => await images.RemoveAsync(await Actor(), businessId, imageId, version, cancellationToken);
@@ -294,9 +295,10 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
         CancellationToken cancellationToken = default)
         => await images.ListAsync(await Actor(), businessId, cancellationToken);
     public async Task<BusinessImageDto> UploadBusinessImageAsync(Guid businessId, string kind, string fileName,
-        string contentType, byte[] content, string? altText, CancellationToken cancellationToken = default)
+        string contentType, byte[] content, string? altText, Guid? targetId = null,
+        CancellationToken cancellationToken = default)
         => await images.UploadAsync(await Actor(), businessId, kind,
-            new UploadedImage(fileName, contentType, content), altText, cancellationToken);
+            new UploadedImage(fileName, contentType, content), altText, targetId, cancellationToken);
     public async Task<BusinessImageDto> UpdateBusinessImageAsync(Guid businessId, Guid imageId,
         UpdateBusinessImageRequest request, CancellationToken cancellationToken = default)
         => await images.DescribeAsync(await Actor(), businessId, imageId, request, cancellationToken);

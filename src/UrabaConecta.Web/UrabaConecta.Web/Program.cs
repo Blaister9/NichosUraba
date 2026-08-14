@@ -420,9 +420,12 @@ platformApi.MapPost("/businesses/{businessId:guid}/images",
             return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
         using var buffer = new MemoryStream();
         await file.CopyToAsync(buffer, ct);
+        // El destino del catálogo llega como campo del formulario; ausente o vacío significa que la
+        // imagen es del establecimiento y no de una fila concreta.
+        Guid? target = Guid.TryParse(form["targetId"].ToString(), out var parsed) ? parsed : null;
         return Results.Created("", await images.UploadAsync(Actor(http), businessId,
             form["kind"].ToString(), new UploadedImage(file.FileName, file.ContentType, buffer.ToArray()),
-            form["altText"].ToString(), ct));
+            form["altText"].ToString(), target, ct));
     }).DisableAntiforgery();
 platformApi.MapPut("/businesses/{businessId:guid}/images/{imageId:guid}",
     (Guid businessId, Guid imageId, UpdateBusinessImageRequest request, HttpContext http,
@@ -516,9 +519,12 @@ privateApi.MapPost("/{businessId:guid}/images",
             return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
         using var buffer = new MemoryStream();
         await file.CopyToAsync(buffer, ct);
+        // El destino del catálogo llega como campo del formulario; ausente o vacío significa que la
+        // imagen es del establecimiento y no de una fila concreta.
+        Guid? target = Guid.TryParse(form["targetId"].ToString(), out var parsed) ? parsed : null;
         return Results.Created("", await images.UploadAsync(Actor(http), businessId,
             form["kind"].ToString(), new UploadedImage(file.FileName, file.ContentType, buffer.ToArray()),
-            form["altText"].ToString(), ct));
+            form["altText"].ToString(), target, ct));
     }).RequireAuthorization("BusinessProfile.Manage").DisableAntiforgery();
 privateApi.MapPut("/{businessId:guid}/images/{imageId:guid}",
     (Guid businessId, Guid imageId, UpdateBusinessImageRequest request, HttpContext http,
