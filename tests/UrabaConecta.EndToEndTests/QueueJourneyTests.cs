@@ -19,7 +19,7 @@ public sealed class QueueJourneyTests(BrowserFixture fixture) : IClassFixture<Br
         await Expect(visitor.GetByText("Barbería El Corte")).ToBeVisibleAsync();
         await visitor.GotoAsync($"{fixture.BaseUrl}/negocios/barberia-el-corte");
         await Expect(visitor.GetByRole(AriaRole.Heading, new() { Name = "Barbería El Corte" })).ToBeVisibleAsync();
-        await Expect(visitor.GetByRole(AriaRole.Link, new() { Name = "Ver fila virtual" })).ToBeVisibleAsync();
+        await Expect(visitor.GetByRole(AriaRole.Link, new() { Name = "Tomar turno" }).First).ToBeVisibleAsync();
         await visitor.GotoAsync($"{fixture.BaseUrl}/negocios/barberia-el-corte/turnos");
         await Expect(visitor.GetByRole(AriaRole.Heading, new() { Name = "Atención general" })).ToBeVisibleAsync();
         await using var publicHub = new HubConnectionBuilder().WithUrl($"{fixture.BaseUrl}/hubs/queue").Build();
