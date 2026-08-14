@@ -1111,7 +1111,10 @@ a.card-media { display: block; color: inherit }
        identidad. Antes los enlaces se apretaban arriba, lejos de la mano y compitiendo entre sí
        por un ancho que no existía. */
     :root { --alto-nav: calc(4.05rem + env(safe-area-inset-bottom)) }
-    .nav-escritorio, .solo-escritorio { display: none }
+    /* Con el ancestro delante a propósito: ".site-header nav" tiene más especificidad que una
+       clase suelta, así que ".nav-escritorio { display:none }" nunca llegaba a aplicarse y la
+       barra de escritorio seguía dibujándose encima de la inferior. */
+    .site-header .nav-escritorio, .site-header .solo-escritorio { display: none }
     .nav-inferior {
         display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
         position: fixed; inset: auto 0 0; z-index: 30;

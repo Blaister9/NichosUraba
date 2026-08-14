@@ -166,12 +166,12 @@ else
     {
         try
         {
-            // Las dos lecturas son independientes y ambas están cacheadas en el servidor: pedirlas a
-            // la vez ahorra una ida y vuelta completa contra una base que vive en otra región.
-            var pedidoNegocios = Api.GetBusinessesAsync();
-            var pedidoCategorias = Api.GetCategoriesAsync();
-            negocios = await pedidoNegocios;
-            categorias = await pedidoCategorias;
+            // Secuencial a propósito. Con InteractiveServer las dos lecturas comparten el
+            // AppDbContext del circuito, y lanzarlas a la vez lo rompe con "a second operation was
+            // started on this context". Ambas están cacheadas en el servidor, así que lo que se
+            // ahorraría en paralelo es una espera que casi nunca llega hasta la base.
+            negocios = await Api.GetBusinessesAsync();
+            categorias = await Api.GetCategoriesAsync();
         }
         catch (ApiException ex) { error = ex.Message; }
         finally { cargando = false; }

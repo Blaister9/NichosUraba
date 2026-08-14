@@ -175,9 +175,10 @@ else
         cargando = true; error = null;
         try
         {
-            var pedidoNegocios = Api.GetBusinessesAsync(termino, municipio, categoria);
+            // Secuencial a propósito: con InteractiveServer ambas lecturas comparten el
+            // AppDbContext del circuito y lanzarlas en paralelo lo rompe.
             if (categorias.Count == 0) categorias = await Api.GetCategoriesAsync();
-            negocios = await pedidoNegocios;
+            negocios = await Api.GetBusinessesAsync(termino, municipio, categoria);
         }
         catch (ApiException ex) { error = ex.Message; }
         finally { cargando = false; }
