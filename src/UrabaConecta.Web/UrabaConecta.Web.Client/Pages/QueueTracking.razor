@@ -9,15 +9,36 @@
 else if (error is not null) { <div class="error" role="alert">@error</div> }
 else if (ticket is not null)
 {
-    <section class="queue-ticket narrow">
+    @* Esta pantalla se mira de reojo mientras se hace otra cosa, así que tiene que contestar de un
+       vistazo y desde lejos: cuánto falta, y si ya toca moverse. El titular cambia con la posición
+       —"Faltan 3", "Eres el siguiente", "¡Es tu turno!"— porque un número solo no dice qué hacer. *@
+    <section class="fila-tablero mi-turno narrow" data-estado-turno="@ticket.Status.ToLowerInvariant()">
         <p class="eyebrow">@ticket.BusinessName · @ticket.QueueName</p>
-        <span>Tu turno</span><strong class="ticket-number">@ticket.Number</strong>
-        <h1>@ticket.StatusLabel</h1>
+        <span class="ticket-etiqueta">Tu turno</span>
+        <strong class="ticket-number">@ticket.Number</strong>
+
+        <h1>@Titular</h1>
+        @if (Subtitulo is { Length: > 0 } subtitulo) { <p class="lead">@subtitulo</p> }
+
         @if (ticket.Status == "Waiting")
         {
-            <p><strong>@ticket.PeopleAhead</strong> turno(s) delante · espera aproximada <strong>~@ticket.ApproximateWaitMinutes min</strong>.</p>
+            @* La barra sólo aparece cuando hay contra qué medir: en el primer vistazo no había
+               referencia y se llenaba entera con cualquier posición. *@
+            @if (Referencia > 0)
+            {
+                <div class="fila-avance" role="img"
+                     aria-label="@($"Faltan {ticket.PeopleAhead} de {Referencia} turnos")">
+                    <span style="width:@(Math.Clamp(100 - ticket.PeopleAhead * 100 / Referencia, 4, 100))%"></span>
+                </div>
+            }
+            <p class="fila-cifras-linea">
+                <span><strong>@ticket.PeopleAhead</strong> @(ticket.PeopleAhead == 1 ? "turno delante" : "turnos delante")</span>
+                <span><strong>~@ticket.ApproximateWaitMinutes</strong> min</span>
+            </p>
         }
-        <p class="meta">El tiempo es aproximado y puede cambiar. Esta página se actualiza en tiempo real y al reconectar.</p>
+
+        <p class="meta">El tiempo es aproximado y puede cambiar. Esta pantalla se actualiza sola.</p>
+
         @if (ticket.CanCancel)
         {
             <button class="danger" @onclick="Cancel" disabled="@(!interactiveReady || busy)">
@@ -36,6 +57,33 @@ else if (ticket is not null)
     private string? error;
     private bool busy, interactiveReady;
     private string? subscribedCode;
+
+    /// <summary>
+    /// Cuántos había delante la primera vez que se miró. Es el punto contra el que se mide el
+    /// avance: la API entrega la posición actual pero no de dónde se venía, y sin referencia una
+    /// barra de progreso no puede decir nada honesto.
+    /// </summary>
+    private int Referencia;
+
+    /// <summary>Lo que hay que hacer, no sólo dónde se está.</summary>
+    private string Titular => ticket!.Status switch
+    {
+        "Waiting" when ticket.PeopleAhead == 0 => "Eres el siguiente",
+        "Waiting" when ticket.PeopleAhead == 1 => "Falta 1 turno",
+        "Waiting" => $"Faltan {ticket.PeopleAhead} turnos",
+        "Called" => "¡Es tu turno!",
+        "InService" => "Te están atendiendo",
+        _ => ticket.StatusLabel
+    };
+
+    private string? Subtitulo => ticket!.Status switch
+    {
+        "Waiting" when ticket.PeopleAhead == 0 => "Acércate al local: entras en cuanto termine la persona actual.",
+        "Waiting" when ticket.ApproximateWaitMinutes <= 10 => "Ve saliendo, ya falta poco.",
+        "Waiting" => "Te avisamos cuando falte poco. No hace falta que esperes en el local.",
+        "Called" => "Pasa al mostrador, te están llamando.",
+        _ => null
+    };
 
     protected override void OnAfterRender(bool firstRender)
     {
@@ -62,7 +110,15 @@ else if (ticket is not null)
     private async Task Load()
     {
         error = null;
-        try { ticket = await Api.GetQueueTicketAsync(Code); if (ticket is null) error = "No encontramos el turno."; }
+        try
+        {
+            ticket = await Api.GetQueueTicketAsync(Code);
+            if (ticket is null) { error = "No encontramos el turno."; return; }
+            // La referencia se fija con la primera lectura y sólo puede crecer: si alguien se cuela
+            // por delante, la barra retrocedería y parecería un error del sistema en vez de lo que
+            // es, un cambio en la fila.
+            if (ticket.PeopleAhead > Referencia) Referencia = ticket.PeopleAhead;
+        }
         catch (ApiException ex) { error = ex.Message; }
     }
     private async Task Cancel()

@@ -1,0 +1,86 @@
+@page "/para-negocios"
+@rendermode InteractiveServer
+
+@* La puerta del otro lado del producto.
+
+   UrabáConecta no tiene registro público: los negocios entran acompañados, uno a uno. Esta pantalla
+   existe para dos personas distintas y hay que atender a las dos sin mezclarlas: quien ya opera un
+   negocio y sólo busca por dónde entrar, y quien está evaluando si esto le sirve.
+
+   El acceso va primero y arriba. Quien ya es cliente viene a trabajar, no a leer una presentación. *@
+<PageTitle>Para negocios | UrabáConecta</PageTitle>
+
+<section class="hero-home">
+    <p class="eyebrow">Para negocios de Urabá</p>
+    <h1>Tu negocio, listo para recibir clientes desde el celular</h1>
+    <p class="hero-sub">Agenda, fila virtual y pedidos para recoger en una sola herramienta,
+        hecha para Apartadó, Carepa, Chigorodó y Turbo.</p>
+    <div class="actions">
+        <AuthorizeView>
+            <Authorized>
+                <a class="button-link btn-grande" href="/panel">Ir a mi panel</a>
+            </Authorized>
+            <NotAuthorized>
+                <a class="button-link btn-grande" href="/Account/Login" target="_self">Entrar a mi negocio</a>
+            </NotAuthorized>
+        </AuthorizeView>
+    </div>
+</section>
+
+<section class="seccion">
+    <div class="seccion-head">
+        <div>
+            <h2>Qué resuelve</h2>
+            <p>Elige lo que tu negocio necesita. No tienes que usarlo todo.</p>
+        </div>
+    </div>
+    <div class="categoria-grid">
+        @foreach (var caso in Casos)
+        {
+            <article class="categoria-card" data-tono="@caso.Tono">
+                <span class="marca-icono"><Icon Name="@caso.Icono" Size="24" /></span>
+                <strong>@caso.Titulo</strong>
+                <span>@caso.Detalle</span>
+            </article>
+        }
+    </div>
+</section>
+
+<section class="seccion">
+    <div class="seccion-head"><div><h2>Cómo se ve para tu cliente</h2></div></div>
+    <div class="capability-grid">
+        <div><strong>Encuentra tu negocio</strong><span>En el directorio, por categoría y por municipio.</span></div>
+        <div><strong>Abre tu ficha</strong><span>Con tus fotos, tus servicios y tus precios.</span></div>
+        <div><strong>Reserva, toma turno o pide</strong><span>Sin llamar y sin crear una cuenta.</span></div>
+    </div>
+</section>
+
+@* Sin registro automático: el alta la hace una persona del equipo. Decirlo aquí evita que alguien
+   busque un botón de "crear cuenta" que no existe y se vaya pensando que el sitio está roto. *@
+<section class="narrow">
+    <h2>Cómo se entra</h2>
+    <p>Damos de alta los negocios uno a uno y acompañamos la puesta en marcha: cargamos tu ficha,
+        tus servicios y tus fotos contigo. Por eso no hay registro automático.</p>
+    <p class="meta">¿Ya te dimos acceso? Entra con el correo que registramos.</p>
+    <div class="actions">
+        <AuthorizeView>
+            <Authorized><a class="button-link" href="/panel">Ir a mi panel</a></Authorized>
+            <NotAuthorized><a class="button-link" href="/Account/Login" target="_self">Entrar</a></NotAuthorized>
+        </AuthorizeView>
+        <a class="button-link secondary" href="/explorar">Ver negocios que ya están</a>
+    </div>
+</section>
+
+@code {
+    private sealed record Caso(string Titulo, string Detalle, string Icono, string Tono);
+
+    private static readonly Caso[] Casos =
+    [
+        new("Fila virtual", "Tus clientes toman turno desde el celular y llegan cuando falte poco.",
+            "tijeras", "barberia"),
+        new("Agenda de citas", "Publicas tus servicios con duración y precio, y recibes reservas.",
+            "brillo", "belleza"),
+        new("Pedidos para recoger", "Muestras tu catálogo y recibes pedidos listos para pasar por ellos.",
+            "bolsa", "producto"),
+    ];
+}

@@ -36,8 +36,12 @@ else if (data is not null)
     </div>
     @if (data.SessionStatus != "Closed")
     {
-        <section class="queue-actions">
-            <button class="primary call-next" @onclick="CallNext" disabled="@(!interactiveReady || busy || data.WaitingCount == 0)">Llamar siguiente</button>
+        @* "Llamar siguiente" es el gesto que se repite todo el día. En móvil se queda pegado abajo,
+           al alcance del pulgar, en vez de obligar a subir hasta la cabecera cada vez. *@
+        <section class="queue-actions accion-fija">
+            <button class="primary call-next" @onclick="CallNext" disabled="@(!interactiveReady || busy || data.WaitingCount == 0)">
+                @(data.WaitingCount == 0 ? "No hay nadie esperando" : $"Llamar siguiente · {ProximoEnEspera}")
+            </button>
             <EditForm Model="walkIn" OnValidSubmit="AddWalkIn" FormName="walk-in" class="walk-in-form">
                 <label>Alias presencial opcional <InputText @bind-Value="walkIn.Alias" maxlength="40" /></label>
                 <button class="secondary" disabled="@(!interactiveReady || busy || data.SessionStatus != "Open")">Agregar presencial</button>
@@ -52,11 +56,40 @@ else if (data is not null)
                 <div><strong>@(ticket.Alias ?? "Sin alias")</strong><br /><span class="meta"><span data-testid="ticket-status">@OperationalStatusText.QueueTicket(ticket.Status)</span>
                     · @(ticket.Source == "WalkIn" ? "Presencial" : "En línea")
                     · Llegó @BusinessDateTimeText.Time(ticket.CreatedAtUtc, data!.Definition.TimeZoneId)</span></div>
+                @* Una acción visible por turno —la que corresponde a su estado— y el resto detrás de
+                   un pliegue. A 390 px, cuatro botones por fila dejaban cada uno en dos palabras
+                   partidas y obligaban a apuntar; con esta forma, el gesto que se repite todo el
+                   día se toca sin mirar. *@
                 <div class="actions">
-                    @if (ticket.Status == "Called") { <button class="secondary" disabled="@(!interactiveReady || busy)" @onclick="() => Recall(ticket)">Volver a llamar</button><button class="primary" disabled="@(!interactiveReady || busy)" @onclick="() => Start(ticket)">Iniciar atención</button><button class="secondary" disabled="@(!interactiveReady || busy)" @onclick="() => Skip(ticket)">No se presentó</button> }
-                    @if (ticket.Status == "InService") { <button class="primary" disabled="@(!interactiveReady || busy)" @onclick="() => Complete(ticket)">Completar</button> }
-                    @if (ticket.Status == "Skipped" && ticket.RestoreCount == 0) { <button class="secondary" disabled="@(!interactiveReady || busy)" @onclick="() => Restore(ticket)">Devolver a espera</button> }
-                    @if (ticket.Status is "Waiting" or "Called" or "InService" or "Skipped") { <button class="tertiary" disabled="@(!interactiveReady || busy)" @onclick="() => Cancel(ticket)">Cancelar</button> }
+                    @if (ticket.Status == "Called")
+                    {
+                        <button class="primary" disabled="@(!interactiveReady || busy)" @onclick="() => Start(ticket)">Iniciar atención</button>
+                    }
+                    @if (ticket.Status == "InService")
+                    {
+                        <button class="primary" disabled="@(!interactiveReady || busy)" @onclick="() => Complete(ticket)">Completar</button>
+                    }
+                    @if (ticket.Status == "Skipped" && ticket.RestoreCount == 0)
+                    {
+                        <button class="secondary" disabled="@(!interactiveReady || busy)" @onclick="() => Restore(ticket)">Devolver a espera</button>
+                    }
+                    @if (TieneSecundarias(ticket))
+                    {
+                        <details class="acciones-mas">
+                            <summary aria-label="@($"Más acciones para el turno {ticket.Number}")">Más</summary>
+                            <div class="acciones-panel">
+                                @if (ticket.Status == "Called")
+                                {
+                                    <button class="secondary" disabled="@(!interactiveReady || busy)" @onclick="() => Recall(ticket)">Volver a llamar</button>
+                                    <button class="secondary" disabled="@(!interactiveReady || busy)" @onclick="() => Skip(ticket)">No se presentó</button>
+                                }
+                                @if (ticket.Status is "Waiting" or "Called" or "InService" or "Skipped")
+                                {
+                                    <button class="danger" disabled="@(!interactiveReady || busy)" @onclick="() => Cancel(ticket)">Cancelar turno</button>
+                                }
+                            </div>
+                        </details>
+                    }
                 </div>
             </article>
         }
@@ -106,5 +139,16 @@ else if (data is not null)
         finally { busy = false; }
     }
     private static string SessionLabel(string s) => s switch { "Open" => "Abierta", "Paused" => "Pausada", _ => "Cerrada" };
+    /// <summary>
+    /// El número que va a salir al llamar. Anunciarlo en el propio botón deja comprobar en voz alta
+    /// a quién se está llamando sin bajar a buscarlo en la lista.
+    /// </summary>
+    private string ProximoEnEspera => data?.Tickets
+        .Where(x => x.Status == "Waiting").OrderBy(x => x.Number)
+        .Select(x => $"#{x.Number}").FirstOrDefault() ?? "";
+
+    /// <summary>Sin acciones que esconder, el pliegue sólo añadiría un control que no hace nada.</summary>
+    private static bool TieneSecundarias(QueueTicketAdminDto ticket)
+        => ticket.Status is "Waiting" or "Called" or "InService" or "Skipped";
     public async ValueTask DisposeAsync() { if (hub is not null) await hub.DisposeAsync(); }
 }

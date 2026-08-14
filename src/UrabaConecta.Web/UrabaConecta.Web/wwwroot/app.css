@@ -702,6 +702,93 @@ a.card-media { display: block; color: inherit }
 }
 .total-pedido strong { font-size: 1.2rem; color: var(--marca-800) }
 
+/* --- Fila virtual ------------------------------------------------------------------------------
+   El único rincón oscuro del producto. Es deliberado: la fila es la pantalla que se mira de reojo
+   desde la calle, con sol y a un brazo de distancia, y también la que le da a barbería una cara
+   propia dentro de la misma marca. Sigue siendo UrabáConecta —el verde de marca es el fondo— pero
+   no se confunde con ninguna otra pantalla. */
+.fila-tablero {
+    margin: 0 auto var(--e4); padding: var(--e5) var(--e4);
+    background: linear-gradient(165deg, var(--marca-900), var(--marca-800) 60%, #0b2620);
+    border-radius: var(--radio-lg); color: #eaf3ee; text-align: center;
+    box-shadow: var(--sombra-lg);
+}
+.fila-tablero header { display: grid; gap: .2rem; justify-items: center }
+.fila-tablero h1, .fila-tablero h2 { margin: .1rem 0 .3rem; color: #fff; max-width: none }
+.fila-tablero .eyebrow { color: var(--calido-500) }
+.fila-tablero .lead { color: #cfe3d8 }
+.fila-tablero .meta { color: #9dbcae }
+.fila-estado {
+    display: inline-flex; align-items: center; gap: .4rem; margin-top: .3rem;
+    padding: .25rem .75rem; border-radius: var(--radio-pill);
+    font-size: .82rem; font-weight: 750;
+    background: rgb(255 255 255 / 12%); color: #d8ece1;
+}
+.fila-estado::before { content: ""; width: .5rem; height: .5rem; border-radius: 50%; background: currentColor }
+.fila-estado[data-estado="open"] { background: rgb(93 214 158 / 18%); color: #7ee2b0 }
+.fila-estado[data-estado="open"]::before { animation: latido 2s ease-in-out infinite }
+.fila-estado[data-estado="paused"] { background: rgb(255 209 102 / 18%); color: #ffd166 }
+
+.fila-cifras { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; margin: var(--e5) 0 var(--e4) }
+.fila-cifras div {
+    display: grid; gap: .2rem; align-content: start; padding: .9rem .4rem;
+    background: rgb(255 255 255 / 7%); border-radius: var(--radio);
+}
+.fila-cifras span { font-size: .74rem; font-weight: 700; color: #a8c7b8; text-wrap: balance }
+.fila-cifras strong { font-size: clamp(1.8rem, 8vw, 2.8rem); line-height: 1; color: #fff; font-weight: 850 }
+.fila-cifras small { font-size: .95rem; font-weight: 700; color: #a8c7b8 }
+/* La cifra que manda: a quién están atendiendo ahora mismo. */
+.fila-cifras .destacada { background: rgb(224 95 53 / 22%); outline: 1px solid rgb(224 95 53 / 45%) }
+.fila-cifras .destacada strong { color: #ffd2c0 }
+
+/* Un punto por persona: el número dice cuántos, los puntos lo hacen sentir. */
+.fila-puntos { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: .35rem; margin: 0 0 var(--e3) }
+.fila-puntos span { width: .6rem; height: .6rem; border-radius: 50%; background: rgb(255 255 255 / 45%) }
+.fila-puntos em { font-style: normal; font-size: .8rem; font-weight: 750; color: #a8c7b8 }
+.fila-mensaje { margin: 0; color: #cfe3d8; font-size: .95rem }
+
+/* Confirmación y seguimiento comparten el tablero, con el número de turno como protagonista. */
+.fila-tablero.confirmado, .fila-tablero.mi-turno { display: grid; justify-items: center; gap: .1rem }
+.ticket-etiqueta { font-size: .8rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; color: #a8c7b8 }
+.fila-tablero .ticket-number { color: #fff; margin: .1rem 0 .2rem }
+.fila-tablero .danger {
+    margin-top: var(--e4); background: transparent; border-color: rgb(255 255 255 / 30%); color: #f3c9c1;
+}
+.fila-tablero .danger:hover { background: rgb(255 255 255 / 10%) }
+.fila-tablero .button-link { margin-top: var(--e4) }
+
+.fila-avance {
+    width: 100%; max-width: 22rem; height: .55rem; margin: var(--e4) 0 var(--e3);
+    background: rgb(255 255 255 / 15%); border-radius: var(--radio-pill); overflow: hidden;
+}
+.fila-avance span {
+    display: block; height: 100%; border-radius: var(--radio-pill);
+    background: linear-gradient(90deg, var(--calido-500), #7ee2b0);
+    transition: width .5s ease;
+}
+.fila-cifras-linea { display: flex; gap: var(--e5); justify-content: center; margin: 0; color: #cfe3d8 }
+.fila-cifras-linea strong { color: #fff; font-size: 1.25rem }
+
+/* Llamado: la pantalla entera cambia de color cuando toca moverse. Es el momento en que alguien
+   levanta la vista del teléfono, y merece más que una palabra distinta. */
+.fila-tablero.mi-turno[data-estado-turno="called"] {
+    background: linear-gradient(165deg, var(--calido-700), var(--calido-600) 65%, #7a2c12);
+    animation: llamado 1.6s ease-in-out 3;
+}
+.fila-tablero.mi-turno[data-estado-turno="called"] .eyebrow,
+.fila-tablero.mi-turno[data-estado-turno="called"] .ticket-etiqueta { color: #ffd9c7 }
+.fila-tablero.mi-turno[data-estado-turno="called"] .lead { color: #ffe6da }
+@keyframes llamado {
+    0%, 100% { box-shadow: var(--sombra-lg) }
+    50% { box-shadow: var(--sombra-lg), 0 0 0 .5rem rgb(224 95 53 / 25%) }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .senal-fila::before, .fila-estado[data-estado="open"]::before,
+    .fila-tablero.mi-turno[data-estado-turno="called"], .skeleton { animation: none }
+    .fila-avance span { transition: none }
+}
+
 .queue-hero {
     max-width: 720px; margin: 0 auto var(--e4); padding: var(--e5) var(--e4);
     background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio-lg);
@@ -883,6 +970,28 @@ a.card-media { display: block; color: inherit }
     font-size: 1.25rem; font-weight: 850; white-space: nowrap;
 }
 
+/* Acciones secundarias plegadas. La que corresponde al estado queda a la vista; el resto vive
+   detrás de "Más", que es donde deben estar las cosas que se usan una vez de cada veinte. */
+.acciones-mas { position: relative }
+.acciones-mas summary {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: var(--alto-control); padding: .5rem .9rem; border-radius: var(--radio-sm);
+    background: var(--superficie-2); color: var(--marca-800); font-weight: 700; font-size: .92rem;
+    cursor: pointer; list-style: none;
+}
+.acciones-mas summary::-webkit-details-marker { display: none }
+.acciones-mas summary::after { content: " ▾"; opacity: .6 }
+.acciones-mas[open] summary { background: var(--marca-100) }
+.acciones-panel {
+    display: grid; gap: .35rem; margin-top: .35rem; padding: .5rem;
+    background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio);
+    box-shadow: var(--sombra);
+}
+/* En escritorio se despliega sobre el contenido para no empujar la lista entera hacia abajo. */
+@media (min-width: 721px) {
+    .acciones-panel { position: absolute; right: 0; z-index: 10; min-width: 13rem }
+}
+
 .wizard-steps {
     display: grid; grid-template-columns: repeat(4, 1fr); gap: .4rem; margin: var(--e4) 0 var(--e5);
     padding: 0;
@@ -1030,6 +1139,15 @@ a.card-media { display: block; color: inherit }
     .appointment-form fieldset { padding: var(--e4) }
     .actions .button-link, .actions button { flex: 1 1 100% }
     .queue-toolbar, .queue-actions, .walk-in-form { flex-direction: column; align-items: stretch }
+    /* El gesto que se repite todo el día se queda al alcance del pulgar, apoyado sobre la barra
+       inferior. El alta de un presencial baja con él porque es la otra cosa que se hace de pie. */
+    .queue-actions.accion-fija {
+        position: sticky; bottom: var(--alto-nav); z-index: 16;
+        margin-inline: calc(var(--e4) * -1); border-radius: 0; border-inline: 0;
+        background: rgb(255 255 255 / 96%); backdrop-filter: blur(10px);
+        box-shadow: 0 -6px 18px rgb(15 46 37 / 8%);
+    }
+    .queue-actions.accion-fija .call-next { min-height: 54px; font-size: 1.05rem }
     .queue-toolbar .actions { flex-wrap: wrap }
     .queue-toolbar .actions button, .queue-toolbar .actions .button-link { flex: 1 1 45% }
     .queue-row { grid-template-columns: auto 1fr }

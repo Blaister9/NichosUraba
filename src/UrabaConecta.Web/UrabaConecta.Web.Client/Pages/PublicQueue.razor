@@ -4,21 +4,51 @@
 @inject IUrabaConectaApi Api
 @inject NavigationManager Navigation
 
+@* La fila virtual es el diferenciador de barbería, así que se ve distinta al resto del producto:
+   fondo oscuro, cifras enormes y una señal que late. No es decoración —es la única pantalla de
+   UrabáConecta cuyo contenido cambia solo mientras alguien la mira— y verlo moverse es lo que
+   convence de que no hay que esperar de pie en el local. *@
 <PageTitle>Fila virtual | UrabáConecta</PageTitle>
 <a class="back-link" href="/negocios/@Slug">← Volver al negocio</a>
 @if (status is null && error is null) { <p class="notice">Consultando la fila…</p> }
 else if (error is not null) { <div class="error" role="alert">@error</div> }
 else if (status is not null)
 {
-    <section class="queue-hero">
-        <p class="eyebrow">@status.BusinessName</p><h1>@status.QueueName</h1>
-        <p>@status.PublicMessage</p>
-        <div class="queue-numbers">
-            <div><span>Atendiendo</span><strong>@(status.CurrentNumber?.ToString() ?? "—")</strong></div>
-            <div><span>En espera</span><strong>@status.WaitingCount</strong></div>
-            <div><span>Espera aproximada</span><strong>~@status.ApproximateWaitMinutes min</strong></div>
+    <section class="fila-tablero">
+        <header>
+            <p class="eyebrow">@status.BusinessName</p>
+            <h1>@status.QueueName</h1>
+            <span class="fila-estado" data-estado="@status.SessionStatus.ToLowerInvariant()">
+                @SessionLabel(status.SessionStatus)
+            </span>
+        </header>
+
+        <div class="fila-cifras">
+            <div class="destacada">
+                <span>Atendiendo ahora</span>
+                <strong>@(status.CurrentNumber?.ToString() ?? "—")</strong>
+            </div>
+            <div>
+                <span>@(status.WaitingCount == 1 ? "Persona esperando" : "Personas esperando")</span>
+                <strong>@status.WaitingCount</strong>
+            </div>
+            <div>
+                <span>Espera aproximada</span>
+                <strong>@status.ApproximateWaitMinutes<small> min</small></strong>
+            </div>
         </div>
-        <span class="status @status.SessionStatus.ToLowerInvariant()">@SessionLabel(status.SessionStatus)</span>
+
+        @* Una fila de puntos por quien espera: el número dice cuántos, los puntos lo hacen sentir.
+           Se acota a doce para que a partir de ahí crezca el resumen y no la tira. *@
+        @if (status.WaitingCount > 0)
+        {
+            <p class="fila-puntos" aria-hidden="true">
+                @for (var i = 0; i < Math.Min(status.WaitingCount, 12); i++) { <span></span> }
+                @if (status.WaitingCount > 12) { <em>+@(status.WaitingCount - 12)</em> }
+            </p>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(status.PublicMessage)) { <p class="fila-mensaje">@status.PublicMessage</p> }
     </section>
     @if (created is null)
     {
@@ -44,13 +74,20 @@ else if (status is not null)
     else
     {
         @* Lo primero que quiere ver quien acaba de entrar a la fila es su número, grande. *@
-        <section class="queue-ticket narrow" data-testid="queue-created">
+        <section class="fila-tablero confirmado narrow" data-testid="queue-created">
             <p class="eyebrow">@status.BusinessName</p>
             <h2>Estás en la fila</h2>
             <span class="ticket-number">@created.Number</span>
-            <p class="lead">Ese es tu número. Hay @status.WaitingCount @(status.WaitingCount == 1 ? "persona" : "personas")
-                antes que tú, unos @status.ApproximateWaitMinutes minutos de espera.</p>
-            <p>Guarda este enlace y mira tu posición desde el celular; no tienes que esperar en el local.</p>
+            <p class="lead">
+                @if (created.PeopleAhead == 0) { <text>Eres el siguiente.</text> }
+                else
+                {
+                    <text>Hay @created.PeopleAhead @(created.PeopleAhead == 1 ? "persona" : "personas") antes que tú,
+                    unos @created.ApproximateWaitMinutes minutos de espera.</text>
+                }
+            </p>
+            <p class="fila-mensaje">Sigue tu turno desde el celular. Te avisamos cuando falte poco;
+                no tienes que esperar en el local.</p>
             <a class="button-link btn-grande" href="/seguimiento/turnos/@created.TrackingCode">Seguir mi turno</a>
         </section>
     }
