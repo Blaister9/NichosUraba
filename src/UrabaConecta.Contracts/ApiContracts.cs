@@ -40,7 +40,13 @@ public sealed record BusinessProfileDto(string Slug, string Name, string Descrip
     string ShortDescription = "", string? ReferencePoint = null, string? WhatsAppUrl = null,
     string? PublicEmail = null, string? InstagramUrl = null, string? FacebookUrl = null,
     string? LocationUrl = null, string? CustomerInstructions = null,
-    IReadOnlyList<BusinessImageDto>? Images = null, string? OpenStatus = null, bool IsPreview = false);
+    IReadOnlyList<BusinessImageDto>? Images = null, string? OpenStatus = null, bool IsPreview = false,
+    /// <summary>
+    /// Un adelanto del catálogo de pedidos, no la carta entera. Para un negocio de productos la
+    /// ficha es el escaparate: mandarlo a otra pantalla para ver el primer artículo es pedirle un
+    /// clic antes de haber enseñado nada.
+    /// </summary>
+    IReadOnlyList<ProductDto>? Products = null);
 public sealed record SlotDto(DateTimeOffset Start, DateTimeOffset End);
 public sealed record SlotListDto(string BusinessTimeZone, DateOnly Date, IReadOnlyList<SlotDto> Slots);
 

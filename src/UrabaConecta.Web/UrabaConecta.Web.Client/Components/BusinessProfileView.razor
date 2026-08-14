@@ -1,14 +1,26 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
 @* Ficha pública reutilizable: la usan el directorio y la vista previa administrativa.
 
    Es la superficie que un negocio va a enseñar como suya, así que se lee como su mini-web: portada,
    identidad, una acción dominante y después el detalle. Quien llega por un enlace directo tiene que
    pensar "ésta es la página de este negocio", no "estoy dentro de un sistema". *@
 
-<section class="ficha-hero">
+<section class="ficha-hero" data-tono="@CategoryLook.Tone(Profile.Category.Slug)">
     @if (Cover is not null)
     {
         <img class="profile-cover" src="@Cover.Url" alt="@(Cover.AltText ?? $"Portada de {Profile.Name}")"
              width="@Cover.Width" height="@Cover.Height" fetchpriority="high" />
+    }
+    else
+    {
+        @* Un negocio sin portada conserva la forma de la ficha en vez de empezar con el título
+           pegado al encabezado: la mini-web sigue pareciendo una mini-web. *@
+        <div class="profile-cover cover-vacia" aria-hidden="true">
+            <Icon Name="@CategoryLook.Icon(Profile.Category.Slug)" Size="64" />
+        </div>
     }
     <div class="profile-head">
         <div class="profile-identity">
@@ -50,7 +62,14 @@
                     <a class="button-link secondary" href="@Profile.LocationUrl"
                        rel="noopener noreferrer nofollow">Cómo llegar</a>
                 }
+                <button type="button" class="secondary" @onclick="Compartir">
+                    <Icon Name="compartir" Size="18" /> Compartir
+                </button>
             </div>
+            @if (avisoCompartir is { Length: > 0 })
+            {
+                <p class="success" role="status">@avisoCompartir</p>
+            }
         }
         @if (!string.IsNullOrWhiteSpace(Profile.ReferencePoint))
         {
@@ -64,21 +83,44 @@
     <section class="notice"><h2>Antes de venir</h2><p>@Profile.CustomerInstructions</p></section>
 }
 
+@* Servicios y productos comparten anatomía: foto, nombre, detalle, precio y una acción. Quien ya
+   entendió una lista no debería tener que aprender la otra. *@
 @if (Profile.Services.Count > 0)
 {
-    <section class="bloque"><h2>Servicios</h2><div class="card-grid">
-        @foreach (var service in Profile.Services)
-        {
-            <article class="service-card"><h3>@service.Name</h3>
-                <p class="meta">@service.DurationMinutes minutos</p>
-                <p class="precio">@service.ReferencePrice.ToString("C0", Colombia)</p>
-                @if (!Profile.IsPreview)
-                {
-                    <a class="button-link secondary" href="/negocios/@Profile.Slug/citas?serviceId=@service.Id">Reservar</a>
-                }
-            </article>
-        }
-    </div></section>
+    <section class="bloque" data-tono="@CategoryLook.Tone(Profile.Category.Slug)">
+        <h2>Servicios</h2>
+        <div class="catalogo">
+            @foreach (var service in Profile.Services)
+            {
+                <article class="catalogo-item">
+                    @if (service.ImageUrl is { Length: > 0 } foto)
+                    {
+                        <img class="catalogo-foto" src="@foto" width="184" height="184" loading="lazy"
+                             alt="@(service.ImageAltText ?? $"{service.Name} en {Profile.Name}")" />
+                    }
+                    else
+                    {
+                        <span class="catalogo-foto sin-foto"><Icon Name="@CategoryLook.Icon(Profile.Category.Slug)" Size="28" /></span>
+                    }
+                    <div class="catalogo-cuerpo">
+                        <h3>@service.Name</h3>
+                        @if (!string.IsNullOrWhiteSpace(service.Description)) { <p>@service.Description</p> }
+                        <p class="catalogo-datos">
+                            <span class="duracion"><Icon Name="reloj" Size="14" /> @Duracion(service.DurationMinutes)</span>
+                            @if (service.RequiresDeposit) { <span>Requiere adelanto</span> }
+                        </p>
+                    </div>
+                    <div class="catalogo-accion">
+                        <span class="precio">@service.ReferencePrice.ToString("C0", Colombia)</span>
+                        @if (!Profile.IsPreview)
+                        {
+                            <a class="button-link secondary" href="/negocios/@Profile.Slug/citas?serviceId=@service.Id">Reservar</a>
+                        }
+                    </div>
+                </article>
+            }
+        </div>
+    </section>
 }
 
 @if (Profile.HasVirtualQueue)
@@ -88,11 +130,51 @@
         @if (!Profile.IsPreview) { <a class="button-link" href="/negocios/@Profile.Slug/turnos">Ver fila virtual</a> }
     </section>
 }
+
 @if (Profile.HasPickupOrdering)
 {
-    <section class="queue-promo"><h2>Pedidos para recoger</h2>
-        <p>Arma tu pedido, elige a qué hora pasas y paga en el establecimiento.</p>
-        @if (!Profile.IsPreview) { <a class="button-link" href="/negocios/@Profile.Slug/pedidos">Ver menú</a> }
+    <section class="bloque" data-tono="@CategoryLook.Tone(Profile.Category.Slug)">
+        <div class="seccion-head">
+            <div>
+                <h2>Para recoger</h2>
+                <p>Arma tu pedido, elige a qué hora pasas y paga en el establecimiento.</p>
+            </div>
+            @if (!Profile.IsPreview && Productos.Count > 0) { <a href="/negocios/@Profile.Slug/pedidos">Ver todo</a> }
+        </div>
+        @if (Productos.Count > 0)
+        {
+            <div class="catalogo">
+                @foreach (var producto in Productos)
+                {
+                    <article class="catalogo-item">
+                        @if (producto.ImageUrl is { Length: > 0 } foto)
+                        {
+                            <img class="catalogo-foto" src="@foto" width="184" height="184" loading="lazy"
+                                 alt="@(producto.ImageAltText ?? $"{producto.Name} en {Profile.Name}")" />
+                        }
+                        else
+                        {
+                            <span class="catalogo-foto sin-foto"><Icon Name="bolsa" Size="28" /></span>
+                        }
+                        <div class="catalogo-cuerpo">
+                            <h3>@producto.Name</h3>
+                            @if (!string.IsNullOrWhiteSpace(producto.Description)) { <p>@producto.Description</p> }
+                        </div>
+                        <div class="catalogo-accion">
+                            <span class="precio">@producto.ReferencePrice.ToString("C0", Colombia)</span>
+                            @if (!Profile.IsPreview)
+                            {
+                                <a class="button-link secondary" href="/negocios/@Profile.Slug/pedidos">Agregar</a>
+                            }
+                        </div>
+                    </article>
+                }
+            </div>
+        }
+        else if (!Profile.IsPreview)
+        {
+            <a class="button-link" href="/negocios/@Profile.Slug/pedidos">Ver menú</a>
+        }
     </section>
 }
 
@@ -160,11 +242,59 @@
 
     private static readonly System.Globalization.CultureInfo Colombia = new("es-CO");
 
+    private IJSObjectReference? modulo;
+    private string? avisoCompartir;
+
+    /// <summary>
+    /// El módulo se carga al primer uso y no al montar: la mayoría de las visitas no comparten, y
+    /// descargarlo siempre sería pagar por todas el gesto de unas pocas.
+    /// </summary>
+    private async Task Compartir()
+    {
+        try
+        {
+            modulo ??= await JS.InvokeAsync<IJSObjectReference>("import",
+                "./Components/BusinessProfileView.razor.js");
+            var resultado = await modulo.InvokeAsync<string>("compartir",
+                Profile.Name, Presentacion, Nav.Uri);
+            avisoCompartir = resultado switch
+            {
+                "copiado" => "Copiamos el enlace. Ya puedes pegarlo donde quieras.",
+                "sin-soporte" => "Copia la dirección desde la barra del navegador.",
+                _ => null
+            };
+        }
+        catch (JSException)
+        {
+            // Compartir es accesorio: si el navegador lo impide, la ficha sigue sirviendo entera.
+            avisoCompartir = "Copia la dirección desde la barra del navegador.";
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        // Al navegar el circuito puede haberse cerrado ya; soltar el módulo entonces lanza, y eso
+        // no debe convertirse en un error visible cuando la persona simplemente cambió de página.
+        if (modulo is null) return;
+        try { await modulo.DisposeAsync(); }
+        catch (JSDisconnectedException) { }
+        catch (JSException) { }
+    }
+
     private IReadOnlyList<BusinessImageDto> Images => Profile.Images ?? [];
     private BusinessImageDto? Logo => Images.FirstOrDefault(x => x.Kind == "Logo");
     private BusinessImageDto? Cover => Images.FirstOrDefault(x => x.Kind == "Cover");
     private IReadOnlyList<BusinessImageDto> Gallery
         => Images.Where(x => x.Kind == "Gallery").OrderBy(x => x.DisplayOrder).ToList();
+    private IReadOnlyList<ProductDto> Productos => Profile.Products ?? [];
+
+    /// <summary>
+    /// "90 minutos" se lee peor que "1 h 30 min" en una tarjeta estrecha, y por encima de dos horas
+    /// el número en minutos deja de significar nada a simple vista.
+    /// </summary>
+    private static string Duracion(int minutos) => minutos < 60
+        ? $"{minutos} min"
+        : minutos % 60 == 0 ? $"{minutos / 60} h" : $"{minutos / 60} h {minutos % 60} min";
 
     /// <summary>
     /// Muchos negocios escriben el municipio dentro de la dirección. Añadirlo otra vez dejaba

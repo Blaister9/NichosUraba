@@ -267,6 +267,11 @@ public static class DevelopmentSeeder
             if (!await db.ProductCategories.AnyAsync(x => x.Id == item.Id)) db.ProductCategories.Add(item);
         var products = new[]
         {
+            // "Bandeja del día" existe para que el catálogo local tenga al menos un producto con
+            // fotografía real y se pueda juzgar cómo se ve una carta con imágenes. Es un producto
+            // nuevo y no el renombrado de otro: los recorridos de extremo a extremo esperan por
+            // nombre los que ya estaban.
+            new Product(Guid.Parse("70000000-0000-0000-0000-000000000006"), SazonBusinessId, categories[0].Id, "Bandeja del día", "Arroz, fríjol, plátano maduro y ensalada fresca.", 21000, 0),
             new Product(Guid.Parse("70000000-0000-0000-0000-000000000001"), SazonBusinessId, categories[0].Id, "Hamburguesa tradicional", "Carne, queso y vegetales.", 18000, 1),
             new Product(Guid.Parse("70000000-0000-0000-0000-000000000002"), SazonBusinessId, categories[0].Id, "Hamburguesa especial", "Hamburguesa especial de la casa.", 24000, 2),
             new Product(Guid.Parse("70000000-0000-0000-0000-000000000003"), SazonBusinessId, categories[1].Id, "Papas fritas", "Porción personal.", 8000, 1),

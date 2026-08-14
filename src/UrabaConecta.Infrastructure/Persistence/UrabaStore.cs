@@ -134,6 +134,13 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
                                   .Select(x => new { x.Id, x.Kind, x.StorageKey, x.AltText, x.Width, x.Height,
                                       x.DisplayOrder, x.Version, x.ServiceId, x.ProductId })
                                   .ToList(),
+                              // Sólo el escaparate. La carta completa, con sus categorías y el
+                              // carrito, sigue viviendo en la pantalla de pedidos.
+                              Products = db.Products.Where(x => x.BusinessId == b.Id && x.IsActive)
+                                  .OrderBy(x => x.DisplayOrder).ThenBy(x => x.Name).Take(6)
+                                  .Select(x => new { x.Id, x.ProductCategoryId, x.Name, x.Description,
+                                      x.ReferencePrice, x.DisplayOrder, x.Version })
+                                  .ToList(),
                           }).SingleOrDefaultAsync(cancellationToken);
         if (data is null) return null;
         // Ordenado por día y hora de apertura: una jornada partida se lee en el orden en que
@@ -161,6 +168,19 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
                 x.DepositValue, policy.CalculateFor(x.ReferencePrice), x.DepositInstructions, "",
                 photo is null ? null : storage.PublicUrl(photo.StorageKey), photo?.AltText);
         }).ToList();
+        var productImages = data.Images.Where(x => x.Kind == BusinessImageKind.Product && x.ProductId is not null)
+            .ToDictionary(x => x.ProductId!.Value);
+        // El escaparate sólo se arma si el negocio realmente recibe pedidos: con el módulo apagado,
+        // enseñar productos invitaría a un carrito que no existe.
+        var productos = data.Modules.Contains(BusinessModuleKind.PickupOrders)
+            ? data.Products.Select(x =>
+            {
+                var photo = productImages.GetValueOrDefault(x.Id);
+                return new ProductDto(x.Id, x.ProductCategoryId, x.Name, x.Description, x.ReferencePrice,
+                    x.DisplayOrder, true, x.Version,
+                    photo is null ? null : storage.PublicUrl(photo.StorageKey), photo?.AltText);
+            }).ToList()
+            : [];
         // La galería de la ficha muestra el establecimiento; las fotos del catálogo ya viajan dentro
         // de su servicio o de su producto y repetirlas aquí llenaría la galería de primeros planos.
         var images = data.Images
@@ -175,7 +195,9 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
             data.b.ShortDescription, data.b.ReferencePoint, data.b.WhatsAppUrl, data.b.PublicEmail,
             data.b.InstagramUrl, data.b.FacebookUrl, data.b.LocationUrl, data.b.CustomerInstructions,
             images,
-            OpenStatus(data.b.TimeZoneId, publicHours));
+            OpenStatus(data.b.TimeZoneId, publicHours),
+            false,
+            productos);
     }
 
     /// <summary>
