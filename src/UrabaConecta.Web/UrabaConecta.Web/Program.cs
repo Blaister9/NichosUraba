@@ -778,6 +778,7 @@ app.MapAdditionalIdentityEndpoints();
 // falla de formas que cuesta leer. Un fallo aquí no derriba el proceso, marca la readiness.
 await app.Services.MigrateDatabaseAsync(app.Environment);
 await app.Services.SeedDevelopmentAsync(app.Environment);
+await app.Services.SeedDemoShowcaseAsync(app.Environment);
 await app.Services.SeedCatalogImagesAsync(app.Environment);
 await app.Services.BootstrapDemoAdminAsync(app.Environment);
 await app.Services.NormalizeDemoAccessAsync(app.Environment);

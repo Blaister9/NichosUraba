@@ -72,6 +72,14 @@ public sealed class StartupGuardTests
     }
 
     [Fact]
+    public void Production_refuses_to_start_with_the_showcase_seed_enabled()
+    {
+        var problems = StartupGuard.Validate(ProductionConfiguration(("ShowcaseSeed:Enabled", "true")),
+            Production, CompleteLegal(), CompleteStorage());
+        Assert.Contains(problems, x => x.Contains("ShowcaseSeed__Enabled"));
+    }
+
+    [Fact]
     public void Production_refuses_to_start_with_the_demo_bootstrap_enabled()
     {
         var problems = StartupGuard.Validate(

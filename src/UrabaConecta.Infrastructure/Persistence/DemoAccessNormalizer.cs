@@ -10,7 +10,7 @@ using UrabaConecta.Infrastructure.Identity;
 namespace UrabaConecta.Infrastructure.Persistence;
 
 /// <summary>
-/// Normalización operativa de las cinco cuentas comerciales de Demo.
+/// Normalización operativa de las cuentas comerciales de Demo.
 /// La presencia del secreto actúa como activador temporal; fuera de Demo siempre falla.
 /// </summary>
 public static class DemoAccessNormalizer
@@ -21,12 +21,10 @@ public static class DemoAccessNormalizer
     [
         new(DevelopmentSeeder.PlatformAdminEmail, "Administración UrabáConecta", "PlatformAdmin", null),
         new(DevelopmentSeeder.PartnerOperatorEmail, "Socia demostrativa", "PartnerOperator", null),
-        new(DevelopmentSeeder.BellaOwnerEmail, "Propietaria Bella", "BusinessOwner",
-            DevelopmentSeeder.BellaBusinessId),
-        new(DevelopmentSeeder.CorteOwnerEmail, "Propietario El Corte", "BusinessOwner",
-            DevelopmentSeeder.CorteBusinessId),
-        new(DevelopmentSeeder.SazonOwnerEmail, "Propietario Sazón Local", "BusinessOwner",
-            DevelopmentSeeder.SazonBusinessId)
+        new(DemoShowcaseSeeder.BarberOwnerEmail, "Operación Brío Nativo", "BusinessOwner",
+            DemoShowcaseSeeder.BarberBusinessId),
+        new(DemoShowcaseSeeder.BeautyOwnerEmail, "Operación Lúmina Coral", "BusinessOwner",
+            DemoShowcaseSeeder.BeautyBusinessId)
     ];
 
     public static async Task NormalizeDemoAccessAsync(this IServiceProvider services,
@@ -54,7 +52,7 @@ public static class DemoAccessNormalizer
             .Select(x => x.Id).ToListAsync(cancellationToken);
         if (existingBusinesses.Count != expectedBusinesses.Count)
             throw new InvalidOperationException(
-                "No se normalizaron accesos: falta uno de los tres negocios originales de Demo.");
+                "No se normalizaron accesos: falta uno de los dos negocios showcase de Demo.");
 
         foreach (var definition in Accounts)
         {
@@ -125,7 +123,7 @@ public static class DemoAccessNormalizer
         foreach (var definition in Accounts)
         {
             var user = await users.FindByEmailAsync(definition.Email)
-                ?? throw new InvalidOperationException("La verificación de accesos Demo no encontró las cinco cuentas.");
+                ?? throw new InvalidOperationException("La verificación de accesos Demo no encontró una cuenta esperada.");
             if (!user.EmailConfirmed || user.MustChangePassword || user.LockoutEnd is not null ||
                 !await users.CheckPasswordAsync(user, password) ||
                 !await users.IsInRoleAsync(user, definition.Role))

@@ -13,11 +13,13 @@ namespace UrabaConecta.IntegrationTests;
 public sealed class DemoAccessNormalizerTests(PostgresWebFactory factory) : IClassFixture<PostgresWebFactory>
 {
     [Fact]
-    public async Task Normalizer_resets_the_five_accounts_and_enforces_roles_and_memberships()
+    public async Task Normalizer_resets_the_showcase_accounts_and_enforces_roles_and_memberships()
     {
         _ = factory.CreateClient();
         const string password = "Shared-Commercial-2026!";
 
+        await factory.Services.SeedDemoShowcaseAsync(
+            new TestEnvironment("Demo"), Configuration(password));
         await factory.Services.NormalizeDemoAccessAsync(
             new TestEnvironment("Demo"), Configuration(password));
 
@@ -28,9 +30,8 @@ public sealed class DemoAccessNormalizerTests(PostgresWebFactory factory) : ICla
         {
             (DevelopmentSeeder.PlatformAdminEmail, "PlatformAdmin", (Guid?)null),
             (DevelopmentSeeder.PartnerOperatorEmail, "PartnerOperator", (Guid?)null),
-            (DevelopmentSeeder.BellaOwnerEmail, "BusinessOwner", (Guid?)DevelopmentSeeder.BellaBusinessId),
-            (DevelopmentSeeder.CorteOwnerEmail, "BusinessOwner", (Guid?)DevelopmentSeeder.CorteBusinessId),
-            (DevelopmentSeeder.SazonOwnerEmail, "BusinessOwner", (Guid?)DevelopmentSeeder.SazonBusinessId)
+            (DemoShowcaseSeeder.BarberOwnerEmail, "BusinessOwner", (Guid?)DemoShowcaseSeeder.BarberBusinessId),
+            (DemoShowcaseSeeder.BeautyOwnerEmail, "BusinessOwner", (Guid?)DemoShowcaseSeeder.BeautyBusinessId)
         };
 
         foreach (var (email, role, businessId) in expected)
@@ -68,7 +69,8 @@ public sealed class DemoAccessNormalizerTests(PostgresWebFactory factory) : ICla
     private static IConfiguration Configuration(string password)
         => new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["DemoAccess:SharedPassword"] = password
+            ["DemoAccess:SharedPassword"] = password,
+            ["ShowcaseSeed:Enabled"] = "true"
         }).Build();
 
     private sealed class TestEnvironment(string name) : IHostEnvironment
