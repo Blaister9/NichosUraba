@@ -16,7 +16,13 @@ public sealed class BusinessImageUseCases(
         CancellationToken cancellationToken = default)
     {
         await EnsureScopeAsync(actor, businessId, cancellationToken);
-        return Map(await store.ListAsync(businessId, cancellationToken));
+        // Sólo las imágenes del establecimiento. Las del catálogo pertenecen a su servicio o a su
+        // producto y se administran junto a ellos: mezcladas aquí aparecían como fotografías sueltas
+        // de la galería, sin decir de qué eran, y borrar una desde esta pantalla habría dejado un
+        // servicio sin foto sin que nadie entendiera por qué.
+        return Map((await store.ListAsync(businessId, cancellationToken))
+            .Where(x => x.Kind is BusinessImageKind.Logo or BusinessImageKind.Cover
+                or BusinessImageKind.Gallery));
     }
 
     public async Task<BusinessImageDto> UploadAsync(PlatformActor actor, Guid businessId, string kind,

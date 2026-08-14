@@ -103,7 +103,7 @@ else
         else
         {
             <div class="card-grid">
-                @foreach (var (negocio, indice) in negocios.Take(6).Select((x, i) => (x, i)))
+                @foreach (var (negocio, indice) in negocios.Take(Destacados).Select((x, i) => (x, i)))
                 {
                     <BusinessCard Business="negocio" Priority="indice == 0" />
                 }
@@ -112,10 +112,14 @@ else
     </section>
 
     @* Una franja por operación: es lo que deja ver que la plataforma hace tres cosas distintas sin
-       tener que explicarlo con texto. Sólo se dibuja la que tiene negocios detrás. *@
+       tener que explicarlo con texto.
+
+       Sólo con lo que la rejilla de arriba no alcanzó a mostrar. Repetir ahí las mismas tarjetas no
+       es una plataforma viva, es relleno, y se nota enseguida cuando el directorio es pequeño. Así
+       las franjas siempre aportan negocios nuevos, y con pocos negocios simplemente no aparecen. *@
     @foreach (var franja in Franjas)
     {
-        var seleccion = negocios.Where(franja.Filtro).Take(8).ToList();
+        var seleccion = negocios.Skip(Destacados).Where(franja.Filtro).Take(8).ToList();
         if (seleccion.Count == 0) { continue; }
         <section class="seccion" aria-label="@franja.Titulo">
             <div class="seccion-head">
@@ -149,6 +153,12 @@ else
     [
         ("apartado", "Apartadó"), ("carepa", "Carepa"), ("chigorodo", "Chigorodó"), ("turbo", "Turbo"),
     ];
+
+    /// <summary>
+    /// Cuántos negocios muestra la rejilla principal. Las franjas por operación empiezan justo
+    /// después, de modo que ningún negocio aparece dos veces en la misma pantalla.
+    /// </summary>
+    private const int Destacados = 6;
 
     private sealed record Franja(string Titulo, string Bajada, Func<BusinessCardDto, bool> Filtro);
 

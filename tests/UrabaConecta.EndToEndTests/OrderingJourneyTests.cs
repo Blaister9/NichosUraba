@@ -15,7 +15,10 @@ public sealed class OrderingJourneyTests(BrowserFixture fixture) : IClassFixture
         // 1. Directorio -> restaurante -> pedidos.
         await visitor.GotoAsync($"{fixture.BaseUrl}/negocios/restaurante-sazon-local");
         await Expect(visitor.GetByRole(AriaRole.Heading, new() { Name = "Restaurante Sazón Local" })).ToBeVisibleAsync();
-        await Expect(visitor.GetByRole(AriaRole.Link, new() { Name = "Ver menú" })).ToBeVisibleAsync();
+        // La ficha de un negocio de pedidos ya enseña sus primeros productos, así que el enlace al
+        // menú completo dice "Ver todo"; "Ver menú" sólo queda cuando todavía no hay catálogo.
+        await Expect(visitor.GetByRole(AriaRole.Link, new() { Name = "Ver todo" })
+            .Or(visitor.GetByRole(AriaRole.Link, new() { Name = "Ver menú" })).First).ToBeVisibleAsync();
         await visitor.GotoAsync($"{fixture.BaseUrl}/negocios/restaurante-sazon-local/pedidos");
         await Expect(visitor.GetByRole(AriaRole.Heading, new() { Name = "Pedido para recoger" })).ToBeVisibleAsync();
 
@@ -25,7 +28,8 @@ public sealed class OrderingJourneyTests(BrowserFixture fixture) : IClassFixture
         // producto habla, así que el nombre accesible es "Agregar uno de …".
         await visitor.Locator("[data-testid=product-card]").First
             .GetByRole(AriaRole.Button, new() { NameRegex = new Regex("^Agregar uno de ") }).ClickAsync();
-        await Expect(visitor.GetByText("1 unidades")).ToBeVisibleAsync();
+        // El resumen concuerda en número: "1 unidades" era una cadena armada, no una frase.
+        await Expect(visitor.GetByText("1 unidad").First).ToBeVisibleAsync();
 
         // 3. Datos mínimos, consentimiento y franja.
         await visitor.GetByLabel("Hora para recoger").SelectOptionAsync(new SelectOptionValue { Index = 1 });

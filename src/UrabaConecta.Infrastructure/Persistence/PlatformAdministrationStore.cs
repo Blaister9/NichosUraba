@@ -51,7 +51,12 @@ public sealed class PlatformAdministrationStore(AppDbContext db) : IPlatformAdmi
             Municipality = db.Municipalities.Where(x => x.Id == b.MunicipalityId).Select(x => x.Name).First(),
             Category = db.Categories.Where(x => x.Id == b.CategoryId).Select(x => x.Name).First(),
             Modules = db.BusinessModules.Where(x => x.BusinessId == b.Id).ToList(),
-            Images = db.BusinessImages.Where(x => x.BusinessId == b.Id && !x.IsDeleted).ToList(),
+            // Sólo las del establecimiento. Las del catálogo cuelgan de un servicio o de un producto
+            // y se administran junto a ellos: aquí aparecerían como fotografías sueltas de la
+            // galería, sin decir de qué son, y contarían para la lista de imágenes del negocio.
+            Images = db.BusinessImages.Where(x => x.BusinessId == b.Id && !x.IsDeleted &&
+                (x.Kind == BusinessImageKind.Logo || x.Kind == BusinessImageKind.Cover ||
+                 x.Kind == BusinessImageKind.Gallery)).ToList(),
             Owner = (from membership in db.BusinessMemberships
                      join user in db.Users on membership.UserId equals user.Id
                      where membership.BusinessId == b.Id && membership.IsActive &&

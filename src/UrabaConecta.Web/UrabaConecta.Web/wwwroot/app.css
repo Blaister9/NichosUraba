@@ -1152,7 +1152,10 @@ a.card-media { display: block; color: inherit }
         grid-column: 1 / -1; grid-auto-flow: column; justify-items: stretch;
         align-items: center; justify-content: space-between; text-align: left;
     }
-    .catalogo-accion .button-link, .catalogo-accion button { min-width: 8.5rem }
+    /* Sólo los hijos directos: el contador de unidades también vive aquí y sus botones son
+       circulares de 44 px. Sin el combinador, heredaban este ancho mínimo y la fila de un producto
+       medía más que la pantalla. */
+    .catalogo-accion > .button-link, .catalogo-accion > button { min-width: 8.5rem }
 
     .hero-home { padding: var(--e4) var(--e4) var(--e5); margin-inline: calc(var(--e4) * -1) ;
         border-radius: 0 }

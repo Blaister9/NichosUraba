@@ -37,7 +37,11 @@ public sealed class QueueJourneyTests(BrowserFixture fixture) : IClassFixture<Br
         await Expect(visitor.GetByTestId("queue-created")).ToBeVisibleAsync();
         await publicChanged.Task.WaitAsync(TimeSpan.FromSeconds(10));
         await visitor.GetByRole(AriaRole.Link, new() { Name = "Seguir mi turno" }).ClickAsync();
-        await Expect(visitor.GetByText("En espera", new() { Exact = true })).ToBeVisibleAsync();
+        // El tablero de la fila nombra la cifra en singular o en plural según cuánta gente hay:
+        // "En espera" era una etiqueta de panel, no algo que alguien diga.
+        await Expect(visitor.GetByText("Personas esperando", new() { Exact = true })
+            .Or(visitor.GetByText("Persona esperando", new() { Exact = true })).First)
+            .ToBeVisibleAsync();
         var trackingCode = visitor.Url.Split('/').Last();
         await using var ticketHub = new HubConnectionBuilder().WithUrl($"{fixture.BaseUrl}/hubs/queue").Build();
         var ticketChanged = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

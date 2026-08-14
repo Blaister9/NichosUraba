@@ -14,7 +14,9 @@ public sealed class SchedulingJourneyTests(BrowserFixture fixture) : IClassFixtu
         await page.GotoAsync(fixture.BaseUrl);
         await Expect(page.GetByText("Salón Bella Urabá")).ToBeVisibleAsync();
         await page.GotoAsync($"{fixture.BaseUrl}/negocios/salon-bella-uraba");
-        var service = page.Locator("article.service-card").Filter(new() { HasTextString = "Corte femenino" });
+        // La ficha dejó de listar los servicios como tarjetas sueltas: ahora usan la misma anatomía
+        // de catálogo que los productos, con fotografía, duración y precio en una fila.
+        var service = page.Locator("article.catalogo-item").Filter(new() { HasTextString = "Corte femenino" });
         await Expect(service).ToBeVisibleAsync();
         await page.GotoAsync($"{fixture.BaseUrl}/negocios/salon-bella-uraba/citas?serviceId=10000000-0000-0000-0000-000000000001");
         await page.GetByRole(AriaRole.Button, new() { Name = "Ver horas disponibles" }).ClickAsync();
