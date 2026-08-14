@@ -59,7 +59,7 @@
     private IReadOnlyList<PickupOrderAdminDto> orders = []; private string? error, message;
     private string businessName = "", timeZoneId = "America/Bogota";
     private bool interactiveReady, busy, loading = true;
-    private string selectedTab = "active";
+    private string selectedTab = "all";
     private bool Blocked => !interactiveReady || busy || loading;
     private static readonly System.Globalization.CultureInfo Colombia = new("es-CO");
     private static readonly (string Key, string Label)[] Tabs =

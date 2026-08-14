@@ -11,6 +11,9 @@ services:
       - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=${POSTGRES_DB:-urabaconecta};Username=${POSTGRES_USER:-urabaconecta};Password=${POSTGRES_PASSWORD}
       - URABACONECTA_TRACKING_HMAC_KEY=${URABACONECTA_TRACKING_HMAC_KEY}
       - URABACONECTA_INVITATION_HMAC_KEY
+      - WebPush__Subject
+      - WebPush__PublicKey
+      - WebPush__PrivateKey
       - DataProtection__KeysPath=/app/keys
       - DataProtection__CertificateBase64
       - DataProtection__CertificatePassword

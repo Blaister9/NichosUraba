@@ -71,6 +71,21 @@ public sealed class PushNotificationApiTests(PushWebFactory factory) : IClassFix
     }
 
     [Fact]
+    public async Task Pwa_manifest_service_worker_and_registration_are_served()
+    {
+        using var client = factory.CreateClient();
+        var home = await client.GetStringAsync("/");
+        Assert.Contains("rel=\"manifest\" href=\"/manifest.webmanifest\"", home);
+        Assert.Contains("/pwa.js", home);
+        var manifest = await client.GetStringAsync("/manifest.webmanifest");
+        Assert.Contains("\"display\": \"standalone\"", manifest);
+        Assert.Contains("\"purpose\": \"any maskable\"", manifest);
+        var worker = await client.GetStringAsync("/sw.js");
+        Assert.Contains("addEventListener('push'", worker);
+        Assert.Contains("addEventListener('notificationclick'", worker);
+    }
+
+    [Fact]
     public async Task Owner_subscription_is_tenant_scoped_and_another_owner_is_forbidden()
     {
         using var owner = factory.CreateClient(new() { AllowAutoRedirect = false, HandleCookies = true });
