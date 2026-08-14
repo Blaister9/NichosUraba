@@ -1,6 +1,7 @@
 @implements IAsyncDisposable
 @inject IJSRuntime JS
 @inject NavigationManager Nav
+@inject IUrabaConectaApi Api
 
 @* Ficha pública reutilizable: la usan el directorio y la vista previa administrativa.
 
@@ -112,7 +113,7 @@
                     </div>
                     <div class="catalogo-accion">
                         <span class="precio">@service.ReferencePrice.ToString("C0", Colombia)</span>
-                        @if (!Profile.IsPreview)
+                        @if (!Profile.IsPreview && !Profile.HasVirtualQueue && !Profile.HasPickupOrdering)
                         {
                             <a class="button-link secondary" href="/negocios/@Profile.Slug/citas?serviceId=@service.Id">Reservar</a>
                         }
@@ -125,9 +126,20 @@
 
 @if (Profile.HasVirtualQueue)
 {
-    <section class="queue-promo"><h2>Atención por orden de llegada</h2>
+    <section class="queue-promo live-queue"><div>
+        <p class="eyebrow">Fila / turno virtual</p>
+        <h2>Atención por orden de llegada</h2>
         <p>Toma tu turno desde el celular y llega cuando falte poco. No necesitas crear una cuenta.</p>
-        @if (!Profile.IsPreview) { <a class="button-link" href="/negocios/@Profile.Slug/turnos">Ver fila virtual</a> }
+        @if (!Profile.IsPreview) { <a class="button-link btn-grande" href="/negocios/@Profile.Slug/turnos">Tomar turno</a> }
+        </div>
+        @if (queueStatus is not null)
+        {
+            <dl class="queue-promo-metrics" aria-label="Estado actual de la fila">
+                <div><dt>Fila</dt><dd class="fila-estado" data-estado="@queueStatus.SessionStatus.ToLowerInvariant()">@QueueState</dd></div>
+                <div><dt>Esperando</dt><dd>@queueStatus.WaitingCount</dd></div>
+                <div><dt>Tiempo estimado</dt><dd>@queueStatus.ApproximateWaitMinutes min</dd></div>
+            </dl>
+        }
     </section>
 }
 
@@ -244,6 +256,17 @@
 
     private IJSObjectReference? modulo;
     private string? avisoCompartir;
+    private QueuePublicStatusDto? queueStatus;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        queueStatus = null;
+        if (!Profile.IsPreview && Profile.HasVirtualQueue)
+        {
+            try { queueStatus = await Api.GetPublicQueueAsync(Profile.Slug); }
+            catch (ApiException) { /* La ficha sigue útil y el botón abre el estado detallado. */ }
+        }
+    }
 
     /// <summary>
     /// El módulo se carga al primer uso y no al montar: la mayoría de las visitas no comparten, y
@@ -351,6 +374,13 @@
         : Profile.HasVirtualQueue ? "Tomar turno"
         : Profile.Services.Count > 0 ? "Reservar cita"
         : "Llamar al negocio";
+
+    private string QueueState => queueStatus?.SessionStatus switch
+    {
+        "Open" => "Abierta ahora",
+        "Paused" => "Pausada",
+        _ => "Cerrada"
+    };
 
     private static string Day(DayOfWeek day) => day switch
     {

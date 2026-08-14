@@ -20,7 +20,7 @@
     <p class="hero-sub">@Bajada</p>
 </section>
 
-<fieldset class="search-panel" aria-label="Filtrar negocios" disabled="@(!listo)">
+<fieldset class="search-panel directory-search" aria-label="Buscar y filtrar por municipio" disabled="@(!listo)">
     <label>Qué buscas
         <input @bind-value="termino" @bind-value:event="oninput" @onkeydown="AlTeclear"
                placeholder="Nombre del negocio…" autocomplete="off" />
@@ -31,16 +31,34 @@
             @foreach (var (slug, nombre) in Municipios) { <option value="@slug">@nombre</option> }
         </select>
     </label>
-    <label>Categoría
-        <select @bind="categoria" @bind:after="Aplicar">
-            <option value="">Todas</option>
-            @foreach (var opcion in categorias) { <option value="@opcion.Slug">@opcion.Name</option> }
-        </select>
-    </label>
     <button class="primary" @onclick="Aplicar" disabled="@(!listo || cargando)">
         @(cargando ? "Buscando…" : "Buscar")
     </button>
 </fieldset>
+
+@* La categoría se elige viendo su identidad, no leyendo un select. La tira conserva el municipio
+   y la búsqueda actuales, así los tres filtros siguen componiéndose en una sola dirección. *@
+@if (categorias.Count > 0)
+{
+    <div class="category-filter" role="group" aria-label="Filtrar por categoría">
+        <span class="filter-label">Categoría</span>
+        <div class="chip-row">
+            <button type="button" class="categoria-chip category-all" aria-pressed="@(categoria == "")"
+                    disabled="@(!listo || cargando)" @onclick='() => AplicarCategoria("")'>
+                <span class="marca-icono"><Icon Name="explorar" Size="17" /></span> Todas
+            </button>
+            @foreach (var opcion in categorias)
+            {
+                <button type="button" class="categoria-chip" data-tono="@CategoryLook.Tone(opcion.Slug)"
+                        aria-pressed="@(categoria == opcion.Slug)" disabled="@(!listo || cargando)"
+                        @onclick="() => AplicarCategoria(opcion.Slug)">
+                    <span class="marca-icono"><Icon Name="@CategoryLook.Icon(opcion.Slug)" Size="17" /></span>
+                    @opcion.Name
+                </button>
+            }
+        </div>
+    </div>
+}
 
 @* Los filtros puestos, visibles y reversibles de un toque. Sin esto, quien llegaba por una
    categoría no tenía cómo saber por qué faltaban negocios que sí existen. *@
@@ -198,6 +216,12 @@ else
     {
         Nav.NavigateTo(Direccion(termino, municipio, categoria));
         return Task.CompletedTask;
+    }
+
+    private void AplicarCategoria(string slug)
+    {
+        categoria = slug;
+        Nav.NavigateTo(Direccion(termino, municipio, categoria));
     }
 
     private void Quitar(string clave) => Nav.NavigateTo(Direccion(

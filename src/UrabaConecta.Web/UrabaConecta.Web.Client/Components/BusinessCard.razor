@@ -73,9 +73,9 @@
         : Business.HasScheduling ? $"/negocios/{Business.Slug}/citas"
         : $"/negocios/{Business.Slug}";
 
-    private string Verbo => Business.HasPickupOrdering ? "Pedir para recoger"
+    private string Verbo => Business.HasPickupOrdering ? "Pedir"
         : Business.HasVirtualQueue ? "Tomar turno"
-        : Business.HasScheduling ? "Reservar cita"
+        : Business.HasScheduling ? "Reservar"
         : "Ver negocio";
 
     /// <summary>Pesos colombianos sin decimales: nadie cotiza un corte en centavos.</summary>
