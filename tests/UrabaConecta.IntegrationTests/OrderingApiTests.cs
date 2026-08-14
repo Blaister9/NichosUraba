@@ -19,7 +19,9 @@ public sealed partial class OrderingApiTests(PostgresWebFactory factory) : IClas
         using var client = Client();
         var menu = await client.GetFromJsonAsync<PickupMenuDto>(
             "/api/v1/public/businesses/restaurante-sazon-local/menu", Json);
-        Assert.Equal(3, menu!.Categories.Count); Assert.Equal(5, menu.Products.Count);
+        // Seis desde que el catálogo ficticio incluye "Bandeja del día", el único producto local con
+        // fotografía real: hacía falta para poder juzgar cómo se ve una carta con imágenes.
+        Assert.Equal(3, menu!.Categories.Count); Assert.Equal(6, menu.Products.Count);
         var created = await Create(client, "Ana", menu.Products[0].Id);
         var tracked = await client.GetFromJsonAsync<PickupOrderTrackingDto>(
             $"/api/v1/public/orders/{created.TrackingCode}", Json);

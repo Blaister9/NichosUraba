@@ -669,6 +669,22 @@ a.card-media { display: block; color: inherit }
     font-size: .95rem; font-weight: 650;
 }
 .slot.selected { background: var(--marca-700); border-color: var(--marca-700); color: #fff }
+/* Las horas se tocan con el pulgar y muchas veces mal: el estado presionado confirma el toque
+   antes de que el circuito responda. */
+.slot:active { transform: scale(.96) }
+.slot { transition: transform .08s ease, background-color .12s ease }
+
+/* El servicio elegido, dentro del formulario. */
+.catalogo-item.elegido { border-color: var(--marca-600); background: var(--marca-050) }
+
+/* Lo que se está a punto de reservar, en una línea, justo encima del botón. */
+.reserva-resumen {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: .3rem .8rem; margin: 0;
+    padding: .8rem 1rem; background: var(--marca-050); border-radius: var(--radio);
+}
+.reserva-resumen strong { font-size: 1.05rem; color: var(--marca-900) }
+.reserva-resumen span { color: var(--texto-suave) }
+.reserva-resumen .precio { margin-left: auto; font-weight: 850; color: var(--marca-800); font-size: 1.05rem }
 
 /* Control segmentado: dos o tres opciones excluyentes que caben a la vista. Sustituye a un
    desplegable cuando las opciones son pocas y la elección cambia lo que se pide debajo. */

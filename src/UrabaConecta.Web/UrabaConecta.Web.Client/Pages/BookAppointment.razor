@@ -23,6 +23,51 @@ else
                 <option value="@Guid.Empty">Seleccione</option>
                 @foreach (var service in business.Services) { <option value="@service.Id">@service.Name · @service.DurationMinutes min</option> }
             </InputSelect></label>
+
+            @* Lo elegido, con cara. Antes el servicio era una línea de texto dentro de un
+               desplegable y el precio vivía tres bloques más abajo, así que en el momento de decidir
+               la hora no se veía ni qué se estaba reservando ni cuánto costaba. *@
+            @if (Selected is { } elegido)
+            {
+                <article class="catalogo-item elegido" data-tono="@CategoryLook.Tone(business.Category.Slug)"
+                         data-testid="deposit-summary">
+                    @if (elegido.ImageUrl is { Length: > 0 } foto)
+                    {
+                        <img class="catalogo-foto" src="@foto" width="184" height="184"
+                             alt="@(elegido.ImageAltText ?? elegido.Name)" />
+                    }
+                    else
+                    {
+                        <span class="catalogo-foto sin-foto"><Icon Name="@CategoryLook.Icon(business.Category.Slug)" Size="28" /></span>
+                    }
+                    <div class="catalogo-cuerpo">
+                        <h3>@elegido.Name</h3>
+                        @if (!string.IsNullOrWhiteSpace(elegido.Description)) { <p>@elegido.Description</p> }
+                        <p class="catalogo-datos">
+                            <span class="duracion"><Icon Name="reloj" Size="14" /> @Duracion(elegido.DurationMinutes)</span>
+                            @if (elegido.RequiresDeposit)
+                            {
+                                <span>Adelanto <strong data-testid="deposit-amount">@elegido.DepositAmount.ToString("C0", Colombia)</strong></span>
+                            }
+                            else { <span>Pagas todo en el establecimiento</span> }
+                        </p>
+                    </div>
+                    <div class="catalogo-accion">
+                        <span class="precio">@elegido.ReferencePrice.ToString("C0", Colombia)</span>
+                    </div>
+                </article>
+                @if (elegido.RequiresDeposit)
+                {
+                    <p class="notice">
+                        Este servicio pide un adelanto de
+                        @(elegido.DepositType == "Percentage" ? $"{elegido.DepositValue:0.##} % del valor" : "un valor fijo").
+                        @elegido.DepositInstructions
+                        El pago se hace <strong>directamente al negocio</strong>: UrabáConecta no recibe dinero
+                        ni procesa pagos. Al terminar te damos un enlace de WhatsApp para enviar el comprobante.
+                    </p>
+                }
+            }
+
             <label>Fecha<input type="date" value="@dateText" @oninput="e => dateText = e.Value?.ToString() ?? string.Empty" min="@DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd")" /></label>
             <button type="button" class="secondary" @onclick="LoadSlots" disabled="@(!interactiveReady || loadingSlots)">@(loadingSlots ? "Consultando…" : "Ver horas disponibles")</button>
             @if (slots is not null && slots.Count == 0) { <p class="notice">No hay horas disponibles para esa fecha. Prueba otro día.</p> }
@@ -55,31 +100,18 @@ else
                 Guardamos la fecha de tu aceptación y la versión vigente de la política.
             </p>
         </fieldset>
-        <fieldset><legend>4. Cuánto cuesta</legend>
-            @if (Selected is null) { <p class="notice" role="status">Calculando adelanto… seleccione un servicio.</p> }
-            else
-            {
-                <dl class="details" data-testid="deposit-summary">
-                    <dt>Precio total</dt><dd>@Selected.ReferencePrice.ToString("C0", Colombia)</dd>
-                    <dt>Adelanto</dt><dd>@(Selected.RequiresDeposit ? "Sí, este servicio pide adelanto" : "No, pagas todo en el establecimiento")</dd>
-                    @if (Selected.RequiresDeposit)
-                    {
-                        <dt>Tipo</dt>
-                        <dd>@(Selected.DepositType == "Percentage" ? $"Porcentaje ({Selected.DepositValue:0.##} %)" : "Valor fijo")</dd>
-                        <dt>Valor del adelanto</dt><dd data-testid="deposit-amount">@Selected.DepositAmount.ToString("C0", Colombia)</dd>
-                        <dt>Cómo pagarlo</dt><dd>@Selected.DepositInstructions</dd>
-                    }
-                </dl>
-                @if (Selected.RequiresDeposit)
-                {
-                    <p class="notice">
-                        El pago se hace <strong>directamente al negocio</strong>. UrabáConecta no recibe dinero
-                        ni procesa pagos: al terminar le damos un enlace de WhatsApp para enviarle el comprobante.
-                    </p>
-                }
-            }
-        </fieldset>
         @if (error is not null) { <p class="error" role="alert">@error</p> }
+
+        @* Antes de enviar, lo que se está reservando en una línea. La confirmación no debería ser el
+           primer sitio donde alguien lee el día y la hora que eligió. *@
+        @if (Selected is { } resumen && request.Start != default)
+        {
+            <p class="reserva-resumen">
+                <strong>@resumen.Name</strong>
+                <span>@LocalFecha(request.Start) · @LocalTime(request.Start)</span>
+                <span class="precio">@resumen.ReferencePrice.ToString("C0", Colombia)</span>
+            </p>
+        }
         <button class="primary btn-grande" disabled="@(!interactiveReady || loadingSlots || submitting)">@(submitting ? "Creando cita…" : "Enviar solicitud")</button>
         </fieldset>
     </EditForm>
@@ -147,6 +179,15 @@ else
     }
     private static string LocalTime(DateTimeOffset value) =>
         TimeZoneInfo.ConvertTime(value, TimeZoneInfo.FindSystemTimeZoneById("America/Bogota")).ToString("hh:mm tt");
+
+    private static string LocalFecha(DateTimeOffset value) =>
+        TimeZoneInfo.ConvertTime(value, TimeZoneInfo.FindSystemTimeZoneById("America/Bogota"))
+            .ToString("dddd d 'de' MMMM", Colombia);
+
+    /// <summary>"1 h 30 min" se lee de un vistazo; "90 minutos" hay que convertirlo.</summary>
+    private static string Duracion(int minutos) => minutos < 60
+        ? $"{minutos} min"
+        : minutos % 60 == 0 ? $"{minutos / 60} h" : $"{minutos / 60} h {minutos % 60} min";
 
     /// <summary>
     /// Agrupa las horas disponibles por momento del día. Sólo cambia cómo se presentan: las horas y
