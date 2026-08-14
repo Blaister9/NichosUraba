@@ -18,6 +18,7 @@
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
     <!-- ImageSharp 2.x conserva la licencia Apache-2.0; 3.x cambia a la Six Labors Split License. -->
     <PackageReference Include="SixLabors.ImageSharp" Version="2.1.13" />
+    <PackageReference Include="WebPush" Version="1.0.12" />
     <!-- AWSSDK.Core se fija explicitamente para evitar la version vulnerable GHSA-9cvc-h2w8-phrp. -->
     <PackageReference Include="AWSSDK.Core" Version="4.0.100.9" />
     <PackageReference Include="AWSSDK.S3" Version="4.0.101.5" />

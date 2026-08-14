@@ -9,6 +9,9 @@ Configurar en Railway; nunca copiar valores a Git, logs o capturas.
 | `ConnectionStrings__DefaultConnection` | secreto/referencia | `Host=${{Postgres.PGHOST}};Port=${{Postgres.PGPORT}};Database=${{Postgres.PGDATABASE}};Username=${{Postgres.PGUSER}};Password=${{Postgres.PGPASSWORD}};SSL Mode=Prefer` |
 | `URABACONECTA_TRACKING_HMAC_KEY` | secreto | 32 bytes aleatorios o más, codificados en Base64 |
 | `DataProtection__KeysPath` | configuración | `/app/keys` |
+| `WebPush__Subject` | configuración | URI `mailto:` de contacto operativo de Demo |
+| `WebPush__PublicKey` | configuración | clave pública VAPID exclusiva de Demo |
+| `WebPush__PrivateKey` | secreto | clave privada VAPID exclusiva de Demo; nunca registrar ni versionar |
 | `DemoSeed__Enabled` | configuración | `true` solo para este entorno |
 | `DemoSeed__AdminPassword` | secreto | clave aleatoria exclusiva de administración |
 | `DemoSeed__BusinessPassword` | secreto | clave aleatoria distinta para cuentas operativas |

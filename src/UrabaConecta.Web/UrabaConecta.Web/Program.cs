@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using UrabaConecta.Application;
 using UrabaConecta.Contracts;
+using UrabaConecta.Domain;
 using UrabaConecta.Infrastructure;
 using UrabaConecta.Infrastructure.Caching;
 using UrabaConecta.Infrastructure.Identity;
@@ -130,6 +131,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.Configure<LegalOptions>(builder.Configuration.GetSection(LegalOptions.SectionName));
 builder.Services.Configure<ObjectStorageOptions>(
     builder.Configuration.GetSection(ObjectStorageOptions.SectionName));
+builder.Services.Configure<WebPushOptions>(builder.Configuration.GetSection(WebPushOptions.SectionName));
 var storageOptions = builder.Configuration.GetSection(ObjectStorageOptions.SectionName)
     .Get<ObjectStorageOptions>() ?? new ObjectStorageOptions();
 var legalOptions = builder.Configuration.GetSection(LegalOptions.SectionName).Get<LegalOptions>() ?? new();
@@ -160,6 +162,8 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IUrabaUseCases, UrabaUseCases>();
 builder.Services.AddScoped<IQueueUseCases, QueueUseCases>();
 builder.Services.AddScoped<IOrderingUseCases, OrderingUseCases>();
+builder.Services.AddScoped<IWebPushTransport, WebPushTransport>();
+builder.Services.AddScoped<IPushNotificationService, PushNotificationService>();
 builder.Services.AddScoped<IPlatformAdministrationUseCases, PlatformAdministrationUseCases>();
 builder.Services.AddScoped<IOwnerDashboardUseCases, OwnerDashboardUseCases>();
 builder.Services.AddScoped<IQueueChangeNotifier, SignalRQueueChangeNotifier>();
@@ -317,6 +321,31 @@ publicApi.MapGet("/orders/{code}", async (string code, IOrderingUseCases orders,
 publicApi.MapPost("/orders/{code}/cancel",
     async (string code, PickupOrderCommandRequest request, IOrderingUseCases orders, CancellationToken ct) =>
     { await orders.CancelPublicAsync(code, request.Version, ct); return Results.NoContent(); })
+    .RequireRateLimiting("public-write");
+publicApi.MapGet("/push/config", (IPushNotificationService push) => push.Configuration);
+publicApi.MapPost("/appointments/{code}/push-subscriptions",
+    (string code, WebPushSubscriptionRequest request, IPushNotificationService push, CancellationToken ct)
+        => push.RegisterClientAsync(PushAudience.Appointment, code, request, ct))
+    .RequireRateLimiting("public-write");
+publicApi.MapPost("/appointments/{code}/push-subscriptions/remove",
+    async (string code, WebPushUnsubscribeRequest request, IPushNotificationService push, CancellationToken ct) =>
+    { await push.UnregisterClientAsync(PushAudience.Appointment, code, request, ct); return Results.NoContent(); })
+    .RequireRateLimiting("public-write");
+publicApi.MapPost("/queue/tickets/{code}/push-subscriptions",
+    (string code, WebPushSubscriptionRequest request, IPushNotificationService push, CancellationToken ct)
+        => push.RegisterClientAsync(PushAudience.QueueTicket, code, request, ct))
+    .RequireRateLimiting("public-write");
+publicApi.MapPost("/queue/tickets/{code}/push-subscriptions/remove",
+    async (string code, WebPushUnsubscribeRequest request, IPushNotificationService push, CancellationToken ct) =>
+    { await push.UnregisterClientAsync(PushAudience.QueueTicket, code, request, ct); return Results.NoContent(); })
+    .RequireRateLimiting("public-write");
+publicApi.MapPost("/orders/{code}/push-subscriptions",
+    (string code, WebPushSubscriptionRequest request, IPushNotificationService push, CancellationToken ct)
+        => push.RegisterClientAsync(PushAudience.PickupOrder, code, request, ct))
+    .RequireRateLimiting("public-write");
+publicApi.MapPost("/orders/{code}/push-subscriptions/remove",
+    async (string code, WebPushUnsubscribeRequest request, IPushNotificationService push, CancellationToken ct) =>
+    { await push.UnregisterClientAsync(PushAudience.PickupOrder, code, request, ct); return Results.NoContent(); })
     .RequireRateLimiting("public-write");
 // PolicyVersion es la versión *efectiva*: la que el servidor exigirá en los formularios públicos.
 publicApi.MapGet("/legal", (IOptions<LegalOptions> legal, IConsentPolicyProvider consent) =>
@@ -491,6 +520,14 @@ privateApi.MapGet("/mine", (ClaimsPrincipal user, IUrabaUseCases useCases, Cance
 privateApi.MapGet("/dashboard", async (ClaimsPrincipal user, IUrabaUseCases businesses,
         IOwnerDashboardUseCases dashboard, CancellationToken ct)
     => await dashboard.SummarizeAsync(await businesses.GetMyBusinessesAsync(UserId(user), ct), ct));
+privateApi.MapPost("/{businessId:guid}/push-subscriptions",
+    (Guid businessId, WebPushSubscriptionRequest request, ClaimsPrincipal user,
+        IPushNotificationService push, CancellationToken ct)
+        => push.RegisterOwnerAsync(UserId(user), businessId, request, ct));
+privateApi.MapPost("/{businessId:guid}/push-subscriptions/remove",
+    async (Guid businessId, WebPushUnsubscribeRequest request, ClaimsPrincipal user,
+        IPushNotificationService push, CancellationToken ct) =>
+    { await push.UnregisterOwnerAsync(UserId(user), businessId, request, ct); return Results.NoContent(); });
 
 // --- Perfil e imágenes del propietario -------------------------------------------------------
 // Mismos casos de uso que usa la administración: la autorización distingue quién entra, no qué

@@ -8,7 +8,7 @@ namespace UrabaConecta.Application;
 public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdministrationStore membershipStore,
     IIdentityAccountManager identityAccounts, IPublicCodeService codes,
     IPersonalDataProtector protector, IConsentPolicyProvider consentPolicy,
-    TimeProvider timeProvider) : IUrabaUseCases
+    IPushNotificationService push, TimeProvider timeProvider) : IUrabaUseCases
 {
     public Task<IReadOnlyList<BusinessCardDto>> GetBusinessesAsync(string? search, string? municipality,
         string? category, CancellationToken cancellationToken = default)
@@ -99,6 +99,10 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
 
         if (!await store.AddAppointmentAsync(appointment, consent, cancellationToken))
             throw new ApiException("SLOT_UNAVAILABLE", "Ese horario acaba de ocuparse. Elija otro.", 409);
+        await push.NotifyBusinessAsync(appointment.BusinessId, new("Nueva cita",
+            $"Solicitud para {appointment.ServiceName}.",
+            $"/panel/{appointment.BusinessId}/citas?destacado={appointment.Id}",
+            $"business-appointment-{appointment.Id}"), cancellationToken);
         return new(code.PlainText, appointment.Status.ToString(), appointment.ServiceName, appointment.StartAtUtc,
             appointment.DepositStatus.ToString(), appointment.DepositAmount);
     }
@@ -196,6 +200,22 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
             throw new ApiException("INVALID_STATUS", "El estado solicitado no existe.");
         TryDomain(() => record.Appointment.ChangeStatus(target, timeProvider.GetUtcNow(), request.Reason));
         await store.SaveChangesAsync(cancellationToken);
+        var clientMessage = target switch
+        {
+            AppointmentStatus.Confirmed => new PushMessage("Cita confirmada",
+                $"{record.Appointment.ServiceName}: el negocio confirmó tu cita.", "",
+                $"appointment-{record.Appointment.Id}", true),
+            AppointmentStatus.Rejected => new PushMessage("Novedad en tu cita",
+                "El negocio no pudo confirmar la solicitud. Revisa el seguimiento.", "",
+                $"appointment-{record.Appointment.Id}", true),
+            AppointmentStatus.Cancelled => new PushMessage("Cita cancelada",
+                "La cita fue cancelada. Revisa el seguimiento para ver su estado.", "",
+                $"appointment-{record.Appointment.Id}", true),
+            _ => null
+        };
+        if (clientMessage is not null)
+            await push.NotifyClientAsync(PushAudience.Appointment, record.Appointment.Id,
+                clientMessage, cancellationToken);
         return ToAdmin(record);
     }
 

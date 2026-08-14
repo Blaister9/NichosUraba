@@ -5,7 +5,7 @@ namespace UrabaConecta.Application;
 
 public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService codes,
     IPersonalDataProtector protector, IConsentPolicyProvider consentPolicy,
-    IObjectStorage storage, TimeProvider clock) : IOrderingUseCases
+    IObjectStorage storage, IPushNotificationService push, TimeProvider clock) : IOrderingUseCases
 {
     public async Task<PickupMenuDto?> GetMenuAsync(string slug, CancellationToken ct = default)
     {
@@ -103,6 +103,10 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
         consent.LinkPickupOrder(order.Id);
         store.AddOrder(order); store.AddConsent(consent);
         await store.SaveChangesAsync(ct); await tx.CommitAsync(ct);
+        await push.NotifyBusinessAsync(order.BusinessId, new("Nuevo pedido para recoger",
+            $"Pedido #{order.PublicOrderNumber} por {order.Total:C0}.",
+            $"/panel/{order.BusinessId}/pedidos?pedido={order.Id}",
+            $"business-order-{order.Id}"), ct);
         return new(order.PublicOrderNumber, code.PlainText, order.Status.ToString(), order.Total, order.PickupStartUtc);
     }
 
@@ -222,7 +226,12 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
             _ => throw new ApiException("INVALID_ORDER_ACTION", "La acción no es válida.")
         };
         TryDomain(() => order.Transition(target, clock.GetUtcNow(), request.Version, request.Reason));
-        await store.SaveChangesAsync(ct); return AdminDto(order);
+        await store.SaveChangesAsync(ct);
+        if (target == PickupOrderStatus.ReadyForPickup)
+            await push.NotifyClientAsync(PushAudience.PickupOrder, order.Id,
+                new("Pedido listo para recoger", $"Tu pedido #{order.PublicOrderNumber} ya está listo.", "",
+                    $"order-{order.Id}", true), ct);
+        return AdminDto(order);
     }
 
     private PickupOrderAdminDto AdminDto(PickupOrder o) => new(o.Id, o.PublicOrderNumber, o.Status.ToString(),

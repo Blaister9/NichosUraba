@@ -33,6 +33,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<PickupOrder> PickupOrders => Set<PickupOrder>();
     public DbSet<PickupOrderLine> PickupOrderLines => Set<PickupOrderLine>();
     public DbSet<BusinessImage> BusinessImages => Set<BusinessImage>();
+    public DbSet<WebPushSubscription> WebPushSubscriptions => Set<WebPushSubscription>();
     public DbSet<AccessInvitation> AccessInvitations => Set<AccessInvitation>();
     public DbSet<BusinessStatusChange> BusinessStatusChanges => Set<BusinessStatusChange>();
     public DbSet<PlatformAccessAudit> PlatformAccessAudits => Set<PlatformAccessAudit>();
@@ -375,6 +376,25 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             x.Property(e => e.AltText).HasMaxLength(160);
             x.Property(e => e.Version).IsConcurrencyToken();
             x.HasOne<Business>().WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Cascade);
+        });
+        builder.Entity<WebPushSubscription>(x =>
+        {
+            x.ToTable("web_push_subscriptions");
+            x.HasKey(e => e.Id);
+            x.HasIndex(e => new { e.EndpointHash, e.Audience, e.ScopeKey }).IsUnique();
+            x.HasIndex(e => new { e.BusinessId, e.Audience, e.IsActive });
+            x.HasIndex(e => new { e.EntityId, e.Audience, e.IsActive });
+            x.HasIndex(e => new { e.UserId, e.BusinessId, e.IsActive });
+            x.Property(e => e.Audience).HasConversion<string>().HasMaxLength(24);
+            x.Property(e => e.ScopeKey).HasMaxLength(64);
+            x.Property(e => e.EndpointHash).HasMaxLength(64);
+            x.Property(e => e.Endpoint).HasMaxLength(2048);
+            x.Property(e => e.P256dh).HasMaxLength(256);
+            x.Property(e => e.Auth).HasMaxLength(256);
+            x.Property(e => e.ProtectedDeepLink).HasMaxLength(2000);
+            x.Property(e => e.Version).IsConcurrencyToken();
+            x.HasOne<Business>().WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Cascade);
+            x.HasOne<ApplicationUser>().WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
         });
         builder.Entity<AccessInvitation>(x =>
         {

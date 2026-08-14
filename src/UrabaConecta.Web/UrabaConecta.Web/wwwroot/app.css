@@ -1225,3 +1225,5 @@ a.card-media { display: block; color: inherit }
     .metric dd { font-size: 1.35rem }
     .galeria { grid-template-columns: repeat(2, 1fr) }
 }
+/* El permiso del navegador sólo se pide desde esta tarjeta contextual, nunca al abrir Home. */
+.push-prompt{display:flex;gap:.85rem;align-items:flex-start;margin:1rem 0;padding:1rem;border:1px solid #b9ded5;border-radius:1rem;background:#f1faf7}.push-prompt-icon{display:grid;place-items:center;flex:0 0 2rem;width:2rem;height:2rem;border-radius:50%;background:#075d52;color:#f3b33d}.push-prompt-copy{min-width:0}.push-prompt-copy p{margin:.25rem 0 .65rem}.push-prompt-copy .error{margin-top:.6rem}

@@ -17,6 +17,10 @@ else
         <p class="meta">Celular: @order.PhoneMasked</p>
         @foreach (var line in order.Lines) { <p>@line.Quantity × @line.ProductName <strong>@line.LineTotal.ToString("C0", Colombia)</strong></p> }
         <p class="total-pedido"><span>Total a pagar en el local</span><strong>@order.Total.ToString("C0", Colombia)</strong></p>
+        <PushPrompt RegistrationPath="@($"/api/v1/public/orders/{Uri.EscapeDataString(Code)}/push-subscriptions")"
+                    Title="Te avisamos cuando esté listo"
+                    Description="Activa los avisos para no tener que revisar esta pantalla."
+                    ButtonLabel="Avisarme en este dispositivo" />
         @if (order.CanCancel)
         {
             <button class="danger" disabled="@(!interactiveReady || busy)" @onclick="Cancel">

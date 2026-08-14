@@ -39,6 +39,11 @@ else if (ticket is not null)
 
         <p class="meta">El tiempo es aproximado y puede cambiar. Esta pantalla se actualiza sola.</p>
 
+        <PushPrompt RegistrationPath="@($"/api/v1/public/queue/tickets/{Uri.EscapeDataString(Code)}/push-subscriptions")"
+                    Title="No esperes mirando la pantalla"
+                    Description="Te avisamos cuando tu turno esté cerca y cuando te llamen."
+                    ButtonLabel="Avisarme cuando falte poco" />
+
         @if (ticket.CanCancel)
         {
             <button class="danger" @onclick="Cancel" disabled="@(!interactiveReady || busy)">

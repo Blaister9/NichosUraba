@@ -1,0 +1,71 @@
+@inject IJSRuntime JS
+
+@if (available)
+{
+    <aside class="push-prompt" data-testid="push-prompt">
+        <div class="push-prompt-icon" aria-hidden="true">●</div>
+        <div class="push-prompt-copy">
+            <strong>@Title</strong>
+            <p>@(active ? ActiveDescription : Description)</p>
+            @if (permission == "denied")
+            {
+                <p class="meta">Los avisos están bloqueados en la configuración de este navegador.</p>
+            }
+            else
+            {
+                <button type="button" class="@(active ? "inline-button" : "secondary")"
+                        disabled="@busy" @onclick="Toggle" data-testid="push-toggle">
+                    @(busy ? "Guardando…" : active ? "Desactivar avisos" : ButtonLabel)
+                </button>
+            }
+            @if (error is not null) { <p class="error" role="alert">@error</p> }
+        </div>
+    </aside>
+}
+
+@code {
+    [Parameter, EditorRequired] public string RegistrationPath { get; set; } = "";
+    [Parameter] public string Title { get; set; } = "Mantente al día";
+    [Parameter] public string Description { get; set; } = "Recibe una alerta útil aunque no tengas UrabáConecta abierto.";
+    [Parameter] public string ActiveDescription { get; set; } = "Los avisos están activos en este dispositivo.";
+    [Parameter] public string ButtonLabel { get; set; } = "Activar avisos en este dispositivo";
+    private bool available, active, busy;
+    private string permission = "default";
+    private string? error;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            var state = await JS.InvokeAsync<PushState>("urabaPush.availability");
+            available = state.Supported && state.Configured;
+            permission = state.Permission;
+            StateHasChanged();
+        }
+        catch (JSException) { }
+    }
+
+    private async Task Toggle()
+    {
+        busy = true; error = null;
+        try
+        {
+            var state = active
+                ? await JS.InvokeAsync<PushState>("urabaPush.unsubscribe", RegistrationPath)
+                : await JS.InvokeAsync<PushState>("urabaPush.subscribe", RegistrationPath);
+            active = state.Active; permission = state.Permission;
+        }
+        catch (JSException ex) { error = ex.Message.Contains("avisos", StringComparison.OrdinalIgnoreCase)
+            ? ex.Message : "No pudimos cambiar los avisos. Intenta nuevamente."; }
+        finally { busy = false; }
+    }
+
+    private sealed class PushState
+    {
+        public bool Supported { get; set; }
+        public bool Configured { get; set; }
+        public bool Active { get; set; }
+        public string Permission { get; set; } = "default";
+    }
+}

@@ -3,6 +3,25 @@ using UrabaConecta.Domain;
 
 namespace UrabaConecta.Application;
 
+public sealed record PushMessage(string Title, string Body, string Url, string Tag, bool Renotify = false);
+
+public interface IPushNotificationService
+{
+    PushConfigurationDto Configuration { get; }
+    Task<WebPushSubscriptionDto> RegisterOwnerAsync(Guid userId, Guid businessId,
+        WebPushSubscriptionRequest request, CancellationToken cancellationToken = default);
+    Task<WebPushSubscriptionDto> RegisterClientAsync(PushAudience audience, string publicCode,
+        WebPushSubscriptionRequest request, CancellationToken cancellationToken = default);
+    Task UnregisterOwnerAsync(Guid userId, Guid businessId, WebPushUnsubscribeRequest request,
+        CancellationToken cancellationToken = default);
+    Task UnregisterClientAsync(PushAudience audience, string publicCode, WebPushUnsubscribeRequest request,
+        CancellationToken cancellationToken = default);
+    Task NotifyBusinessAsync(Guid businessId, PushMessage message,
+        CancellationToken cancellationToken = default);
+    Task NotifyClientAsync(PushAudience audience, Guid entityId, PushMessage message,
+        CancellationToken cancellationToken = default);
+}
+
 public sealed record SchedulingContext(Business Business, Service Service, IReadOnlyList<BusinessHour> Hours,
     IReadOnlyList<StaffMember> EligibleStaff, IReadOnlyList<AvailabilityException> Exceptions,
     IReadOnlyList<(DateTimeOffset Start, DateTimeOffset End, Guid StaffId)> Occupied);

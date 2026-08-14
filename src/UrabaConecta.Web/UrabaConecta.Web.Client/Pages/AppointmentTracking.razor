@@ -24,6 +24,10 @@
             <dt>Teléfono</dt><dd>@appointment.PhoneMasked</dd>
             <dt>Última actualización</dt><dd>@LocalDate(appointment.UpdatedAt)</dd>
         </dl>
+        <PushPrompt RegistrationPath="@($"/api/v1/public/appointments/{Uri.EscapeDataString(Code)}/push-subscriptions")"
+                    Title="Recibe novedades de esta cita"
+                    Description="Te avisamos en este dispositivo cuando el negocio confirme o cambie la cita."
+                    ButtonLabel="Avisarme sobre esta cita" />
         @if (appointment.RequiresDeposit)
         {
             <section class="deposit-block" data-testid="deposit-block">

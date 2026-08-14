@@ -127,6 +127,12 @@
         }
     }
 
+    <PushPrompt RegistrationPath="@($"/api/v1/businesses/{Business.Id}/push-subscriptions")"
+                Title="@($"Avisos de {Business.Name}")"
+                Description="Recibe nuevas citas, turnos y pedidos aunque no tengas UrabáConecta abierto."
+                ActiveDescription="Este dispositivo recibirá las novedades operativas de este negocio."
+                ButtonLabel="Avisarme de nuevas operaciones" />
+
     @* data-enhance-nav="false": al salir de este componente interactivo, la navegación mejorada
        cambiaba la dirección pero dejaba el panel en pantalla, y parecía que la operación no
        funcionaba. Con la navegación normal la página destino se carga completa. *@

@@ -4,6 +4,20 @@ namespace UrabaConecta.Contracts;
 
 public sealed record OptionDto(string Slug, string Name);
 
+public sealed record PushConfigurationDto(bool Enabled, string? PublicKey);
+public sealed class WebPushKeysRequest
+{
+    public string P256dh { get; set; } = "";
+    public string Auth { get; set; } = "";
+}
+public sealed class WebPushSubscriptionRequest
+{
+    public string Endpoint { get; set; } = "";
+    public WebPushKeysRequest Keys { get; set; } = new();
+}
+public sealed class WebPushUnsubscribeRequest { public string Endpoint { get; set; } = ""; }
+public sealed record WebPushSubscriptionDto(bool Active, DateTimeOffset UpdatedAtUtc);
+
 /// <summary>
 /// Una categoría del directorio con cuántos negocios publicados tiene. El conteo es lo que decide
 /// si vale la pena ofrecerla: una categoría vacía enviada a una pantalla sin resultados es peor que
