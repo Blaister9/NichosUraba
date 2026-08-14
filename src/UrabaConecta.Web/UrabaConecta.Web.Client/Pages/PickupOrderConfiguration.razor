@@ -88,9 +88,14 @@
                 MaximumActivePerSlot = settings.MaximumActivePerSlot, ReceivesFrom = settings.ReceivesFrom,
                 ReceivesUntil = settings.ReceivesUntil, Version = settings.Version };
             fromText = settings.ReceivesFrom.ToString("HH:mm"); untilText = settings.ReceivesUntil.ToString("HH:mm");
-            categories = await Api.GetProductCategoriesAsync(BusinessId); products = await Api.GetProductsAsync(BusinessId);
-            await LoadImages();
+            categories = await Api.GetProductCategoriesAsync(BusinessId);
+            // Products and their mutable editors are one render state. Publishing products before
+            // creating the dictionary leaves a hydration window where the renderer indexes a key
+            // that does not exist and closes the whole Owner circuit.
+            var loadedProducts = await Api.GetProductsAsync(BusinessId);
+            products = loadedProducts;
             RefreshEditors();
+            await LoadImages();
         } catch (ApiException ex) { error = ex.Message; }
     }
     private async Task LoadImages()
