@@ -117,7 +117,15 @@ else if (status is not null)
         if (hub is not null) await hub.DisposeAsync();
         hub = new Microsoft.AspNetCore.SignalR.Client.HubConnectionBuilder()
             .WithUrl(Navigation.ToAbsoluteUri("/hubs/queue")).WithAutomaticReconnect().Build();
-        hub.On("QueueChanged", async () => { await Load(); await InvokeAsync(StateHasChanged); });
+        // The event for our own Join can arrive before JoinAsync returns on a remote database.
+        // Both calls share the circuit DbContext, so reloading here would run a second operation on
+        // it and terminate the UI. Join refreshes once its write has completed.
+        hub.On("QueueChanged", async () =>
+        {
+            if (busy) return;
+            await Load();
+            await InvokeAsync(StateHasChanged);
+        });
         hub.Reconnected += async _ => { await hub.InvokeAsync("SubscribePublic", Slug); await Load(); };
         try { await hub.StartAsync(); await hub.InvokeAsync("SubscribePublic", Slug); } catch { /* HTTP remains source of truth. */ }
     }
@@ -130,7 +138,7 @@ else if (status is not null)
     private async Task Join()
     {
         busy = true; error = null;
-        try { created = await Api.JoinQueueAsync(Slug, request); }
+        try { created = await Api.JoinQueueAsync(Slug, request); await Load(); }
         catch (ApiException ex) { error = ex.Message; await Load(); }
         finally { busy = false; }
     }
