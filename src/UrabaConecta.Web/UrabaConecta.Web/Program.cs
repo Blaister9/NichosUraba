@@ -546,6 +546,10 @@ privateApi.MapGet("/{businessId:guid}/images",
     (Guid businessId, HttpContext http, IBusinessImageUseCases images, CancellationToken ct)
         => images.ListAsync(Actor(http), businessId, ct))
     .RequireAuthorization("BusinessProfile.Manage");
+privateApi.MapGet("/{businessId:guid}/catalog-images",
+    (Guid businessId, HttpContext http, IBusinessImageUseCases images, CancellationToken ct)
+        => images.ListCatalogAsync(Actor(http), businessId, ct))
+    .RequireAuthorization("BusinessProfile.Manage");
 privateApi.MapPost("/{businessId:guid}/images",
     async (Guid businessId, HttpRequest request, HttpContext http, IBusinessImageUseCases images,
         CancellationToken ct) =>

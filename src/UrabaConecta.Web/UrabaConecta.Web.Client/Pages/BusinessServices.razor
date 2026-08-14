@@ -94,6 +94,12 @@ else
                             }
                             else { <text>Sin adelanto</text> }
                         </p>
+                        @if (canManageImages)
+                        {
+                            <CatalogImageEditor BusinessId="BusinessId" TargetId="service.Id" Kind="Service"
+                                Label="@service.Name" CurrentImage="@ServiceImage(service.Id)"
+                                OnChanged="LoadImages" />
+                        }
                     </div>
                     <div class="actions">
                         <button class="secondary" type="button" @onclick="() => Edit(service)" disabled="@(!interactiveReady || saving)">Editar</button>
@@ -112,6 +118,8 @@ else
     [Parameter] public Guid BusinessId { get; set; }
     private IReadOnlyList<ServiceDto> services = [];
     private IReadOnlyList<StaffMemberDto> staff = [];
+    private IReadOnlyList<BusinessImageDto> images = [];
+    private bool canManageImages;
     private ServiceForm form = new();
     private Guid? editingId;
     private bool loading = true, saving, interactiveReady;
@@ -129,10 +137,20 @@ else
             // circuito y en paralelo lanzarían InvalidOperationException.
             services = await Api.GetServicesAsync(BusinessId);
             staff = await Api.GetStaffAsync(BusinessId);
+            await LoadImages();
         }
         catch (ApiException ex) { error = Friendly(ex); }
         finally { loading = false; }
     }
+
+    private async Task LoadImages()
+    {
+        try { images = await Api.GetOwnerCatalogImagesAsync(BusinessId); canManageImages = true; }
+        catch (ApiException ex) when (ex.StatusCode == 403) { images = []; canManageImages = false; }
+    }
+
+    private BusinessImageDto? ServiceImage(Guid serviceId)
+        => images.FirstOrDefault(x => x.Kind == "Service" && x.ServiceId == serviceId);
 
     /// <summary>
     /// Si alguien activo y que participa en la agenda presta el servicio. Es la misma condición que

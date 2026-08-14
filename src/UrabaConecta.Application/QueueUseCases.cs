@@ -214,7 +214,7 @@ public sealed class QueueUseCases(IQueueStore store, IPublicCodeService codes, I
         if (source == QueueTicketSource.Online)
             await push.NotifyBusinessAsync(businessId, new("Nuevo turno en la fila",
                 $"Turno #{ticket.Number} se unió desde UrabáConecta.",
-                $"/panel/{businessId}/turnos?turno={ticket.Id}",
+                $"/panel/{businessId}/turnos#ticket-{ticket.Id}",
                 $"business-queue-{ticket.Id}"), ct);
         return new(number, publicCode.PlainText, ticket.Status.ToString(), waiting, waiting * definition.AverageDurationMinutes);
     }

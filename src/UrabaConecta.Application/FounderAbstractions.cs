@@ -173,6 +173,8 @@ public interface IBusinessImageUseCases
 {
     Task<IReadOnlyList<BusinessImageDto>> ListAsync(PlatformActor actor, Guid businessId,
         CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BusinessImageDto>> ListCatalogAsync(PlatformActor actor, Guid businessId,
+        CancellationToken cancellationToken = default);
     /// <summary>
     /// <paramref name="targetId"/> identifica la fila del catálogo cuando el tipo es Service o
     /// Product; para logo, portada y galería no se envía.

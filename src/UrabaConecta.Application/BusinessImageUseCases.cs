@@ -25,6 +25,14 @@ public sealed class BusinessImageUseCases(
                 or BusinessImageKind.Gallery));
     }
 
+    public async Task<IReadOnlyList<BusinessImageDto>> ListCatalogAsync(PlatformActor actor, Guid businessId,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureScopeAsync(actor, businessId, cancellationToken);
+        return Map((await store.ListAsync(businessId, cancellationToken))
+            .Where(x => x.Kind is BusinessImageKind.Service or BusinessImageKind.Product));
+    }
+
     public async Task<BusinessImageDto> UploadAsync(PlatformActor actor, Guid businessId, string kind,
         UploadedImage file, string? altText, Guid? targetId = null,
         CancellationToken cancellationToken = default)

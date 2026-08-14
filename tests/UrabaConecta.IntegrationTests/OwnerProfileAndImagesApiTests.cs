@@ -105,6 +105,44 @@ public sealed class OwnerProfileAndImagesApiTests(PostgresWebFactory factory) : 
         Assert.Contains(images!, x => x.Kind == "Gallery");
     }
 
+    [Fact]
+    public async Task Owner_service_screen_contains_preview_replace_and_remove_photo_controls()
+    {
+        using var owner = await LoggedInAs(DevelopmentSeeder.BellaOwnerEmail);
+        var html = await owner.GetStringAsync($"/panel/{Bella}/configuracion/servicios");
+        Assert.Contains("data-testid=\"catalog-image-editor\"", html);
+        Assert.Contains("data-testid=\"catalog-image-file\"", html);
+        Assert.Contains("Foto de", html);
+    }
+
+    [Fact]
+    public async Task Owner_product_screen_contains_catalog_photo_controls()
+    {
+        using var owner = await LoggedInAs(DevelopmentSeeder.SazonOwnerEmail);
+        var html = await owner.GetStringAsync(
+            $"/panel/{DevelopmentSeeder.SazonBusinessId}/configuracion/pedidos");
+        Assert.Contains("data-testid=\"catalog-image-editor\"", html);
+        Assert.Contains("data-testid=\"catalog-image-file\"", html);
+    }
+
+    [Fact]
+    public async Task Owner_uploads_a_service_photo_without_mixing_it_with_business_gallery()
+    {
+        using var owner = await LoggedInAs(DevelopmentSeeder.BellaOwnerEmail);
+        var services = await owner.GetFromJsonAsync<List<ServiceDto>>(
+            $"/api/v1/businesses/{Bella}/services", Json);
+        var service = services!.First();
+        var response = await UploadAsync(owner, Bella, "Service", "servicio.png", "image/png",
+            PlatformAdministrationApiTests.TinyPng(), service.Id);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        var images = await owner.GetFromJsonAsync<List<BusinessImageDto>>(
+            $"/api/v1/businesses/{Bella}/catalog-images", Json);
+        var photo = Assert.Single(images!, x => x.Kind == "Service" && x.ServiceId == service.Id);
+        Assert.Null(photo.ProductId);
+        Assert.DoesNotContain(photo, images!.Where(x => x.Kind == "Gallery"));
+    }
+
     // ------------------------------------------------------------------ frontera
 
     [Theory]
@@ -190,13 +228,14 @@ public sealed class OwnerProfileAndImagesApiTests(PostgresWebFactory factory) : 
     }
 
     private static Task<HttpResponseMessage> UploadAsync(HttpClient client, Guid businessId, string kind,
-        string fileName, string contentType, byte[] content)
+        string fileName, string contentType, byte[] content, Guid? targetId = null)
     {
         var form = new MultipartFormDataContent();
         var part = new ByteArrayContent(content);
         part.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
         form.Add(part, "file", fileName);
         form.Add(new StringContent(kind), "kind");
+        if (targetId is { } target) form.Add(new StringContent(target.ToString()), "targetId");
         return client.PostAsync($"/api/v1/businesses/{businessId}/images", form);
     }
 }

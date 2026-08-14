@@ -46,6 +46,11 @@
                     @foreach (var category in categories) { <option value="@category.Id">@category.Name</option> }
                 </select></label>
                 <label class="check-option"><input type="checkbox" @bind="editor.Active" /> Visible en el menú</label>
+                @if (canManageImages)
+                {
+                    <CatalogImageEditor BusinessId="BusinessId" TargetId="product.Id" Kind="Product"
+                        Label="@product.Name" CurrentImage="@ProductImage(product.Id)" OnChanged="LoadImages" />
+                }
             </div>
             <div class="actions"><button type="button" class="secondary" disabled="@(!interactiveReady || busy)"
                 @onclick="() => SaveExistingProduct(product)">Guardar producto</button></div>
@@ -68,6 +73,8 @@
     private IReadOnlyList<ProductCategoryDto> categories = []; private IReadOnlyList<ProductDto> products = [];
     private SaveProductCategoryRequest categoryForm = new(); private SaveProductRequest productForm = new();
     private readonly Dictionary<Guid, ProductEditor> productEditors = [];
+    private IReadOnlyList<BusinessImageDto> images = [];
+    private bool canManageImages;
     private string fromText = "11:00", untilText = "20:30"; private string? error; private bool busy;
     private bool interactiveReady;
     private static readonly System.Globalization.CultureInfo Colombia = new("es-CO");
@@ -82,9 +89,17 @@
                 ReceivesUntil = settings.ReceivesUntil, Version = settings.Version };
             fromText = settings.ReceivesFrom.ToString("HH:mm"); untilText = settings.ReceivesUntil.ToString("HH:mm");
             categories = await Api.GetProductCategoriesAsync(BusinessId); products = await Api.GetProductsAsync(BusinessId);
+            await LoadImages();
             RefreshEditors();
         } catch (ApiException ex) { error = ex.Message; }
     }
+    private async Task LoadImages()
+    {
+        try { images = await Api.GetOwnerCatalogImagesAsync(BusinessId); canManageImages = true; }
+        catch (ApiException ex) when (ex.StatusCode == 403) { images = []; canManageImages = false; }
+    }
+    private BusinessImageDto? ProductImage(Guid productId)
+        => images.FirstOrDefault(x => x.Kind == "Product" && x.ProductId == productId);
     protected override void OnAfterRender(bool firstRender)
     {
         if (!firstRender) return;

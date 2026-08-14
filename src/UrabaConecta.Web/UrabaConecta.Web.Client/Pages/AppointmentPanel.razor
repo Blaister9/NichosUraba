@@ -36,7 +36,7 @@ else
             @* Lo que el negocio necesita de un vistazo —hora, servicio, estado, quién y su
                teléfono— arriba y sin adornos. El resto vive plegado: sigue estando, pero deja de
                convertir una cita en una pantalla completa de etiquetas. *@
-            <article class="appointment-card" data-testid="appointment-card">
+            <article class="appointment-card" id="appointment-@item.Id" data-testid="appointment-card">
                 <header><div><strong>@item.ServiceName</strong>
                         <p data-testid="appointment-start">@Local(item.Start) — @BusinessDateTimeText.Time(item.End, timeZoneId)</p></div>
                     <span class="status @item.Status.ToLowerInvariant()" data-testid="appointment-status">@OperationalStatusText.Appointment(item.Status)</span></header>

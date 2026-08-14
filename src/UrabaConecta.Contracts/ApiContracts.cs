@@ -607,6 +607,8 @@ public interface IUrabaConectaApi
         CancellationToken cancellationToken = default);
     Task<IReadOnlyList<BusinessImageDto>> GetOwnerImagesAsync(Guid businessId,
         CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BusinessImageDto>> GetOwnerCatalogImagesAsync(Guid businessId,
+        CancellationToken cancellationToken = default);
     /// <summary>
     /// <paramref name="targetId"/> sólo viaja para las fotografías de un servicio o de un producto:
     /// es la fila del catálogo a la que pertenece la imagen.

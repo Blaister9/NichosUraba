@@ -51,7 +51,7 @@ else if (data is not null)
     <section class="queue-board" aria-live="polite">
         @foreach (var ticket in data.Tickets.Where(x => x.Status is not ("Completed" or "Cancelled")))
         {
-            <article class="queue-row" data-ticket="@ticket.Number">
+            <article class="queue-row" id="ticket-@ticket.Id" data-ticket="@ticket.Number">
                 <div class="ticket-badge">@ticket.Number</div>
                 <div><strong>@(ticket.Alias ?? "Sin alias")</strong><br /><span class="meta"><span data-testid="ticket-status">@OperationalStatusText.QueueTicket(ticket.Status)</span>
                     · @(ticket.Source == "WalkIn" ? "Presencial" : "En línea")

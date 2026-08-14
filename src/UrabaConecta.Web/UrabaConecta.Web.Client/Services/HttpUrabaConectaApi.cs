@@ -317,6 +317,9 @@ public sealed class HttpUrabaConectaApi(HttpClient http) : IUrabaConectaApi
     public Task<IReadOnlyList<BusinessImageDto>> GetOwnerImagesAsync(Guid businessId,
         CancellationToken cancellationToken = default)
         => Get<IReadOnlyList<BusinessImageDto>>($"api/v1/businesses/{businessId}/images", cancellationToken);
+    public Task<IReadOnlyList<BusinessImageDto>> GetOwnerCatalogImagesAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => Get<IReadOnlyList<BusinessImageDto>>($"api/v1/businesses/{businessId}/catalog-images", cancellationToken);
     public async Task<BusinessImageDto> UploadOwnerImageAsync(Guid businessId, string kind, string fileName,
         string contentType, byte[] content, string? altText, Guid? targetId = null,
         CancellationToken cancellationToken = default)

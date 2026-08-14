@@ -1,0 +1,115 @@
+@inject IUrabaConectaApi Api
+
+<section class="catalog-image-editor" data-testid="catalog-image-editor" data-target-id="@TargetId">
+    <div class="catalog-image-preview">
+        @if (previewUrl is not null)
+        {
+            <img src="@previewUrl" alt="Vista previa de @Label" width="160" height="160" />
+            <span class="tag">Vista previa</span>
+        }
+        else if (CurrentImage is not null)
+        {
+            <img src="@CurrentImage.Url" alt="@(CurrentImage.AltText ?? Label)"
+                 width="@CurrentImage.Width" height="@CurrentImage.Height" loading="lazy" />
+        }
+        else
+        {
+            <div class="catalog-image-empty"><Icon Name="imagen" Size="28" /><span>Sin foto</span></div>
+        }
+    </div>
+    <div class="catalog-image-controls">
+        <strong>Foto de @Label</strong>
+        <p class="meta">JPEG, PNG o WebP · máximo 5 MB.</p>
+        <InputFile OnChange="Select" accept="image/jpeg,image/png,image/webp" disabled="@busy"
+                   data-testid="catalog-image-file" />
+        @if (selected is not null)
+        {
+            <p class="meta">@selectedName · @FormatBytes(selected.Length)</p>
+            <div class="actions">
+                <button type="button" class="primary" @onclick="Save" disabled="@busy"
+                        data-testid="catalog-image-save">@(busy ? "Guardando…" : "Guardar foto")</button>
+                <button type="button" class="secondary" @onclick="ClearSelection" disabled="@busy">Cancelar</button>
+            </div>
+        }
+        else if (CurrentImage is not null)
+        {
+            <p class="meta">Elige otra imagen para reemplazarla.</p>
+            <button type="button" class="tertiary" @onclick="Remove" disabled="@busy"
+                    data-testid="catalog-image-remove">@(busy ? "Eliminando…" : "Quitar foto")</button>
+        }
+        @if (message is not null) { <p class="success" role="status">@message</p> }
+        @if (error is not null) { <p class="error" role="alert">@error</p> }
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public Guid BusinessId { get; set; }
+    [Parameter, EditorRequired] public Guid TargetId { get; set; }
+    [Parameter, EditorRequired] public string Kind { get; set; } = "";
+    [Parameter, EditorRequired] public string Label { get; set; } = "elemento";
+    [Parameter] public BusinessImageDto? CurrentImage { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private const long MaximumBytes = 5 * 1024 * 1024;
+    private byte[]? selected;
+    private string? selectedName, selectedContentType, previewUrl, error, message;
+    private bool busy;
+
+    private async Task Select(InputFileChangeEventArgs args)
+    {
+        error = message = null;
+        var file = args.File;
+        if (file.ContentType is not ("image/jpeg" or "image/png" or "image/webp"))
+        {
+            error = "Usa una imagen JPEG, PNG o WebP."; ClearSelection(); return;
+        }
+        try
+        {
+            await using var stream = file.OpenReadStream(MaximumBytes);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            selected = buffer.ToArray(); selectedName = file.Name; selectedContentType = file.ContentType;
+            previewUrl = $"data:{file.ContentType};base64,{Convert.ToBase64String(selected)}";
+        }
+        catch (IOException) { error = "El archivo supera el máximo de 5 MB."; ClearSelection(); }
+    }
+
+    private async Task Save()
+    {
+        if (selected is null || selectedName is null || selectedContentType is null || busy) return;
+        busy = true; error = message = null;
+        try
+        {
+            await Api.UploadOwnerImageAsync(BusinessId, Kind, selectedName, selectedContentType,
+                selected, $"Foto de {Label}", TargetId);
+            ClearSelection(); message = "Foto guardada."; await OnChanged.InvokeAsync();
+        }
+        catch (ApiException ex) { error = Friendly(ex); }
+        finally { busy = false; }
+    }
+
+    private async Task Remove()
+    {
+        if (CurrentImage is null || busy) return;
+        busy = true; error = message = null;
+        try
+        {
+            await Api.RemoveOwnerImageAsync(BusinessId, CurrentImage.Id, CurrentImage.Version);
+            message = "Foto eliminada."; await OnChanged.InvokeAsync();
+        }
+        catch (ApiException ex) { error = Friendly(ex); }
+        finally { busy = false; }
+    }
+
+    private void ClearSelection() { selected = null; selectedName = selectedContentType = previewUrl = null; }
+    private static string FormatBytes(long bytes) => bytes >= 1024 * 1024
+        ? $"{bytes / 1024d / 1024d:0.0} MB" : $"{Math.Max(1, bytes / 1024d):0} KB";
+    private static string Friendly(ApiException ex) => ex.StatusCode switch
+    {
+        401 => "Tu sesión se cerró. Vuelve a ingresar.",
+        403 => "No tienes permiso para cambiar esta foto.",
+        409 => "La foto cambió. Recarga e intenta de nuevo.",
+        413 => "El archivo supera el máximo de 5 MB.",
+        _ => ex.Message
+    };
+}

@@ -101,7 +101,7 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
             throw new ApiException("SLOT_UNAVAILABLE", "Ese horario acaba de ocuparse. Elija otro.", 409);
         await push.NotifyBusinessAsync(appointment.BusinessId, new("Nueva cita",
             $"Solicitud para {appointment.ServiceName}.",
-            $"/panel/{appointment.BusinessId}/citas?destacado={appointment.Id}",
+            $"/panel/{appointment.BusinessId}/citas#appointment-{appointment.Id}",
             $"business-appointment-{appointment.Id}"), cancellationToken);
         return new(code.PlainText, appointment.Status.ToString(), appointment.ServiceName, appointment.StartAtUtc,
             appointment.DepositStatus.ToString(), appointment.DepositAmount);

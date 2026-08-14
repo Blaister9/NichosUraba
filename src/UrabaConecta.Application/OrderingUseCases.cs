@@ -105,7 +105,7 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
         await store.SaveChangesAsync(ct); await tx.CommitAsync(ct);
         await push.NotifyBusinessAsync(order.BusinessId, new("Nuevo pedido para recoger",
             $"Pedido #{order.PublicOrderNumber} por {order.Total:C0}.",
-            $"/panel/{order.BusinessId}/pedidos?pedido={order.Id}",
+            $"/panel/{order.BusinessId}/pedidos#order-{order.Id}",
             $"business-order-{order.Id}"), ct);
         return new(order.PublicOrderNumber, code.PlainText, order.Status.ToString(), order.Total, order.PickupStartUtc);
     }

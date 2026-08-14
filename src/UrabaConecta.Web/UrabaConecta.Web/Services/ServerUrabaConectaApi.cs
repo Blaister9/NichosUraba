@@ -285,6 +285,9 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
     public async Task<IReadOnlyList<BusinessImageDto>> GetOwnerImagesAsync(Guid businessId,
         CancellationToken cancellationToken = default)
         => await images.ListAsync(await Actor(), businessId, cancellationToken);
+    public async Task<IReadOnlyList<BusinessImageDto>> GetOwnerCatalogImagesAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => await images.ListCatalogAsync(await Actor(), businessId, cancellationToken);
     public async Task<BusinessImageDto> UploadOwnerImageAsync(Guid businessId, string kind, string fileName,
         string contentType, byte[] content, string? altText, Guid? targetId = null,
         CancellationToken cancellationToken = default)

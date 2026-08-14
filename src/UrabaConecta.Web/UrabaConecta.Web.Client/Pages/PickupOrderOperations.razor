@@ -18,9 +18,21 @@
 @if (error is not null) { <div class="error" role="alert">@error</div> }
 @if (message is not null) { <p class="success" role="status">@message</p> }
 @if (loading) { <p class="notice" role="status">Cargando pedidos…</p> }
-@foreach (var order in orders)
+@if (!loading && error is null)
 {
-    <article class="queue-row" data-testid="admin-order">
+    <nav class="operation-tabs" aria-label="Estados de pedidos" data-testid="order-status-tabs">
+        @foreach (var tab in Tabs)
+        {
+            <button type="button" class="@(selectedTab == tab.Key ? "active" : null)"
+                    aria-pressed="@(selectedTab == tab.Key)" @onclick="() => selectedTab = tab.Key">
+                <span>@tab.Label</span><strong>@Count(tab.Key)</strong>
+            </button>
+        }
+    </nav>
+}
+@foreach (var order in VisibleOrders)
+{
+    <article class="queue-row order-operation-row" id="order-@order.Id" data-testid="admin-order">
         <div class="ticket-badge">#@order.OrderNumber</div>
         <div><strong>@order.CustomerAlias · @order.Total.ToString("C0", Colombia)</strong>
             <br /><span class="meta"><span data-testid="order-status">@OperationalStatusText.Order(order.Status)</span>
@@ -41,14 +53,36 @@
 }
 @* El vacío sólo es real cuando ya se terminó de cargar: antes decía "no hay pedidos" mientras
    la consulta seguía en curso. *@
-@if (orders.Count == 0 && error is null && !loading) { <div class="empty"><p>No hay pedidos todavía.</p></div> }
+@if (VisibleOrders.Count == 0 && error is null && !loading) { <div class="empty"><p>No hay pedidos en este estado.</p></div> }
 @code {
     [Parameter] public Guid BusinessId { get; set; }
     private IReadOnlyList<PickupOrderAdminDto> orders = []; private string? error, message;
     private string businessName = "", timeZoneId = "America/Bogota";
     private bool interactiveReady, busy, loading = true;
+    private string selectedTab = "active";
     private bool Blocked => !interactiveReady || busy || loading;
     private static readonly System.Globalization.CultureInfo Colombia = new("es-CO");
+    private static readonly (string Key, string Label)[] Tabs =
+        [("active", "Por atender"), ("new", "Nuevos"), ("preparing", "Preparando"),
+         ("ready", "Listos"), ("finished", "Finalizados"), ("all", "Todos")];
+    private IReadOnlyList<PickupOrderAdminDto> VisibleOrders => orders.Where(x => selectedTab switch
+    {
+        "active" => x.Status is "Pending" or "Accepted" or "Preparing" or "ReadyForPickup",
+        "new" => x.Status == "Pending",
+        "preparing" => x.Status is "Accepted" or "Preparing",
+        "ready" => x.Status == "ReadyForPickup",
+        "finished" => x.Status is "Delivered" or "Rejected" or "Cancelled",
+        _ => true
+    }).ToList();
+    private int Count(string tab) => tab == "all" ? orders.Count : orders.Count(x => tab switch
+    {
+        "active" => x.Status is "Pending" or "Accepted" or "Preparing" or "ReadyForPickup",
+        "new" => x.Status == "Pending",
+        "preparing" => x.Status is "Accepted" or "Preparing",
+        "ready" => x.Status == "ReadyForPickup",
+        "finished" => x.Status is "Delivered" or "Rejected" or "Cancelled",
+        _ => false
+    });
     protected override async Task OnParametersSetAsync() => await Load();
     protected override void OnAfterRender(bool firstRender)
     {
