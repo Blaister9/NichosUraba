@@ -13,3 +13,9 @@
 
 <ManageNavMenu />
 <div class="config-form">@Body</div>
+
+<form class="logout-form" action="/Account/Logout" method="post">
+    <AntiforgeryToken />
+    <input type="hidden" name="returnUrl" value="" />
+    <button type="submit" class="secondary">Cerrar sesión</button>
+</form>
