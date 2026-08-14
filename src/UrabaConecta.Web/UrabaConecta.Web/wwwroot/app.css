@@ -694,6 +694,32 @@ a.card-media { display: block; color: inherit }
 }
 .stepper .cantidad { min-width: 2.5rem; text-align: center; font-size: 1.05rem; font-weight: 800 }
 
+/* Carrito flotante: cuánto llevas y por dónde seguir, sin bajar hasta el final de la carta. */
+.carrito-flotante {
+    position: sticky; bottom: var(--alto-nav); z-index: 16;
+    display: flex; align-items: center; justify-content: space-between; gap: var(--e3);
+    margin: var(--e4) 0 0; padding: .7rem .9rem;
+    background: var(--marca-900); border-radius: var(--radio); color: #fff;
+    box-shadow: var(--sombra-lg);
+}
+.carrito-flotante div { display: grid; gap: .05rem }
+.carrito-flotante strong { font-size: .95rem }
+.carrito-flotante span { font-size: 1.15rem; font-weight: 850; color: #ffd2c0 }
+.carrito-flotante .button-link { flex: 0 0 auto; background: var(--calido-500); border-color: var(--calido-500) }
+.carrito-flotante .button-link:hover { background: var(--calido-600) }
+/* Lo que ya está en el carrito se reconoce en la propia carta. */
+.catalogo-item.en-carrito { border-color: var(--marca-600); background: var(--marca-050) }
+
+/* Detalle del pedido antes del total. */
+.resumen-lineas { display: grid; gap: .1rem; margin: 0 0 var(--e3); padding: 0; list-style: none }
+.resumen-lineas li {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: .6rem;
+    padding: .45rem 0; border-bottom: 1px solid var(--superficie-2);
+}
+.resumen-lineas li:last-child { border-bottom: 0 }
+.resumen-lineas .unidades { font-weight: 800; color: var(--marca-700) }
+.resumen-lineas .importe { font-weight: 700; white-space: nowrap }
+
 .resumen-pedido { position: sticky; bottom: 0; z-index: 5 }
 .total-pedido {
     display: flex; align-items: baseline; justify-content: space-between; gap: var(--e3);

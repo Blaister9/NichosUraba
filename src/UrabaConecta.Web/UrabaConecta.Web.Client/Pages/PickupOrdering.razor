@@ -13,29 +13,93 @@ else if (menu is not null && created is null)
         <p class="eyebrow">@menu.BusinessName</p><h1>Pedido para recoger</h1>
         <p class="meta">@menu.PublicMessage</p>
     </div>
+    @* Atajos a cada parte de la carta. Con tres categorías sobra desplazarse a ciegas; con ocho es
+       la diferencia entre elegir y rendirse. *@
+    @if (menu.Categories.Count > 1)
+    {
+        <div class="chip-row" role="group" aria-label="Ir a una parte del menú">
+            @foreach (var category in menu.Categories)
+            {
+                <a class="chip" href="#categoria-@category.Id">@category.Name</a>
+            }
+        </div>
+    }
+
     @foreach (var category in menu.Categories)
     {
-        <section class="bloque"><h2>@category.Name</h2><div class="card-grid">
-        @foreach (var product in menu.Products.Where(x => x.CategoryId == category.Id))
-        {
-            <article class="service-card" data-testid="product-card">
-                <h3>@product.Name</h3><p class="meta">@product.Description</p>
-                <p class="precio">@product.ReferencePrice.ToString("C0", Colombia)</p>
-                @* Antes los dos botones ocupaban el ancho de la tarjeta y la cantidad quedaba
-                   suelta entre ellos: un control de tres pisos para sumar una hamburguesa. *@
-                <div class="stepper">
-                    <button class="secondary" type="button" aria-label="Quitar uno de @product.Name"
-                            disabled="@(!Ready || Quantity(product.Id) == 0)" @onclick="() => Change(product.Id, -1)">−</button>
-                    <span class="cantidad" data-testid="quantity">@Quantity(product.Id)</span>
-                    <button class="secondary" type="button" aria-label="Agregar uno de @product.Name"
-                            disabled="@(!Ready)" @onclick="() => Change(product.Id, 1)">+</button>
-                </div>
-            </article>
-        }</div></section>
+        <section class="bloque" id="categoria-@category.Id">
+            <h2>@category.Name</h2>
+            <div class="catalogo">
+                @foreach (var product in menu.Products.Where(x => x.CategoryId == category.Id))
+                {
+                    <article class="catalogo-item @(Quantity(product.Id) > 0 ? "en-carrito" : null)"
+                             data-testid="product-card" data-tono="producto">
+                        @if (product.ImageUrl is { Length: > 0 } foto)
+                        {
+                            <img class="catalogo-foto" src="@foto" width="184" height="184" loading="lazy"
+                                 alt="@(product.ImageAltText ?? product.Name)" />
+                        }
+                        else
+                        {
+                            <span class="catalogo-foto sin-foto"><Icon Name="bolsa" Size="28" /></span>
+                        }
+                        <div class="catalogo-cuerpo">
+                            <h3>@product.Name</h3>
+                            @if (!string.IsNullOrWhiteSpace(product.Description)) { <p>@product.Description</p> }
+                        </div>
+                        <div class="catalogo-accion">
+                            <span class="precio">@product.ReferencePrice.ToString("C0", Colombia)</span>
+                            @* Un control de una sola línea. Antes los dos botones ocupaban el ancho
+                               de la tarjeta y la cantidad quedaba suelta entre ellos: tres pisos
+                               para sumar una hamburguesa. *@
+                            <div class="stepper">
+                                <button class="secondary" type="button" aria-label="Quitar uno de @product.Name"
+                                        disabled="@(!Ready || Quantity(product.Id) == 0)" @onclick="() => Change(product.Id, -1)">−</button>
+                                <span class="cantidad" data-testid="quantity">@Quantity(product.Id)</span>
+                                <button class="secondary" type="button" aria-label="Agregar uno de @product.Name"
+                                        disabled="@(!Ready)" @onclick="() => Change(product.Id, 1)">+</button>
+                            </div>
+                        </div>
+                    </article>
+                }
+            </div>
+        </section>
     }
-    <section class="config-form">
+
+    @* El carrito viaja con quien pide. Sin esto había que bajar hasta el final para saber cuánto
+       llevaba sumado, y volver a subir si quería cambiar algo. *@
+    @if (CartCount > 0)
+    {
+        <div class="carrito-flotante">
+            <div>
+                <strong>@CartCount @(CartCount == 1 ? "unidad" : "unidades")</strong>
+                <span>@CartTotal.ToString("C0", Colombia)</span>
+            </div>
+            <a class="button-link" href="#tu-pedido">Continuar</a>
+        </div>
+    }
+    <section class="config-form" id="tu-pedido">
         <h2>Tu pedido</h2>
-        <p class="total-pedido"><span>@CartCount unidades</span><strong>@CartTotal.ToString("C0", Colombia)</strong></p>
+        @* El detalle antes del total: quien va a dar su celular quiere confirmar primero que lo que
+           lleva es lo que quería. Un total suelto obliga a subir a revisar. *@
+        @if (CartCount > 0)
+        {
+            <ul class="resumen-lineas">
+                @foreach (var linea in Lineas)
+                {
+                    <li>
+                        <span class="unidades">@linea.Cantidad ×</span>
+                        <span class="nombre">@linea.Nombre</span>
+                        <span class="importe">@linea.Total.ToString("C0", Colombia)</span>
+                    </li>
+                }
+            </ul>
+        }
+        else
+        {
+            <p class="summary-empty">Todavía no has agregado nada. Elige algo del menú de arriba.</p>
+        }
+        <p class="total-pedido"><span>@CartCount @(CartCount == 1 ? "unidad" : "unidades")</span><strong>@CartTotal.ToString("C0", Colombia)</strong></p>
         @* Al hidratar, el circuito crea una instancia nueva y vuelve a pedir menú y franjas: la
            lista prerenderizada desaparece durante ese segundo. Antes el formulario ya estaba
            habilitado en esa ventana, así que quien llegaba rápido encontraba el selector de hora
@@ -114,6 +178,14 @@ else if (created is not null)
     private void Change(Guid id, int delta) => quantities[id] = Math.Clamp(Quantity(id) + delta, 0, 20);
     private int CartCount => quantities.Values.Sum();
     private decimal CartTotal => menu?.Products.Sum(x => x.ReferencePrice * Quantity(x.Id)) ?? 0;
+
+    private sealed record Linea(string Nombre, int Cantidad, decimal Total);
+
+    /// <summary>Lo que lleva el carrito, en el orden en que aparece en la carta.</summary>
+    private IEnumerable<Linea> Lineas => menu is null
+        ? []
+        : menu.Products.Where(x => Quantity(x.Id) > 0)
+            .Select(x => new Linea(x.Name, Quantity(x.Id), x.ReferencePrice * Quantity(x.Id)));
     private async Task Submit()
     {
         // Guarda de doble envío: sin ella un segundo clic creaba un pedido duplicado.
