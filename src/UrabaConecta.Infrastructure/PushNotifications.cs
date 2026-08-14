@@ -21,8 +21,15 @@ public sealed class WebPushOptions
     public string Subject { get; set; } = "";
     public string PublicKey { get; set; } = "";
     public string PrivateKey { get; set; } = "";
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(Subject) &&
-        !string.IsNullOrWhiteSpace(PublicKey) && !string.IsNullOrWhiteSpace(PrivateKey);
+    public string NormalizedSubject => Normalize(Subject);
+    public string NormalizedPublicKey => Normalize(PublicKey);
+    public string NormalizedPrivateKey => Normalize(PrivateKey);
+    public bool IsConfigured => NormalizedSubject.Length > 0 &&
+        NormalizedPublicKey.Length > 0 && NormalizedPrivateKey.Length > 0;
+
+    // Los valores suelen llegar desde archivos o CLI de variables. Un BOM invisible al inicio
+    // convierte una clave base64url válida en una que PushManager/atob no puede decodificar.
+    private static string Normalize(string? value) => (value ?? "").Trim().TrimStart('\uFEFF').Trim();
 }
 
 public interface IWebPushTransport
@@ -51,7 +58,8 @@ public sealed class WebPushTransport(IOptions<WebPushOptions> options) : IWebPus
             tag = message.Tag, renotify = message.Renotify
         }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         var target = new BrowserPushSubscription(subscription.Endpoint, subscription.P256dh, subscription.Auth);
-        var vapid = new VapidDetails(settings.Subject, settings.PublicKey, settings.PrivateKey);
+        var vapid = new VapidDetails(settings.NormalizedSubject, settings.NormalizedPublicKey,
+            settings.NormalizedPrivateKey);
         using var client = new WebPushClient();
         try { await client.SendNotificationAsync(target, payload, vapid, cancellationToken); }
         catch (WebPushException ex)
@@ -67,7 +75,7 @@ public sealed class PushNotificationService(AppDbContext db, IPublicCodeService 
 {
     private readonly WebPushOptions settings = options.Value;
     public PushConfigurationDto Configuration => new(settings.IsConfigured,
-        settings.IsConfigured ? settings.PublicKey : null);
+        settings.IsConfigured ? settings.NormalizedPublicKey : null);
 
     public async Task<WebPushSubscriptionDto> RegisterOwnerAsync(Guid userId, Guid businessId,
         WebPushSubscriptionRequest request, CancellationToken cancellationToken = default)

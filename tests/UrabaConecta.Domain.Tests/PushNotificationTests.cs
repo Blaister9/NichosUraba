@@ -1,4 +1,5 @@
 using UrabaConecta.Domain;
+using UrabaConecta.Infrastructure;
 
 namespace UrabaConecta.Domain.Tests;
 
@@ -10,6 +11,22 @@ public sealed class PushNotificationTests
             audience == PushAudience.Owner ? Guid.NewGuid() : null,
             audience == PushAudience.Owner ? null : Guid.NewGuid(),
             audience == PushAudience.Owner ? null : "protected-link", DateTimeOffset.UtcNow);
+
+    [Fact]
+    public void Web_push_options_remove_bom_and_whitespace_from_environment_values()
+    {
+        var options = new WebPushOptions
+        {
+            Subject = " \uFEFFmailto:demo@urabaconecta.test\r\n",
+            PublicKey = "\uFEFFpublic-key\r\n",
+            PrivateKey = " \uFEFFprivate-key "
+        };
+
+        Assert.True(options.IsConfigured);
+        Assert.Equal("mailto:demo@urabaconecta.test", options.NormalizedSubject);
+        Assert.Equal("public-key", options.NormalizedPublicKey);
+        Assert.Equal("private-key", options.NormalizedPrivateKey);
+    }
 
     [Fact]
     public void Owner_subscription_requires_a_user_and_client_subscription_requires_an_entity()
