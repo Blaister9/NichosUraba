@@ -1,14 +1,16 @@
 # 17 — Production Launch Gate
 
-Estado al 13 de agosto de 2026:
+Estado al 14 de agosto de 2026:
 
 ```
-DEMO-ACTIVATION-READY
+PRODUCT-READY
 PRODUCTION-BLOCKED-BY-EXTERNAL-CONFIG
 ```
 
-La Demo queda como **referencia funcional validada** y cerrada. Production está bloqueada
-únicamente por trece entradas externas que sólo puede suministrar o autorizar el responsable.
+La Demo en `release/pilot-demo` queda como **referencia funcional validada**. Production está
+bloqueada únicamente por trece entradas externas que sólo puede suministrar o autorizar el
+responsable. No existe un blocker interno conocido después de 461 pruebas Release y el deployment
+Demo del commit de producto `64d906a`.
 
 Este documento es la secuencia de lanzamiento, y nada más. No abre fases de producto, no propone
 mejoras y no vuelve sobre lo cerrado. Cuando lleguen las trece entradas, la ejecución siguiente se
@@ -75,13 +77,16 @@ Cada paso termina en una comprobación. Si falla, se detiene ahí.
 
 ### 0 — Rama de despliegue
 
-`release/founder-production` avanza sin merge hasta el commit validado en Demo:
+`release/founder-production` avanza por fast-forward hasta el commit validado en Demo:
 
 ```bash
-git checkout release/founder-production && git merge --ff-only feat/founder-launch && git push origin release/founder-production
+git fetch origin
+git checkout release/founder-production
+git merge --ff-only origin/release/pilot-demo
+git push origin release/founder-production
 ```
 
-**Comprobación:** `git log --oneline -1` muestra `94f5df6` o posterior.
+**Comprobación:** `git log --oneline -1` muestra `64d906a` o posterior.
 
 ### 1 — Crear el ambiente y sus recursos
 
@@ -213,8 +218,8 @@ más fácil se olvida porque nada obliga a darlo.
 
 ### 10 — Publicar y smoke público
 
-Publicar el negocio y recorrer sin sesión: home, directorio, ficha de Studio Laura, servicios,
-horarios y la pantalla de reserva.
+Publicar el negocio y recorrer sin sesión: home, municipio, categoría, directorio, ficha de Studio
+Laura, servicios, horarios y la pantalla de reserva.
 
 ```bash
 node private/founder-launch-2/scripts/capturas-responsive.mjs https://<dominio> production
@@ -304,13 +309,15 @@ Si alguno falló, se registra cuál y por qué, y el estado sigue siendo
 | Punto | Estado |
 | --- | --- |
 | Dominio | `https://nichosuraba-production.up.railway.app` |
-| Commit | `94f5df6` |
+| Commit de producto | `64d906a` |
 | `health/live` · `health/ready` | 200 · 200 |
-| Negocios en el directorio | 1 — Studio Laura usuga |
-| Reserva pública → cita → panel del propietario | Verificado en navegador, sin 5xx |
+| Negocios en el directorio | 3 — Studio Laura usuga · Brío Nativo Barbería DEMO · Lúmina Coral Beauty Store DEMO |
+| Discovery desplegado | Home, municipio y categoría responden 200; Carepa + Maquillaje conserva el contexto |
+| Citas · turnos · pedidos · Owner | 40 journeys E2E Chromium y 228 integraciones verdes |
+| Push | Transporte, audiencia, eventos y deep links verificados; recepción visual del SO no demostrada en esta sesión |
 | Data Protection | Persistente en volumen; sobrevivió a un reinicio completo |
 | `DemoSeed__Enabled` | `false`, y **no se vuelve a activar sobre esta base** |
-| Pruebas | 443 verdes |
+| Pruebas | 461 verdes — 193 dominio · 228 integración · 40 E2E |
 
 ### Mecanismo de recuperación de las cuentas Demo
 
