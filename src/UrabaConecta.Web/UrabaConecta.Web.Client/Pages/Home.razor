@@ -1,177 +1,114 @@
 @page "/"
 @rendermode InteractiveServer
 @inject IUrabaConectaApi Api
-@inject NavigationManager Nav
 
-<PageTitle>Negocios de Urabá | UrabáConecta</PageTitle>
+<PageTitle>Descubre Urabá | UrabáConecta</PageTitle>
 
-<h1 id="home-title" class="visually-hidden">Descubre negocios y servicios en Urabá</h1>
-
-<section class="visual-home" aria-labelledby="home-title">
-    <form class="buscador-hero visual-search" @onsubmit="Buscar" @formname="buscar-home">
-        <label class="visually-hidden" for="q-home">Qué buscas</label>
-        <Icon Name="explorar" Size="20" />
-        <input id="q-home" @bind-value="termino" @bind-value:event="oninput" disabled="@(!listo)"
-               placeholder="¿Qué buscas hoy?" autocomplete="off" />
-        <button type="submit" class="primary" disabled="@(!listo)">Buscar</button>
-    </form>
+<div class="portal-home" aria-labelledby="portal-title">
+    <h1 id="portal-title" class="visually-hidden">Elige dónde o qué quieres encontrar en Urabá</h1>
 
     @if (cargando)
     {
-        <div class="skeleton commercial-banner banner-skeleton" aria-hidden="true"></div>
+        <div class="skeleton portal-promo" aria-hidden="true"></div>
     }
     else if (Featured is { } featured && PromotionCatalog.For(featured.Slug) is { } promotion)
     {
-        <CommercialBanner Business="featured" Promotion="promotion" Priority="true" />
+        <CommercialBanner Business="featured" Promotion="promotion" Priority="true" Compact="true" />
     }
 
-    <section class="intent-panel @(Featured is null && !cargando ? "without-banner" : null)" aria-labelledby="intent-title">
-        <div class="index-heading compact-heading">
-            <div>
-                <p class="index-step">Entra por lo que quieres hacer</p>
-                <h2 id="intent-title">¿Qué quieres hacer?</h2>
-            </div>
-        </div>
-        <div class="intent-grid">
-            @foreach (var intent in IntentOptions)
+    <section class="portal-decision" aria-labelledby="where-title">
+        <header class="portal-heading">
+            <h2 id="where-title">¿Dónde buscas?</h2>
+            <span>Urabá</span>
+        </header>
+        <div class="portal-municipalities">
+            @foreach (var municipio in DiscoveryCatalog.Municipalities)
             {
-                var business = BusinessForIntent(intent.Key);
-                <a class="intent-action" data-intent="@intent.Key" href="@IntentDestination(intent.Key, business)">
-                    <span class="intent-icon"><Icon Name="@intent.Icon" Size="25" /></span>
-                    <span><strong>@intent.Label</strong><small>@intent.Caption</small></span>
-                    <Icon Name="flecha" Size="17" Class="intent-arrow" />
+                var look = MunicipalityLook.For(municipio.Slug);
+                <a class="portal-municipality" data-place="@look.Tone" href="@($"/municipios/{municipio.Slug}")">
+                    <span class="place-monogram" aria-hidden="true">@look.Monogram</span>
+                    <span class="place-icon"><Icon Name="@look.Icon" Size="28" /></span>
+                    <span class="place-copy"><strong>@municipio.Name</strong><small>@look.Cue</small></span>
                 </a>
             }
         </div>
     </section>
 
-    <section class="index-block municipality-launcher" aria-labelledby="titulo-municipios">
-        <div class="index-heading compact-heading">
-            <div>
-                <p class="index-step">Cerca de ti</p>
-                <h2 id="titulo-municipios">Elige tu municipio</h2>
-            </div>
-        </div>
-        <div class="municipality-grid">
-            @foreach (var (municipio, index) in DiscoveryCatalog.Municipalities.Select((item, i) => (item, i)))
-            {
-                <a class="municipality-card" data-place="@index" href="@($"/municipios/{municipio.Slug}")">
-                    <span class="municipality-icon"><Icon Name="ubicacion" Size="22" /></span>
-                    <span>
-                        <strong>@municipio.Name</strong>
-                        <small>@ConteoMunicipio(municipio.Slug)</small>
-                    </span>
-                    <Icon Name="flecha" Size="16" Class="destination-arrow" />
-                </a>
-            }
-        </div>
-    </section>
-
-    <section class="index-block category-launcher" aria-labelledby="titulo-categorias">
-        <div class="index-heading compact-heading">
-            <div>
-                <p class="index-step">Explora de un toque</p>
-                <h2 id="titulo-categorias">¿Qué quieres encontrar?</h2>
-            </div>
+    <section class="portal-decision portal-categories" aria-labelledby="what-title">
+        <header class="portal-heading">
+            <h2 id="what-title">¿Qué quieres encontrar?</h2>
             <a href="/categorias">Ver todas</a>
-        </div>
+        </header>
         @if (cargando)
         {
-            <div class="discovery-category-grid home-category-grid" aria-hidden="true">
-                @for (var i = 0; i < 7; i++) { <span class="skeleton discovery-category-tile"></span> }
+            <div class="portal-category-grid" aria-hidden="true">
+                @for (var i = 0; i < 3; i++) { <span class="skeleton portal-category"></span> }
             </div>
         }
         else
         {
-            <div class="discovery-category-grid home-category-grid">
-                @foreach (var item in MapaCategorias)
+            <div class="portal-category-grid">
+                @foreach (var category in HomeCategories)
                 {
-                    @if (item.IsAvailable)
-                    {
-                        <a class="discovery-category-tile" data-tono="@CategoryLook.Tone(item.Slug)"
-                           href="@($"/categorias/{item.Slug}")">
-                            <span class="marca-icono"><Icon Name="@CategoryLook.Icon(item.Slug)" Size="25" /></span>
-                            <span><strong>@NombreCorto(item.Slug, item.Name)</strong><small>@ConteoCorto(item.BusinessCount)</small></span>
-                        </a>
-                    }
-                    else
-                    {
-                        <div class="discovery-category-tile proximamente" data-tono="@CategoryLook.Tone(item.Slug)"
-                             aria-label="@item.Name, próximamente">
-                            <span class="marca-icono"><Icon Name="@CategoryLook.Icon(item.Slug)" Size="25" /></span>
-                            <span><strong>@NombreCorto(item.Slug, item.Name)</strong><small>Pronto</small></span>
-                        </div>
-                    }
+                    <a class="portal-category" data-tono="@CategoryLook.Tone(category.Slug)"
+                       href="@($"/categorias/{category.Slug}")">
+                        <span class="portal-category-art"><Icon Name="@CategoryLook.Icon(category.Slug)" Size="39" /></span>
+                        <strong>@ShortName(category.Slug, category.Name)</strong>
+                        <Icon Name="flecha" Size="16" Class="portal-category-arrow" />
+                    </a>
                 }
             </div>
         }
     </section>
-</section>
 
-@if (error is not null)
-{
-    <p class="error" role="alert">@error</p>
-}
-else
-{
-    <section class="seccion home-businesses" aria-labelledby="titulo-destacados">
-        <div class="seccion-head visual-section-head">
-            <div>
-                <p class="index-step">Para descubrir hoy</p>
-                <h2 id="titulo-destacados">Negocios que puedes usar ya</h2>
-            </div>
-            @if (!cargando && negocios.Count > 0) { <a href="/explorar">Ver todo</a> }
-        </div>
-
-        @if (cargando)
-        {
-            <div class="card-grid" aria-hidden="true">
-                @for (var i = 0; i < 3; i++)
+    @if (error is not null)
+    {
+        <p class="error" role="alert">@error</p>
+    }
+    else if (!cargando && PreviewBusinesses.Count > 0)
+    {
+        <section class="portal-preview" aria-labelledby="preview-title">
+            <header class="portal-heading">
+                <h2 id="preview-title">Para descubrir</h2>
+                <a href="/explorar">Explorar</a>
+            </header>
+            <div class="portal-preview-grid">
+                @foreach (var negocio in PreviewBusinesses)
                 {
-                    <div class="skeleton-card">
-                        <div class="skeleton skeleton-media"></div>
-                        <div class="skeleton skeleton-linea"></div>
-                    </div>
+                    <a class="portal-business" data-tono="@CategoryLook.Tone(negocio.Category.Slug)"
+                       href="@($"/negocios/{negocio.Slug}")">
+                        <span class="portal-business-media">
+                            @if (negocio.CoverUrl is { Length: > 0 } cover)
+                            {
+                                <img src="@cover" alt="@(negocio.CoverAltText ?? $"Portada de {negocio.Name}")"
+                                     width="420" height="300" loading="lazy" />
+                            }
+                            else
+                            {
+                                <Icon Name="@CategoryLook.Icon(negocio.Category.Slug)" Size="40" />
+                            }
+                        </span>
+                        <span><strong>@CleanName(negocio.Name)</strong><small>@negocio.Category.Name · @negocio.Municipality.Name</small></span>
+                    </a>
                 }
             </div>
-        }
-        else if (negocios.Count == 0)
-        {
-            <div class="empty">
-                <h3>Estamos sumando negocios</h3>
-                <p class="meta">Las categorías muestran lo que pronto podrás encontrar.</p>
-            </div>
-        }
-        else
-        {
-            <div class="card-grid visual-card-grid">
-                @foreach (var (negocio, indice) in OrderedBusinesses.Take(6).Select((x, i) => (x, i)))
-                {
-                    <BusinessCard Business="negocio" Priority="indice == 0 && Featured is null" />
-                }
-            </div>
-        }
-    </section>
-}
+        </section>
+    }
+</div>
 
 @code {
-    private sealed record IntentOption(string Key, string Label, string Caption, string Icon);
-    private static readonly IntentOption[] IntentOptions =
-    [
-        new("booking", "Reservar", "Cita de belleza", "calendario"),
-        new("queue", "Tomar turno", "Fila virtual", "turno"),
-        new("order", "Pedir", "Recoge después", "pedido"),
-    ];
-
-    private string termino = "";
     private string? error;
-    private bool cargando = true, listo;
+    private bool cargando = true;
     private IReadOnlyList<BusinessCardDto> negocios = [];
     private IReadOnlyList<CategoryCardDto> categorias = [];
 
     private IReadOnlyList<BusinessCardDto> OrderedBusinesses => PromotionCatalog.Order(negocios);
     private BusinessCardDto? Featured => OrderedBusinesses.FirstOrDefault(PromotionCatalog.IsFeatured);
-    private IReadOnlyList<DiscoveryCatalog.CategoryEntry> MapaCategorias => DiscoveryCatalog.WithCounts(categorias);
+    private IReadOnlyList<DiscoveryCatalog.CategoryEntry> HomeCategories => DiscoveryCatalog.WithCounts(categorias)
+        .Where(x => x.IsAvailable).Take(6).ToArray();
+    private IReadOnlyList<BusinessCardDto> PreviewBusinesses => OrderedBusinesses
+        .Where(x => Featured is null || !x.Slug.Equals(Featured.Slug, StringComparison.OrdinalIgnoreCase))
+        .Take(2).ToArray();
 
     protected override async Task OnInitializedAsync()
     {
@@ -184,39 +121,7 @@ else
         finally { cargando = false; }
     }
 
-    protected override void OnAfterRender(bool firstRender)
-    {
-        if (!firstRender) return;
-        listo = true;
-        StateHasChanged();
-    }
-
-    private BusinessCardDto? BusinessForIntent(string key) => key switch
-    {
-        "booking" => Prefer("laura-usuga", x => x.HasScheduling),
-        "queue" => Prefer("brio-nativo-barberia-demo", x => x.HasVirtualQueue),
-        "order" => Prefer("lumina-coral-beauty-demo", x => x.HasPickupOrdering),
-        _ => null,
-    };
-
-    private BusinessCardDto? Prefer(string slug, Func<BusinessCardDto, bool> capability)
-        => negocios.FirstOrDefault(x => x.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase) && capability(x))
-           ?? negocios.FirstOrDefault(capability);
-
-    private static string IntentDestination(string key, BusinessCardDto? business)
-    {
-        if (business is null) return "/explorar";
-        var suffix = key switch { "booking" => "citas", "queue" => "turnos", "order" => "pedidos", _ => "" };
-        return string.IsNullOrEmpty(suffix) ? $"/negocios/{business.Slug}" : $"/negocios/{business.Slug}/{suffix}";
-    }
-
-    private string ConteoMunicipio(string slug)
-    {
-        var count = negocios.Count(x => x.Municipality.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase));
-        return count == 0 ? "Explorar" : Conteo(count);
-    }
-
-    private static string NombreCorto(string slug, string fallback) => slug switch
+    private static string ShortName(string slug, string fallback) => slug switch
     {
         "belleza-cuidado-personal" => "Belleza",
         "maquillaje-y-cosmeticos" => "Maquillaje",
@@ -225,9 +130,5 @@ else
         _ => fallback,
     };
 
-    private static string Conteo(int count) => count == 1 ? "1 negocio" : $"{count} negocios";
-    private static string ConteoCorto(int count) => count == 1 ? "1 opción" : $"{count} opciones";
-
-    private void Buscar() => Nav.NavigateTo(string.IsNullOrWhiteSpace(termino)
-        ? "/explorar" : $"/explorar?q={Uri.EscapeDataString(termino.Trim())}");
+    private static string CleanName(string name) => name.Replace(" · DEMO", "", StringComparison.OrdinalIgnoreCase);
 }

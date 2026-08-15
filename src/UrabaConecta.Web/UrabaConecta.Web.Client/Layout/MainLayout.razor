@@ -17,6 +17,7 @@
                aria-current="@(EsActiva(item.Href) ? "page" : null)">@item.Label</a>
         }
     </nav>
+    <a class="header-search" href="/explorar" data-enhance-nav="false" aria-label="Buscar negocios"><Icon Name="explorar" Size="20" /></a>
     <nav class="nav-identidad" aria-label="Tu cuenta">
         <AuthorizeView>
             <Authorized>
@@ -55,10 +56,10 @@
 @* La barra inferior sólo existe en móvil. Se marca con aria-current para que un lector de pantalla
    anuncie dónde está quien navega, no sólo qué puede tocar. *@
 <nav class="nav-inferior" aria-label="Navegación">
-    @foreach (var item in Publicas)
+    @foreach (var item in Moviles)
     {
-        <a href="@item.Href" class="@(EsActiva(item.Href) ? "activo" : null)"
-           aria-current="@(EsActiva(item.Href) ? "page" : null)">
+        <a href="@item.Href" class="@(EsActivaMovil(item) ? "activo" : null)"
+           aria-current="@(EsActivaMovil(item) ? "page" : null)">
             <Icon Name="@item.Icono" Size="22" /><span>@item.Label</span>
         </a>
     }
@@ -97,6 +98,12 @@
         new("/categorias", "Categorías", "categorias"),
     ];
 
+    private static readonly Destino[] Moviles =
+    [
+        new("/", "Inicio", "inicio"),
+        new("/explorar", "Explorar", "explorar", ["/negocios", "/categorias", "/municipios"]),
+    ];
+
     protected override void OnInitialized() => Nav.LocationChanged += AlNavegar;
 
     private void AlNavegar(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
@@ -113,6 +120,13 @@
         if (href == "/") return actual == "/";
         if (Cubre(href, actual)) return true;
         return Publicas.FirstOrDefault(x => x.Href == href)?.Tambien?.Any(p => Cubre(p, actual)) == true;
+    }
+
+    private bool EsActivaMovil(Destino item)
+    {
+        var actual = Ruta();
+        if (item.Href == "/") return actual == "/";
+        return Cubre(item.Href, actual) || item.Tambien?.Any(p => Cubre(p, actual)) == true;
     }
 
     private string Ruta()

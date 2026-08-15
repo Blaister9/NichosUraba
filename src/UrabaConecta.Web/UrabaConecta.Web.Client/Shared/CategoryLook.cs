@@ -17,12 +17,12 @@ public static class CategoryLook
     private static readonly Dictionary<string, Look> Known = new(StringComparer.OrdinalIgnoreCase)
     {
         ["barberia"] = new("tijeras", "barberia"),
-        ["belleza-cuidado-personal"] = new("brillo", "belleza"),
-        ["unas-y-belleza"] = new("brillo", "belleza"),
-        ["maquillaje-y-cosmeticos"] = new("bolsa", "producto"),
-        ["restaurante"] = new("plato", "comida"),
+        ["belleza-cuidado-personal"] = new("rostro", "belleza"),
+        ["unas-y-belleza"] = new("rostro", "belleza"),
+        ["maquillaje-y-cosmeticos"] = new("labial", "producto"),
+        ["restaurante"] = new("cubiertos", "comida"),
         ["mascotas"] = new("mascota", "mascotas"),
-        ["salud-bienestar"] = new("salud", "salud"),
+        ["salud-bienestar"] = new("spa", "salud"),
         ["servicios-profesionales"] = new("herramienta", "servicios"),
     };
 

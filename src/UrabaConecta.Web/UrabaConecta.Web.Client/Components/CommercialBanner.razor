@@ -1,4 +1,4 @@
-<article class="commercial-banner" data-tono="@CategoryLook.Tone(Business.Category.Slug)" data-testid="commercial-banner">
+<article class="commercial-banner @(Compact ? "is-compact" : null)" data-tono="@CategoryLook.Tone(Business.Category.Slug)" data-testid="commercial-banner">
     <a class="commercial-banner-media" href="@ProfileDestination" tabindex="-1" aria-label="Ver @Business.Name">
         @if (Business.CoverUrl is { Length: > 0 } cover)
         {
@@ -28,6 +28,7 @@
     [Parameter, EditorRequired] public BusinessCardDto Business { get; set; } = default!;
     [Parameter, EditorRequired] public PromotionCatalog.Placement Promotion { get; set; } = default!;
     [Parameter] public bool Priority { get; set; }
+    [Parameter] public bool Compact { get; set; }
 
     private string ProfileDestination => $"/negocios/{Business.Slug}";
     private string ActionDestination => Business.HasPickupOrdering ? $"{ProfileDestination}/pedidos"

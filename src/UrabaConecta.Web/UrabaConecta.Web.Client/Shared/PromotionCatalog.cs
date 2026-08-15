@@ -23,8 +23,15 @@ public static class PromotionCatalog
             100,
             "Destacado",
             "Fila virtual abierta",
-            "Tu próximo corte, sin esperar de pie",
+            "Tu corte sin espera",
             "Entra a la fila desde el celular y llega cuando se acerque tu turno."),
+        new(
+            "lumina-coral-beauty-demo",
+            80,
+            "Destacado",
+            "Recoge en Carepa",
+            "Belleza para llevar",
+            "Elige tus productos favoritos y prepara el pedido desde el celular."),
     ];
 
     public static Placement? For(string? businessSlug)

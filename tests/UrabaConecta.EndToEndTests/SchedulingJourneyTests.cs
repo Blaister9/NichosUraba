@@ -11,7 +11,7 @@ public sealed class SchedulingJourneyTests(BrowserFixture fixture) : IClassFixtu
         await using var context = await fixture.Browser.NewContextAsync(new()
         { ViewportSize = new() { Width = 390, Height = 844 } });
         var page = await context.NewPageAsync();
-        await page.GotoAsync(fixture.BaseUrl);
+        await page.GotoAsync($"{fixture.BaseUrl}/categorias/belleza-cuidado-personal?municipio=apartado");
         await Expect(page.GetByText("Salón Bella Urabá")).ToBeVisibleAsync();
         await page.GotoAsync($"{fixture.BaseUrl}/negocios/salon-bella-uraba");
         // La ficha dejó de listar los servicios como tarjetas sueltas: ahora usan la misma anatomía

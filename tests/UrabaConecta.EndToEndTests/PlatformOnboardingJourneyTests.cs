@@ -21,7 +21,7 @@ public sealed class PlatformOnboardingJourneyTests(BrowserFixture fixture) : ICl
         var created = await CreateWithWizard(admin, slug, pilotEmail);
         var published = await CompleteAndPublish(admin, created.Business);
         Assert.Equal("Active", published.Status);
-        await admin.GotoAsync($"{fixture.BaseUrl}/");
+        await admin.GotoAsync($"{fixture.BaseUrl}/explorar?q={Uri.EscapeDataString(created.Business.Name)}");
         await Expect(admin.GetByText(created.Business.Name, new() { Exact = true })).ToBeVisibleAsync();
 
         await using var ownerContext = await fixture.Browser.NewContextAsync();
@@ -119,7 +119,7 @@ public sealed class PlatformOnboardingJourneyTests(BrowserFixture fixture) : ICl
         var suspended = await Fetch(admin, "POST", $"/api/v1/admin/businesses/{created.Business.Id}/suspend",
             new PlatformBusinessStateRequest { Version = version, Reason = "Pausa E2E" });
         Assert.Equal(200, suspended.Status);
-        await admin.GotoAsync($"{fixture.BaseUrl}/");
+        await admin.GotoAsync($"{fixture.BaseUrl}/explorar?q={Uri.EscapeDataString(created.Business.Name)}");
         await Expect(admin.GetByText(created.Business.Name, new() { Exact = true })).ToHaveCountAsync(0);
         var publicWrite = await Fetch(admin, "POST",
             $"/api/v1/public/businesses/{created.Business.Slug}/queue/tickets",

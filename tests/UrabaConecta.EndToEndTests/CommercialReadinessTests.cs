@@ -16,7 +16,7 @@ public sealed class CommercialReadinessTests(BrowserFixture fixture) : IClassFix
         var page = await context.NewPageAsync();
         await page.GotoAsync(fixture.BaseUrl);
 
-        var municipalityLinks = page.Locator(".municipality-grid .municipality-card");
+        var municipalityLinks = page.Locator(".portal-municipalities .portal-municipality");
         await Assertions.Expect(municipalityLinks).ToHaveCountAsync(4);
         foreach (var name in new[] { "Apartadó", "Carepa", "Chigorodó", "Turbo" })
             await Assertions.Expect(municipalityLinks.GetByText(name, new() { Exact = true })).ToBeVisibleAsync();
@@ -26,18 +26,21 @@ public sealed class CommercialReadinessTests(BrowserFixture fixture) : IClassFix
             Assert.True(box[0] >= 0, $"El municipio empieza fuera del viewport: {box[0]}");
             Assert.True(box[1] <= 390, $"El municipio termina fuera del viewport: {box[1]}");
         }
-        await Assertions.Expect(page.Locator(".home-category-grid .discovery-category-tile")).ToHaveCountAsync(7);
+        await Assertions.Expect(page.Locator(".portal-category-grid .portal-category")).ToHaveCountAsync(3);
+        await Assertions.Expect(page.GetByText("Pronto", new() { Exact = true })).ToHaveCountAsync(0);
 
         await municipalityLinks.GetByText("Apartadó", new() { Exact = true }).ClickAsync();
         await page.WaitForURLAsync(url => url.Contains("/municipios/apartado"));
-        await Assertions.Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Negocios en Apartadó" })).ToBeVisibleAsync();
-        await page.GetByRole(AriaRole.Link, new() { NameRegex = new Regex("Belleza y estética") }).ClickAsync();
+        await Assertions.Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Apartadó" })).ToBeVisibleAsync();
+        await page.GetByRole(AriaRole.Link, new() { NameRegex = new Regex("Belleza") }).ClickAsync();
         await page.WaitForURLAsync(url => url.Contains("/categorias/belleza-cuidado-personal") &&
                                            url.Contains("municipio=apartado"));
         await Assertions.Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Belleza y estética en Apartadó" }))
             .ToBeVisibleAsync();
 
         await page.GotoAsync(fixture.BaseUrl);
+        await page.GetByRole(AriaRole.Link, new() { Name = "Buscar negocios" }).ClickAsync();
+        await page.WaitForURLAsync(url => url.Contains("/explorar"));
         await Assertions.Expect(page.GetByRole(AriaRole.Button, new() { Name = "Buscar" })).ToBeEnabledAsync();
         await page.GetByLabel("Qué buscas").FillAsync("Manicure");
         await page.GetByRole(AriaRole.Button, new() { Name = "Buscar" }).ClickAsync();
