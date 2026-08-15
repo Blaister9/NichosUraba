@@ -151,7 +151,7 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
                               Products = db.Products.Where(x => x.BusinessId == b.Id && x.IsActive)
                                   .OrderBy(x => x.DisplayOrder).ThenBy(x => x.Name).Take(6)
                                   .Select(x => new { x.Id, x.ProductCategoryId, x.Name, x.Description,
-                                      x.ReferencePrice, x.DisplayOrder, x.Version })
+                                      x.ReferencePrice, x.DisplayOrder, x.IsAvailable, x.Version })
                                   .ToList(),
                           }).SingleOrDefaultAsync(cancellationToken);
         if (data is null) return null;
@@ -190,7 +190,7 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
                 var photo = productImages.GetValueOrDefault(x.Id);
                 return new ProductDto(x.Id, x.ProductCategoryId, x.Name, x.Description, x.ReferencePrice,
                     x.DisplayOrder, true, x.Version,
-                    photo is null ? null : storage.PublicUrl(photo.StorageKey), photo?.AltText);
+                    photo is null ? null : storage.PublicUrl(photo.StorageKey), photo?.AltText, x.IsAvailable);
             }).ToList()
             : [];
         // La galería de la ficha muestra el establecimiento; las fotos del catálogo ya viajan dentro

@@ -63,4 +63,19 @@ public sealed class PushNotificationTests
         subscription.MarkFailed(DateTimeOffset.UtcNow, true);
         Assert.False(subscription.IsActive);
     }
+
+    [Fact]
+    public void Promotion_requires_relative_deep_link_and_bounded_validity()
+    {
+        var now = DateTimeOffset.UtcNow;
+        Assert.Equal("INVALID_PROMOTION", Assert.Throws<DomainException>(() => new BusinessPromotion(
+            Guid.NewGuid(), Guid.NewGuid(), "Oferta", null, "Ver", "https://outside.example",
+            now, now.AddDays(1), true, now)).Code);
+        Assert.Equal("INVALID_PROMOTION", Assert.Throws<DomainException>(() => new BusinessPromotion(
+            Guid.NewGuid(), Guid.NewGuid(), "Oferta", null, "Ver", "//outside.example",
+            now, now.AddDays(1), true, now)).Code);
+        Assert.Equal("INVALID_PROMOTION", Assert.Throws<DomainException>(() => new BusinessPromotion(
+            Guid.NewGuid(), Guid.NewGuid(), "Oferta", null, "Ver", "/negocio",
+            now, now.AddDays(32), true, now)).Code);
+    }
 }

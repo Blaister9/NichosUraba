@@ -62,7 +62,7 @@ public sealed partial class OrderingApiTests(PostgresWebFactory factory) : IClas
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var entity = await db.Products.SingleAsync(x => x.Id == product.Id);
         entity.Update(entity.ProductCategoryId, entity.Name, entity.Description, product.ReferencePrice + 9000,
-            entity.DisplayOrder, true, entity.Version);
+            entity.DisplayOrder, true, true, entity.Version);
         await db.SaveChangesAsync();
         var tracked = await client.GetFromJsonAsync<PickupOrderTrackingDto>(
             $"/api/v1/public/orders/{created.TrackingCode}", Json);

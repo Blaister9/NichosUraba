@@ -16,10 +16,26 @@ public interface IPushNotificationService
         CancellationToken cancellationToken = default);
     Task UnregisterClientAsync(PushAudience audience, string publicCode, WebPushUnsubscribeRequest request,
         CancellationToken cancellationToken = default);
+    Task<WebPushSubscriptionDto> RegisterProductRestockAsync(string businessSlug, Guid productId,
+        WebPushSubscriptionRequest request, CancellationToken cancellationToken = default);
+    Task UnregisterProductRestockAsync(string businessSlug, Guid productId,
+        WebPushUnsubscribeRequest request, CancellationToken cancellationToken = default);
+    Task<WebPushSubscriptionDto> RegisterBusinessFollowerAsync(string businessSlug,
+        WebPushSubscriptionRequest request, CancellationToken cancellationToken = default);
+    Task UnregisterBusinessFollowerAsync(string businessSlug, WebPushUnsubscribeRequest request,
+        CancellationToken cancellationToken = default);
     Task NotifyBusinessAsync(Guid businessId, PushMessage message,
         CancellationToken cancellationToken = default);
     Task NotifyClientAsync(PushAudience audience, Guid entityId, PushMessage message,
         CancellationToken cancellationToken = default);
+    Task NotifyProductRestockedAsync(Guid businessId, Guid productId, string productName,
+        string businessSlug, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BusinessPromotionDto>> GetPublicPromotionsAsync(
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BusinessPromotionDto>> GetBusinessPromotionsAsync(Guid userId, Guid businessId,
+        CancellationToken cancellationToken = default);
+    Task<BusinessPromotionSaveResultDto> SavePromotionAsync(Guid userId, Guid businessId, Guid? promotionId,
+        SaveBusinessPromotionRequest request, CancellationToken cancellationToken = default);
 }
 
 public sealed record SchedulingContext(Business Business, Service Service, IReadOnlyList<BusinessHour> Hours,

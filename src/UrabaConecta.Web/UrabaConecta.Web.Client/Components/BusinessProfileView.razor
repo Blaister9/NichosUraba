@@ -79,6 +79,17 @@
     </div>
 </section>
 
+@if (!Profile.IsPreview)
+{
+    <section class="follow-business" aria-label="Promociones de este negocio">
+        <PushPrompt RegistrationPath="@($"/api/v1/public/businesses/{Profile.Slug}/followers/push-subscriptions")"
+            Title="¿Quieres volver por aquí?"
+            Description="Sigue este negocio para recibir únicamente sus promociones."
+            ActiveDescription="Sigues este negocio en este dispositivo."
+            ButtonLabel="Seguir negocio" Compact="true" />
+    </section>
+}
+
 @if (!string.IsNullOrWhiteSpace(Profile.CustomerInstructions))
 {
     <section class="notice"><h2>Antes de venir</h2><p>@Profile.CustomerInstructions</p></section>
@@ -176,7 +187,17 @@
                             <span class="precio">@producto.ReferencePrice.ToString("C0", Colombia)</span>
                             @if (!Profile.IsPreview)
                             {
-                                <a class="button-link secondary" href="/negocios/@Profile.Slug/pedidos">Agregar</a>
+                                @if (producto.IsAvailable)
+                                {
+                                    <a class="button-link secondary" href="/negocios/@Profile.Slug/pedidos#producto-@producto.Id">Agregar</a>
+                                }
+                                else
+                                {
+                                    <span class="stock-status">No disponible</span>
+                                    <PushPrompt RegistrationPath="@($"/api/v1/public/businesses/{Profile.Slug}/products/{producto.Id}/push-subscriptions")"
+                                        Title="¿Lo estabas buscando?" Description="Te avisamos cuando vuelva."
+                                        ActiveDescription="Tu aviso está activo." ButtonLabel="Avísame cuando vuelva" Compact="true" />
+                                }
                             }
                         </div>
                     </article>

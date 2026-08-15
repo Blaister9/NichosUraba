@@ -39,11 +39,12 @@ public sealed class Product : IBusinessOwned
 {
     private Product() { }
     public Product(Guid id, Guid businessId, Guid productCategoryId, string name, string? description,
-        decimal referencePrice, int displayOrder = 0)
+        decimal referencePrice, int displayOrder = 0, bool isAvailable = true)
     {
         Validate(name, description, referencePrice, displayOrder);
-        (Id, BusinessId, ProductCategoryId, Name, Description, ReferencePrice, DisplayOrder) =
-            (id, businessId, productCategoryId, name.Trim(), description?.Trim() ?? "", referencePrice, displayOrder);
+        (Id, BusinessId, ProductCategoryId, Name, Description, ReferencePrice, DisplayOrder, IsAvailable) =
+            (id, businessId, productCategoryId, name.Trim(), description?.Trim() ?? "", referencePrice,
+                displayOrder, isAvailable);
     }
     public Guid Id { get; private set; }
     public Guid BusinessId { get; private set; }
@@ -53,18 +54,24 @@ public sealed class Product : IBusinessOwned
     public decimal ReferencePrice { get; private set; }
     public int DisplayOrder { get; private set; }
     public bool IsActive { get; private set; } = true;
+    /// <summary>
+    /// Visible y disponible son decisiones distintas: un producto agotado debe seguir en la tienda
+    /// para que una persona pueda pedir que le avisemos cuando vuelva.
+    /// </summary>
+    public bool IsAvailable { get; private set; } = true;
     public long Version { get; private set; }
     public void EnsureAvailable()
     {
-        if (!IsActive) throw new DomainException("PRODUCT_UNAVAILABLE", $"{Name} ya no está disponible.");
+        if (!IsActive || !IsAvailable)
+            throw new DomainException("PRODUCT_UNAVAILABLE", $"{Name} ya no está disponible.");
     }
     public void Update(Guid categoryId, string name, string? description, decimal price, int order,
-        bool active, long expectedVersion)
+        bool active, bool available, long expectedVersion)
     {
         if (expectedVersion != Version) throw new DomainException("CONCURRENCY_CONFLICT", "El producto cambió. Recargue la información.");
         Validate(name, description, price, order);
         ProductCategoryId = categoryId; Name = name.Trim(); Description = description?.Trim() ?? "";
-        ReferencePrice = price; DisplayOrder = order; IsActive = active; Version++;
+        ReferencePrice = price; DisplayOrder = order; IsActive = active; IsAvailable = available; Version++;
     }
     private static void Validate(string name, string? description, decimal price, int order)
     {

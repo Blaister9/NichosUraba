@@ -31,6 +31,7 @@ public static class DemoShowcaseSeeder
 
     private static readonly Guid QueueDefinitionId = Guid.Parse("77777777-7777-7777-7777-777777777710");
     private static readonly Guid PickupSettingsId = Guid.Parse("77777777-7777-7777-7777-777777777720");
+    private static readonly Guid BeautyPromotionId = Guid.Parse("77777777-7777-7777-7777-777777777760");
 
     private static readonly Guid[] BarberServiceIds =
     [
@@ -70,6 +71,7 @@ public static class DemoShowcaseSeeder
         await EnsureBusinessesAsync(db, cancellationToken);
         await EnsureBarberAsync(db, cancellationToken);
         await EnsureBeautyStoreAsync(db, cancellationToken);
+        await EnsurePromotionAsync(db, cancellationToken);
         await EnsureOwnersAsync(scope.ServiceProvider, db, configuration, logger, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
 
@@ -213,6 +215,28 @@ public static class DemoShowcaseSeeder
         foreach (var product in products)
             if (!await db.Products.AnyAsync(x => x.Id == product.Id, cancellationToken))
                 db.Products.Add(product);
+    }
+
+    private static async Task EnsurePromotionAsync(AppDbContext db, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var promotion = await db.BusinessPromotions.SingleOrDefaultAsync(x => x.Id == BeautyPromotionId,
+            cancellationToken);
+        if (promotion is null)
+        {
+            db.BusinessPromotions.Add(new BusinessPromotion(BeautyPromotionId, BeautyBusinessId,
+                "¿Buscas un detalle para hoy?", "Labiales y paletas DEMO disponibles para recoger en Carepa.",
+                "Ver tienda", "/negocios/lumina-coral-beauty-demo/pedidos", now.AddHours(-1),
+                now.AddDays(14), true, now));
+        }
+        else if (!promotion.IsCurrent(now))
+        {
+            promotion.Update("¿Buscas un detalle para hoy?",
+                "Labiales y paletas DEMO disponibles para recoger en Carepa.", "Ver tienda",
+                "/negocios/lumina-coral-beauty-demo/pedidos", now.AddHours(-1), now.AddDays(14),
+                true, promotion.Version, now);
+        }
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     private static async Task EnsureHoursAsync(AppDbContext db, Guid businessId, TimeOnly from,

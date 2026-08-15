@@ -32,8 +32,8 @@ else if (menu is not null && created is null)
             <div class="catalogo">
                 @foreach (var product in menu.Products.Where(x => x.CategoryId == category.Id))
                 {
-                    <article class="catalogo-item @(Quantity(product.Id) > 0 ? "en-carrito" : null)"
-                             data-testid="product-card" data-tono="producto">
+                    <article class="catalogo-item tienda-producto @(Quantity(product.Id) > 0 ? "en-carrito" : null) @(!product.IsAvailable ? "agotado" : null)"
+                             id="producto-@product.Id" data-testid="product-card" data-tono="producto">
                         @if (product.ImageUrl is { Length: > 0 } foto)
                         {
                             <img class="catalogo-foto" src="@foto" width="184" height="184" loading="lazy"
@@ -49,6 +49,18 @@ else if (menu is not null && created is null)
                         </div>
                         <div class="catalogo-accion">
                             <span class="precio">@product.ReferencePrice.ToString("C0", Colombia)</span>
+                            @if (!product.IsAvailable)
+                            {
+                                <span class="stock-status">No disponible</span>
+                                <PushPrompt
+                                    RegistrationPath="@($"/api/v1/public/businesses/{Slug}/products/{product.Id}/push-subscriptions")"
+                                    Title="¿Quieres este producto?"
+                                    Description="Te avisamos una sola vez cuando vuelva a estar disponible."
+                                    ActiveDescription="Te avisaremos cuando vuelva. Puedes cancelar cuando quieras."
+                                    ButtonLabel="Avísame cuando vuelva" Compact="true" />
+                            }
+                            else
+                            {
                             @* Un control de una sola línea. Antes los dos botones ocupaban el ancho
                                de la tarjeta y la cantidad quedaba suelta entre ellos: tres pisos
                                para sumar una hamburguesa. *@
@@ -59,6 +71,7 @@ else if (menu is not null && created is null)
                                 <button class="secondary" type="button" aria-label="Agregar uno de @product.Name"
                                         disabled="@(!Ready)" @onclick="() => Change(product.Id, 1)">+</button>
                             </div>
+                            }
                         </div>
                     </article>
                 }

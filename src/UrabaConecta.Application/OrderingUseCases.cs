@@ -189,15 +189,29 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
         var category = await store.GetCategoryAsync(businessId, request.CategoryId, ct);
         if (category is null) throw new ApiException("PRODUCT_CATEGORY_NOT_FOUND", "La categoría no pertenece al establecimiento.", 404);
         Product product;
-        if (productId is null) { product = TryDomain(() => new Product(Guid.NewGuid(), businessId, category.Id, request.Name, request.Description, request.ReferencePrice, request.DisplayOrder)); store.AddProduct(product); }
+        var becameAvailable = false;
+        if (productId is null)
+        {
+            product = TryDomain(() => new Product(Guid.NewGuid(), businessId, category.Id, request.Name,
+                request.Description, request.ReferencePrice, request.DisplayOrder, request.IsAvailable));
+            store.AddProduct(product);
+        }
         else
         {
             product = await store.GetProductAsync(businessId, productId.Value, ct)
                 ?? throw new ApiException("PRODUCT_NOT_FOUND", "No encontramos el producto.", 404);
+            becameAvailable = !product.IsAvailable && request.IsAvailable && request.IsActive;
             TryDomain(() => product.Update(category.Id, request.Name, request.Description, request.ReferencePrice,
-                request.DisplayOrder, request.IsActive, request.Version));
+                request.DisplayOrder, request.IsActive, request.IsAvailable, request.Version));
         }
-        await store.SaveChangesAsync(ct); return ProductDto(product);
+        await store.SaveChangesAsync(ct);
+        if (becameAvailable)
+        {
+            var business = await store.GetBusinessAsync(businessId, ct)
+                ?? throw new ApiException("BUSINESS_NOT_FOUND", "No encontramos el establecimiento.", 404);
+            await push.NotifyProductRestockedAsync(businessId, product.Id, product.Name, business.Slug, ct);
+        }
+        return ProductDto(product);
     }
 
     public async Task<PickupOrderBoardDto> ListOrdersAsync(Guid userId, Guid businessId,
@@ -277,7 +291,7 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
         var photo = photos?.GetValueOrDefault(x.Id);
         return new(x.Id, x.ProductCategoryId, x.Name, x.Description, x.ReferencePrice, x.DisplayOrder,
             x.IsActive, x.Version,
-            photo is null ? null : storage.PublicUrl(photo.StorageKey), photo?.AltText);
+            photo is null ? null : storage.PublicUrl(photo.StorageKey), photo?.AltText, x.IsAvailable);
     }
     private static PickupOrderSettingsDto SettingsDto(PickupOrderSettings x) => new(x.Id, x.BusinessId,
         x.IsEnabled, x.PublicMessage, x.MinimumPreparationMinutes, x.SlotIntervalMinutes,

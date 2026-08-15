@@ -2,7 +2,7 @@
 
 @if (available)
 {
-    <aside class="push-prompt" data-testid="push-prompt">
+    <aside class="push-prompt @(Compact ? "is-compact" : null)" data-testid="push-prompt">
         <div class="push-prompt-icon" aria-hidden="true">●</div>
         <div class="push-prompt-copy">
             <strong>@Title</strong>
@@ -29,6 +29,7 @@
     [Parameter] public string Description { get; set; } = "Recibe una alerta útil aunque no tengas UrabáConecta abierto.";
     [Parameter] public string ActiveDescription { get; set; } = "Los avisos están activos en este dispositivo.";
     [Parameter] public string ButtonLabel { get; set; } = "Activar avisos en este dispositivo";
+    [Parameter] public bool Compact { get; set; }
     private bool available, active, busy;
     private string permission = "default";
     private string? error;
@@ -38,9 +39,10 @@
         if (!firstRender) return;
         try
         {
-            var state = await JS.InvokeAsync<PushState>("urabaPush.availability");
+            var state = await JS.InvokeAsync<PushState>("urabaPush.availability", RegistrationPath);
             available = state.Supported && state.Configured;
             permission = state.Permission;
+            active = state.Active;
             StateHasChanged();
         }
         catch (JSException) { }

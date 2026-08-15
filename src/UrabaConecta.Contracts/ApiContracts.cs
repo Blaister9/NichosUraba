@@ -317,7 +317,7 @@ public sealed class SaveAvailabilityExceptionRequest
 public sealed record ProductCategoryDto(Guid Id, string Name, int DisplayOrder, bool IsActive, long Version);
 public sealed record ProductDto(Guid Id, Guid CategoryId, string Name, string Description,
     decimal ReferencePrice, int DisplayOrder, bool IsActive, long Version,
-    string? ImageUrl = null, string? ImageAltText = null);
+    string? ImageUrl = null, string? ImageAltText = null, bool IsAvailable = true);
 public sealed record PickupMenuDto(string BusinessName, string BusinessSlug, string PublicMessage,
     IReadOnlyList<ProductCategoryDto> Categories, IReadOnlyList<ProductDto> Products);
 public sealed record PickupSlotDto(DateTimeOffset Start, DateTimeOffset End, int RemainingCapacity);
@@ -351,8 +351,30 @@ public sealed class SaveProductRequest
     [Range(0, 100000000)] public decimal ReferencePrice { get; set; }
     [Range(0, 10000)] public int DisplayOrder { get; set; }
     public bool IsActive { get; set; } = true;
+    public bool IsAvailable { get; set; } = true;
     public long Version { get; set; }
 }
+
+public sealed record BusinessPromotionDto(Guid Id, Guid BusinessId, string BusinessSlug,
+    string BusinessName, OptionDto Municipality, OptionDto Category, string Headline, string Body,
+    string CtaLabel, string DeepLink, DateTimeOffset StartsAtUtc, DateTimeOffset EndsAtUtc,
+    bool IsActive, DateTimeOffset? PushSentAtUtc, string? ImageUrl, long Version);
+
+public sealed class SaveBusinessPromotionRequest
+{
+    [Required, StringLength(90, MinimumLength = 3)] public string Headline { get; set; } = "";
+    [StringLength(220)] public string? Body { get; set; }
+    [Required, StringLength(32, MinimumLength = 2)] public string CtaLabel { get; set; } = "Ver más";
+    [Required, StringLength(500, MinimumLength = 2)] public string DeepLink { get; set; } = "/";
+    public DateTimeOffset StartsAtUtc { get; set; }
+    public DateTimeOffset EndsAtUtc { get; set; }
+    public bool IsActive { get; set; } = true;
+    public bool NotifyFollowers { get; set; }
+    public long Version { get; set; }
+}
+
+public sealed record BusinessPromotionSaveResultDto(BusinessPromotionDto Promotion, bool PushSent,
+    string Message, DateTimeOffset? NextPushAllowedAtUtc);
 public sealed class CreatePickupOrderLineRequest
 {
     [Required] public Guid ProductId { get; set; }
@@ -582,6 +604,12 @@ public interface IUrabaConectaApi
     Task<IReadOnlyList<ProductDto>> GetProductsAsync(Guid businessId, CancellationToken cancellationToken = default);
     Task<ProductDto> SaveProductAsync(Guid businessId, Guid? productId, SaveProductRequest request,
         CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BusinessPromotionDto>> GetPublicPromotionsAsync(
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BusinessPromotionDto>> GetBusinessPromotionsAsync(Guid businessId,
+        CancellationToken cancellationToken = default);
+    Task<BusinessPromotionSaveResultDto> SaveBusinessPromotionAsync(Guid businessId, Guid? promotionId,
+        SaveBusinessPromotionRequest request, CancellationToken cancellationToken = default);
     Task<PickupOrderBoardDto> GetPickupOrdersAsync(Guid businessId, string? status = null,
         DateOnly? date = null, CancellationToken cancellationToken = default);
     Task<PickupOrderAdminDto> ChangePickupOrderAsync(Guid businessId, Guid orderId, string action,

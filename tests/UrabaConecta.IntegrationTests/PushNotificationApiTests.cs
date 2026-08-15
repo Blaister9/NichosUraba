@@ -223,6 +223,92 @@ public sealed class PushNotificationApiTests(PushWebFactory factory) : IClassFix
         factory.Transport.Reset();
     }
 
+    [Fact]
+    public async Task Unavailable_product_opt_in_receives_one_restock_push_with_product_deep_link()
+    {
+        using var owner = factory.CreateClient(new() { AllowAutoRedirect = false, HandleCookies = true });
+        using var visitor = factory.CreateClient();
+        await PlatformAdministrationApiTests.Login(owner, DevelopmentSeeder.SazonOwnerEmail);
+        var products = await owner.GetFromJsonAsync<ProductDto[]>(
+            $"/api/v1/businesses/{DevelopmentSeeder.SazonBusinessId}/products");
+        var product = products!.First();
+
+        product = await SaveProduct(owner, product, available: false);
+        var menu = await visitor.GetFromJsonAsync<PickupMenuDto>(
+            "/api/v1/public/businesses/restaurante-sazon-local/menu");
+        Assert.Contains(menu!.Products, x => x.Id == product.Id && !x.IsAvailable);
+
+        var subscription = Subscription("restock");
+        Assert.Equal(HttpStatusCode.OK, (await visitor.PostAsJsonAsync(
+            $"/api/v1/public/businesses/restaurante-sazon-local/products/{product.Id}/push-subscriptions",
+            subscription)).StatusCode);
+        factory.Transport.Reset();
+
+        product = await SaveProduct(owner, product, available: true);
+        var sent = Assert.Single(factory.Transport.Sent, x => x.Audience == PushAudience.ProductRestock);
+        Assert.Equal($"Volvió {product.Name}", sent.Message.Title);
+        Assert.Equal($"/negocios/restaurante-sazon-local/pedidos#producto-{product.Id}", sent.Message.Url);
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var stored = await db.WebPushSubscriptions.SingleAsync(x => x.Endpoint == subscription.Endpoint);
+        Assert.False(stored.IsActive);
+    }
+
+    [Fact]
+    public async Task Followed_business_receives_only_its_promotion_and_frequency_cap_blocks_second_push()
+    {
+        using var owner = factory.CreateClient(new() { AllowAutoRedirect = false, HandleCookies = true });
+        using var visitor = factory.CreateClient();
+        await PlatformAdministrationApiTests.Login(owner, DevelopmentSeeder.SazonOwnerEmail);
+        var follower = Subscription("follower");
+        Assert.Equal(HttpStatusCode.OK, (await visitor.PostAsJsonAsync(
+            "/api/v1/public/businesses/restaurante-sazon-local/followers/push-subscriptions", follower)).StatusCode);
+        factory.Transport.Reset();
+
+        var first = await owner.PostAsJsonAsync(
+            $"/api/v1/businesses/{DevelopmentSeeder.SazonBusinessId}/promotions", Promotion("Almuerzo listo"));
+        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+        var firstResult = await first.Content.ReadFromJsonAsync<BusinessPromotionSaveResultDto>();
+        Assert.True(firstResult!.PushSent);
+        var sent = Assert.Single(factory.Transport.Sent, x => x.Audience == PushAudience.BusinessFollower);
+        Assert.Equal("Almuerzo listo", sent.Message.Title);
+        Assert.Equal("/negocios/restaurante-sazon-local/pedidos", sent.Message.Url);
+
+        factory.Transport.Reset();
+        var second = await owner.PostAsJsonAsync(
+            $"/api/v1/businesses/{DevelopmentSeeder.SazonBusinessId}/promotions", Promotion("Segunda novedad"));
+        var secondResult = await second.Content.ReadFromJsonAsync<BusinessPromotionSaveResultDto>();
+        Assert.False(secondResult!.PushSent);
+        Assert.NotNull(secondResult.NextPushAllowedAtUtc);
+        Assert.DoesNotContain(factory.Transport.Sent, x => x.Audience == PushAudience.BusinessFollower);
+
+        var publicPromotions = await visitor.GetFromJsonAsync<BusinessPromotionDto[]>("/api/v1/public/promotions");
+        Assert.Contains(publicPromotions!, x => x.Headline == "Almuerzo listo" &&
+            x.BusinessSlug == "restaurante-sazon-local");
+    }
+
+    private static SaveBusinessPromotionRequest Promotion(string headline) => new()
+    {
+        Headline = headline, Body = "Disponible para recoger hoy.", CtaLabel = "Pedir",
+        DeepLink = "/negocios/restaurante-sazon-local/pedidos", StartsAtUtc = DateTimeOffset.UtcNow.AddMinutes(-1),
+        EndsAtUtc = DateTimeOffset.UtcNow.AddDays(2), IsActive = true, NotifyFollowers = true
+    };
+
+    private static async Task<ProductDto> SaveProduct(HttpClient owner, ProductDto product, bool available)
+    {
+        var response = await owner.PutAsJsonAsync(
+            $"/api/v1/businesses/{DevelopmentSeeder.SazonBusinessId}/products/{product.Id}",
+            new SaveProductRequest
+            {
+                CategoryId = product.CategoryId, Name = product.Name, Description = product.Description,
+                ReferencePrice = product.ReferencePrice, DisplayOrder = product.DisplayOrder,
+                IsActive = product.IsActive, IsAvailable = available, Version = product.Version
+            });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<ProductDto>())!;
+    }
+
     private static async Task<QueueTicketCreatedDto> JoinQueue(HttpClient client, string alias)
     {
         var response = await client.PostAsJsonAsync(

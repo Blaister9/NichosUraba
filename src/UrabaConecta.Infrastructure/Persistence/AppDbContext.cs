@@ -34,6 +34,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<PickupOrderLine> PickupOrderLines => Set<PickupOrderLine>();
     public DbSet<BusinessImage> BusinessImages => Set<BusinessImage>();
     public DbSet<WebPushSubscription> WebPushSubscriptions => Set<WebPushSubscription>();
+    public DbSet<BusinessPromotion> BusinessPromotions => Set<BusinessPromotion>();
     public DbSet<AccessInvitation> AccessInvitations => Set<AccessInvitation>();
     public DbSet<BusinessStatusChange> BusinessStatusChanges => Set<BusinessStatusChange>();
     public DbSet<PlatformAccessAudit> PlatformAccessAudits => Set<PlatformAccessAudit>();
@@ -293,6 +294,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             x.HasKey(e => e.Id); x.HasIndex(e => new { e.BusinessId, e.Id }).IsUnique();
             x.HasIndex(e => new { e.BusinessId, e.ProductCategoryId, e.IsActive, e.DisplayOrder });
             x.Property(e => e.Name).HasMaxLength(120); x.Property(e => e.Description).HasMaxLength(500);
+            x.Property(e => e.IsAvailable).HasDefaultValue(true);
             x.Property(e => e.ReferencePrice).HasPrecision(12, 2); x.Property(e => e.Version).IsConcurrencyToken();
             x.HasOne<ProductCategory>().WithMany().HasForeignKey(e => new { e.BusinessId, e.ProductCategoryId })
                 .HasPrincipalKey(e => new { e.BusinessId, e.Id }).OnDelete(DeleteBehavior.Restrict);
@@ -395,6 +397,19 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             x.Property(e => e.Version).IsConcurrencyToken();
             x.HasOne<Business>().WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Cascade);
             x.HasOne<ApplicationUser>().WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        builder.Entity<BusinessPromotion>(x =>
+        {
+            x.ToTable("business_promotions");
+            x.HasKey(e => e.Id);
+            x.HasIndex(e => new { e.BusinessId, e.IsActive, e.StartsAtUtc, e.EndsAtUtc });
+            x.HasIndex(e => new { e.BusinessId, e.PushSentAtUtc });
+            x.Property(e => e.Headline).HasMaxLength(90);
+            x.Property(e => e.Body).HasMaxLength(220);
+            x.Property(e => e.CtaLabel).HasMaxLength(32);
+            x.Property(e => e.DeepLink).HasMaxLength(500);
+            x.Property(e => e.Version).IsConcurrencyToken();
+            x.HasOne<Business>().WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Cascade);
         });
         builder.Entity<AccessInvitation>(x =>
         {

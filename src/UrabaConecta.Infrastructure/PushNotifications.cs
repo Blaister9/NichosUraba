@@ -71,7 +71,7 @@ public sealed class WebPushTransport(IOptions<WebPushOptions> options) : IWebPus
 
 public sealed class PushNotificationService(AppDbContext db, IPublicCodeService codes,
     IPersonalDataProtector protector, IWebPushTransport transport, IOptions<WebPushOptions> options,
-    TimeProvider clock, ILogger<PushNotificationService> logger) : IPushNotificationService
+    IObjectStorage storage, TimeProvider clock, ILogger<PushNotificationService> logger) : IPushNotificationService
 {
     private readonly WebPushOptions settings = options.Value;
     public PushConfigurationDto Configuration => new(settings.IsConfigured,
@@ -136,6 +136,60 @@ public sealed class PushNotificationService(AppDbContext db, IPublicCodeService 
         await Deactivate(audience, target.EntityId.ToString("N"), request.Endpoint, cancellationToken);
     }
 
+    public async Task<WebPushSubscriptionDto> RegisterProductRestockAsync(string businessSlug, Guid productId,
+        WebPushSubscriptionRequest request, CancellationToken cancellationToken = default)
+    {
+        DemandConfigured(); Validate(request);
+        var target = await (from product in db.Products.AsNoTracking()
+            join business in db.Businesses.AsNoTracking() on product.BusinessId equals business.Id
+            where business.Slug == businessSlug && business.IsPublished &&
+                  business.Status == BusinessStatus.Active && product.Id == productId && product.IsActive
+            select new { business.Id, business.Slug, ProductId = product.Id, product.IsAvailable })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (target is null)
+            throw new ApiException("PRODUCT_NOT_FOUND", "No encontramos ese producto.", 404);
+        if (target.IsAvailable)
+            throw new ApiException("PRODUCT_ALREADY_AVAILABLE", "Este producto ya está disponible.", 409);
+        var deepLink = $"/negocios/{Uri.EscapeDataString(target.Slug)}/pedidos#producto-{target.ProductId}";
+        return await Upsert(target.Id, PushAudience.ProductRestock, target.ProductId.ToString("N"), request,
+            null, target.ProductId, protector.Protect(deepLink), cancellationToken);
+    }
+
+    public async Task UnregisterProductRestockAsync(string businessSlug, Guid productId,
+        WebPushUnsubscribeRequest request, CancellationToken cancellationToken = default)
+    {
+        var exists = await (from product in db.Products.AsNoTracking()
+            join business in db.Businesses.AsNoTracking() on product.BusinessId equals business.Id
+            where business.Slug == businessSlug && product.Id == productId
+            select product.Id).AnyAsync(cancellationToken);
+        if (!exists) throw new ApiException("PRODUCT_NOT_FOUND", "No encontramos ese producto.", 404);
+        await Deactivate(PushAudience.ProductRestock, productId.ToString("N"), request.Endpoint,
+            cancellationToken);
+    }
+
+    public async Task<WebPushSubscriptionDto> RegisterBusinessFollowerAsync(string businessSlug,
+        WebPushSubscriptionRequest request, CancellationToken cancellationToken = default)
+    {
+        DemandConfigured(); Validate(request);
+        var business = await db.Businesses.AsNoTracking().SingleOrDefaultAsync(x => x.Slug == businessSlug &&
+            x.IsPublished && x.Status == BusinessStatus.Active, cancellationToken)
+            ?? throw new ApiException("BUSINESS_NOT_FOUND", "No encontramos ese negocio.", 404);
+        var deepLink = $"/negocios/{Uri.EscapeDataString(business.Slug)}";
+        return await Upsert(business.Id, PushAudience.BusinessFollower, business.Id.ToString("N"), request,
+            null, business.Id, protector.Protect(deepLink), cancellationToken);
+    }
+
+    public async Task UnregisterBusinessFollowerAsync(string businessSlug, WebPushUnsubscribeRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var businessId = await db.Businesses.AsNoTracking().Where(x => x.Slug == businessSlug)
+            .Select(x => x.Id).SingleOrDefaultAsync(cancellationToken);
+        if (businessId == Guid.Empty)
+            throw new ApiException("BUSINESS_NOT_FOUND", "No encontramos ese negocio.", 404);
+        await Deactivate(PushAudience.BusinessFollower, businessId.ToString("N"), request.Endpoint,
+            cancellationToken);
+    }
+
     public async Task NotifyBusinessAsync(Guid businessId, PushMessage message,
         CancellationToken cancellationToken = default)
     {
@@ -160,6 +214,115 @@ public sealed class PushNotificationService(AppDbContext db, IPublicCodeService 
                 ? message.Url : protector.Unprotect(subscription.ProtectedDeepLink);
             await Deliver([subscription], message with { Url = link }, cancellationToken);
         }
+    }
+
+    public async Task NotifyProductRestockedAsync(Guid businessId, Guid productId, string productName,
+        string businessSlug, CancellationToken cancellationToken = default)
+    {
+        if (!settings.IsConfigured) return;
+        var started = clock.GetUtcNow();
+        var subscriptions = await db.WebPushSubscriptions.Where(x => x.BusinessId == businessId &&
+            x.Audience == PushAudience.ProductRestock && x.EntityId == productId && x.IsActive)
+            .ToListAsync(cancellationToken);
+        var message = new PushMessage($"Volvió {productName}", "Ya está disponible en UrabáConecta.",
+            $"/negocios/{Uri.EscapeDataString(businessSlug)}/pedidos#producto-{productId}",
+            $"restock-{productId}", true);
+        await Deliver(subscriptions, message, cancellationToken);
+        foreach (var subscription in subscriptions.Where(x => x.LastSuccessfulAtUtc >= started))
+            subscription.Deactivate(clock.GetUtcNow());
+        if (subscriptions.Any(x => x.LastSuccessfulAtUtc >= started)) await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<BusinessPromotionDto>> GetPublicPromotionsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var now = clock.GetUtcNow();
+        var promotions = await db.BusinessPromotions.AsNoTracking()
+            .Where(x => x.IsActive && x.StartsAtUtc <= now && x.EndsAtUtc > now)
+            .OrderByDescending(x => x.StartsAtUtc).Take(40).ToListAsync(cancellationToken);
+        return await ToPromotionDtos(promotions, publishedOnly: true, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<BusinessPromotionDto>> GetBusinessPromotionsAsync(Guid userId,
+        Guid businessId, CancellationToken cancellationToken = default)
+    {
+        await DemandPromotionAccess(userId, businessId, cancellationToken);
+        var promotions = await db.BusinessPromotions.AsNoTracking().Where(x => x.BusinessId == businessId)
+            .OrderByDescending(x => x.CreatedAtUtc).Take(50).ToListAsync(cancellationToken);
+        return await ToPromotionDtos(promotions, publishedOnly: false, cancellationToken);
+    }
+
+    public async Task<BusinessPromotionSaveResultDto> SavePromotionAsync(Guid userId, Guid businessId,
+        Guid? promotionId, SaveBusinessPromotionRequest request, CancellationToken cancellationToken = default)
+    {
+        await DemandPromotionAccess(userId, businessId, cancellationToken);
+        var now = clock.GetUtcNow();
+        BusinessPromotion promotion;
+        try
+        {
+            if (promotionId is null)
+            {
+                promotion = new BusinessPromotion(Guid.NewGuid(), businessId, request.Headline, request.Body,
+                    request.CtaLabel, request.DeepLink, request.StartsAtUtc, request.EndsAtUtc,
+                    request.IsActive, now);
+                db.BusinessPromotions.Add(promotion);
+            }
+            else
+            {
+                promotion = await db.BusinessPromotions.SingleOrDefaultAsync(x => x.BusinessId == businessId &&
+                    x.Id == promotionId, cancellationToken)
+                    ?? throw new ApiException("PROMOTION_NOT_FOUND", "No encontramos esa promoción.", 404);
+                promotion.Update(request.Headline, request.Body, request.CtaLabel, request.DeepLink,
+                    request.StartsAtUtc, request.EndsAtUtc, request.IsActive, request.Version, now);
+            }
+        }
+        catch (DomainException ex)
+        {
+            throw new ApiException(ex.Code, ex.Message, ex.Code == "CONCURRENCY_CONFLICT" ? 409 : 400);
+        }
+        await db.SaveChangesAsync(cancellationToken);
+
+        var sent = false;
+        DateTimeOffset? nextAllowed = null;
+        var message = "Promoción guardada. Sólo aparece durante su vigencia.";
+        if (request.NotifyFollowers)
+        {
+            var lastSent = await db.BusinessPromotions.AsNoTracking()
+                .Where(x => x.BusinessId == businessId && x.PushSentAtUtc != null)
+                .MaxAsync(x => x.PushSentAtUtc, cancellationToken);
+            nextAllowed = lastSent?.AddHours(24);
+            if (nextAllowed > now)
+            {
+                message = $"Promoción guardada. El próximo aviso puede enviarse después de {nextAllowed:dd/MM HH:mm}.";
+            }
+            else if (!settings.IsConfigured)
+            {
+                message = "Promoción guardada. Push no está configurado en este entorno.";
+            }
+            else
+            {
+                var followers = await db.WebPushSubscriptions.Where(x => x.BusinessId == businessId &&
+                    x.Audience == PushAudience.BusinessFollower && x.EntityId == businessId && x.IsActive)
+                    .ToListAsync(cancellationToken);
+                if (followers.Count == 0)
+                {
+                    message = "Promoción guardada. El negocio todavía no tiene seguidores con avisos activos.";
+                }
+                else
+                {
+                    await Deliver(followers, new PushMessage(promotion.Headline,
+                        string.IsNullOrWhiteSpace(promotion.Body) ? "Hay una novedad en el negocio que sigues." : promotion.Body,
+                        promotion.DeepLink, $"promotion-{promotion.Id}", true), cancellationToken);
+                    promotion.MarkPushSent(now);
+                    await db.SaveChangesAsync(cancellationToken);
+                    sent = true; nextAllowed = now.AddHours(24);
+                    message = $"Promoción guardada y enviada a {followers.Count} dispositivo(s) seguidor(es).";
+                }
+            }
+        }
+
+        var dto = (await ToPromotionDtos([promotion], publishedOnly: false, cancellationToken)).Single();
+        return new(dto, sent, message, nextAllowed);
     }
 
     private async Task<WebPushSubscriptionDto> Upsert(Guid businessId, PushAudience audience, string scopeKey,
@@ -219,6 +382,46 @@ public sealed class PushNotificationService(AppDbContext db, IPublicCodeService 
         }
         if (subscriptions.Count > 0) await db.SaveChangesAsync(ct);
     }
+
+    private async Task DemandPromotionAccess(Guid userId, Guid businessId, CancellationToken ct)
+    {
+        var allowed = await db.BusinessMemberships.AsNoTracking().AnyAsync(x => x.UserId == userId &&
+            x.BusinessId == businessId && x.IsActive &&
+            (x.Role == MembershipRole.Owner || x.CanManageConfiguration), ct);
+        if (!allowed)
+            throw new ApiException("MEMBERSHIP_FORBIDDEN", "No tienes permiso para publicar promociones.", 403);
+    }
+
+    private async Task<IReadOnlyList<BusinessPromotionDto>> ToPromotionDtos(
+        IReadOnlyList<BusinessPromotion> promotions, bool publishedOnly, CancellationToken ct)
+    {
+        if (promotions.Count == 0) return [];
+        var businessIds = promotions.Select(x => x.BusinessId).Distinct().ToArray();
+        var businesses = await (from business in db.Businesses.AsNoTracking()
+            join municipality in db.Municipalities.AsNoTracking() on business.MunicipalityId equals municipality.Id
+            join category in db.Categories.AsNoTracking() on business.CategoryId equals category.Id
+            where businessIds.Contains(business.Id) && (!publishedOnly ||
+                business.IsPublished && business.Status == BusinessStatus.Active)
+            select new PromotionBusinessInfo(business.Id, business.Slug, business.Name,
+                municipality.Slug, municipality.Name, category.Slug, category.Name))
+            .ToDictionaryAsync(x => x.Id, ct);
+        var covers = await db.BusinessImages.AsNoTracking()
+            .Where(x => businessIds.Contains(x.BusinessId) && x.Kind == BusinessImageKind.Cover && !x.IsDeleted)
+            .Select(x => new { x.BusinessId, x.StorageKey }).ToDictionaryAsync(x => x.BusinessId, ct);
+        return promotions.Where(x => businesses.ContainsKey(x.BusinessId)).Select(x =>
+        {
+            var business = businesses[x.BusinessId];
+            var imageUrl = covers.TryGetValue(x.BusinessId, out var cover) ? storage.PublicUrl(cover.StorageKey) : null;
+            return new BusinessPromotionDto(x.Id, x.BusinessId, business.Slug, business.Name,
+                new OptionDto(business.MunicipalitySlug, business.MunicipalityName),
+                new OptionDto(business.CategorySlug, business.CategoryName), x.Headline, x.Body,
+                x.CtaLabel, x.DeepLink, x.StartsAtUtc, x.EndsAtUtc, x.IsActive, x.PushSentAtUtc,
+                imageUrl, x.Version);
+        }).ToArray();
+    }
+
+    private sealed record PromotionBusinessInfo(Guid Id, string Slug, string Name,
+        string MunicipalitySlug, string MunicipalityName, string CategorySlug, string CategoryName);
 
     private async Task<(Guid BusinessId, Guid EntityId)> ResolveClient(PushAudience audience, string code,
         CancellationToken ct)

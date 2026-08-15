@@ -227,6 +227,19 @@ public sealed class HttpUrabaConectaApi(HttpClient http) : IUrabaConectaApi
         => await Read<ProductDto>(productId.HasValue
             ? await http.PutAsJsonAsync($"api/v1/businesses/{businessId}/products/{productId}", request, Json, cancellationToken)
             : await http.PostAsJsonAsync($"api/v1/businesses/{businessId}/products", request, Json, cancellationToken), cancellationToken);
+    public Task<IReadOnlyList<BusinessPromotionDto>> GetPublicPromotionsAsync(
+        CancellationToken cancellationToken = default)
+        => Get<IReadOnlyList<BusinessPromotionDto>>("api/v1/public/promotions", cancellationToken);
+    public Task<IReadOnlyList<BusinessPromotionDto>> GetBusinessPromotionsAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => Get<IReadOnlyList<BusinessPromotionDto>>($"api/v1/businesses/{businessId}/promotions", cancellationToken);
+    public async Task<BusinessPromotionSaveResultDto> SaveBusinessPromotionAsync(Guid businessId,
+        Guid? promotionId, SaveBusinessPromotionRequest request, CancellationToken cancellationToken = default)
+        => await Read<BusinessPromotionSaveResultDto>(promotionId.HasValue
+            ? await http.PutAsJsonAsync($"api/v1/businesses/{businessId}/promotions/{promotionId}", request,
+                Json, cancellationToken)
+            : await http.PostAsJsonAsync($"api/v1/businesses/{businessId}/promotions", request,
+                Json, cancellationToken), cancellationToken);
     public Task<PickupOrderBoardDto> GetPickupOrdersAsync(Guid businessId, string? status = null,
         DateOnly? date = null, CancellationToken cancellationToken = default)
         => Get<PickupOrderBoardDto>(

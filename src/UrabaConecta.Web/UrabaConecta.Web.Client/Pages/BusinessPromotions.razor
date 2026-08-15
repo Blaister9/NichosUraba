@@ -1,0 +1,147 @@
+@page "/panel/{BusinessId:guid}/promociones"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject IUrabaConectaApi Api
+
+<PageTitle>Promociones | UrabáConecta</PageTitle>
+<a class="back-link" href="/panel/@BusinessId/configuracion">← Configuración</a>
+<p class="eyebrow">Contenido para seguidores</p>
+<h1>Promociones</h1>
+<p class="lead">Publica una novedad breve en el feed. El aviso Push sólo llega a quienes decidieron seguir este negocio.</p>
+
+@if (error is not null) { <p class="error" role="alert">@error</p> }
+@if (message is not null) { <p class="success" role="status">@message</p> }
+
+<EditForm Model="form" OnValidSubmit="Create" FormName="promotion-create" class="config-form promotion-form">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+    <h2>Nueva promoción</h2>
+    <label>Pregunta o titular
+        <InputText @bind-Value="form.Headline" placeholder="¿Buscas un regalo para hoy?" />
+    </label>
+    <label>Detalle corto
+        <InputTextArea @bind-Value="form.Body" placeholder="Paletas disponibles para recoger esta tarde." />
+    </label>
+    <div class="form-grid">
+        <label>Botón <InputText @bind-Value="form.CtaLabel" /></label>
+        <label>Enlace <InputText @bind-Value="form.DeepLink" /></label>
+    </div>
+    <div class="form-grid">
+        <label>Empieza <input type="datetime-local" value="@startsLocal" @onchange="ChangeStart" /></label>
+        <label>Termina <input type="datetime-local" value="@endsLocal" @onchange="ChangeEnd" /></label>
+    </div>
+    <label class="check-option"><InputCheckbox @bind-Value="form.IsActive" /> Mostrar durante la vigencia</label>
+    <label class="check-option"><InputCheckbox @bind-Value="form.NotifyFollowers" /> Avisar ahora a seguidores</label>
+    <p class="meta">Protección anti-spam: máximo un aviso promocional por negocio cada 24 horas.</p>
+    <button class="primary" disabled="@busy">@(busy ? "Publicando…" : "Publicar promoción")</button>
+</EditForm>
+
+<section class="config-form" aria-labelledby="promotion-history">
+    <h2 id="promotion-history">Publicadas</h2>
+    @if (loading) { <p class="notice">Cargando promociones…</p> }
+    else if (promotions.Count == 0) { <p class="meta">Todavía no has publicado promociones.</p> }
+    else
+    {
+        <div class="config-list">
+            @foreach (var promotion in promotions)
+            {
+                <article class="config-row promotion-owner-row">
+                    <div>
+                        <span class="status @(promotion.IsActive ? "activo" : "inactivo")">@(promotion.IsActive ? "Activa" : "Inactiva")</span>
+                        <h3>@promotion.Headline</h3>
+                        <p>@promotion.Body</p>
+                        <p class="meta">Vigencia: @Local(promotion.StartsAtUtc) – @Local(promotion.EndsAtUtc)</p>
+                        <p class="meta">@(promotion.PushSentAtUtc is null ? "Sin Push promocional" : $"Push enviado {Local(promotion.PushSentAtUtc.Value)}")</p>
+                    </div>
+                    @if (promotion.IsActive)
+                    {
+                        <button type="button" class="secondary" disabled="@busy" @onclick="() => Deactivate(promotion)">Desactivar</button>
+                    }
+                </article>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter] public Guid BusinessId { get; set; }
+    private readonly TimeZoneInfo colombia = TimeZoneInfo.FindSystemTimeZoneById("America/Bogota");
+    private SaveBusinessPromotionRequest form = new();
+    private IReadOnlyList<BusinessPromotionDto> promotions = [];
+    private string startsLocal = "";
+    private string endsLocal = "";
+    private string? error, message;
+    private bool busy, loading = true;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        ResetForm();
+        await Load();
+    }
+
+    private void ResetForm()
+    {
+        var now = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, colombia);
+        startsLocal = now.ToString("yyyy-MM-ddTHH:mm");
+        endsLocal = now.AddDays(7).ToString("yyyy-MM-ddTHH:mm");
+        form = new SaveBusinessPromotionRequest
+        {
+            CtaLabel = "Ver negocio", DeepLink = "/", IsActive = true
+        };
+    }
+
+    private async Task Load()
+    {
+        loading = true;
+        try { promotions = await Api.GetBusinessPromotionsAsync(BusinessId); error = null; }
+        catch (ApiException ex) { error = ex.Message; }
+        finally { loading = false; }
+    }
+
+    private async Task Create()
+    {
+        if (!TryDates(out var starts, out var ends)) { error = "Revisa la vigencia de la promoción."; return; }
+        form.StartsAtUtc = starts; form.EndsAtUtc = ends;
+        busy = true; error = null; message = null;
+        try
+        {
+            var saved = await Api.SaveBusinessPromotionAsync(BusinessId, null, form);
+            message = saved.Message; ResetForm(); await Load();
+        }
+        catch (ApiException ex) { error = ex.Message; }
+        finally { busy = false; }
+    }
+
+    private async Task Deactivate(BusinessPromotionDto promotion)
+    {
+        busy = true; error = null; message = null;
+        try
+        {
+            var saved = await Api.SaveBusinessPromotionAsync(BusinessId, promotion.Id,
+                new SaveBusinessPromotionRequest
+                {
+                    Headline = promotion.Headline, Body = promotion.Body, CtaLabel = promotion.CtaLabel,
+                    DeepLink = promotion.DeepLink, StartsAtUtc = promotion.StartsAtUtc,
+                    EndsAtUtc = promotion.EndsAtUtc, IsActive = false, Version = promotion.Version
+                });
+            message = saved.Message; await Load();
+        }
+        catch (ApiException ex) { error = ex.Message; }
+        finally { busy = false; }
+    }
+
+    private bool TryDates(out DateTimeOffset starts, out DateTimeOffset ends)
+    {
+        starts = ends = default;
+        if (!DateTime.TryParse(startsLocal, out var startLocal) || !DateTime.TryParse(endsLocal, out var endLocal))
+            return false;
+        starts = new DateTimeOffset(startLocal, colombia.GetUtcOffset(startLocal)).ToUniversalTime();
+        ends = new DateTimeOffset(endLocal, colombia.GetUtcOffset(endLocal)).ToUniversalTime();
+        return ends > starts;
+    }
+
+    private void ChangeStart(ChangeEventArgs args) => startsLocal = args.Value?.ToString() ?? "";
+    private void ChangeEnd(ChangeEventArgs args) => endsLocal = args.Value?.ToString() ?? "";
+
+    private string Local(DateTimeOffset value) => TimeZoneInfo.ConvertTime(value, colombia).ToString("dd/MM h:mm tt");
+}

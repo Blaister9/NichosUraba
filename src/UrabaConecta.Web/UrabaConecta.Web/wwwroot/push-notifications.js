@@ -5,14 +5,24 @@
     return Uint8Array.from(atob(base64), char => char.charCodeAt(0));
   };
 
-  const configuration = async () => {
+  const followedScopes = () => {
+    try { return JSON.parse(localStorage.getItem('urabaPushScopes') || '[]'); }
+    catch { return []; }
+  };
+  const rememberScope = (path, active) => {
+    const scopes = new Set(followedScopes());
+    if (active) scopes.add(path); else scopes.delete(path);
+    localStorage.setItem('urabaPushScopes', JSON.stringify([...scopes]));
+  };
+
+  const configuration = async registrationPath => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window))
       return { supported: false, configured: false, permission: 'unsupported' };
     try {
       const response = await fetch('/api/v1/public/push/config', { credentials: 'same-origin' });
       const config = response.ok ? await response.json() : { enabled: false };
       return { supported: true, configured: Boolean(config.enabled), publicKey: config.publicKey,
-        permission: Notification.permission };
+        permission: Notification.permission, active: registrationPath ? followedScopes().includes(registrationPath) : false };
     } catch {
       return { supported: true, configured: false, permission: Notification.permission };
     }
@@ -37,6 +47,7 @@
       const response = await fetch(registrationPath, { method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(subscriptionBody(subscription)) });
       if (!response.ok) throw new Error('No pudimos guardar los avisos en este dispositivo.');
+      rememberScope(registrationPath, true);
       return { active: true, permission };
     },
     unsubscribe: async registrationPath => {
@@ -48,6 +59,7 @@
           body: JSON.stringify({ endpoint: subscription.endpoint }) });
         if (!response.ok) throw new Error('No pudimos desactivar los avisos.');
       }
+      rememberScope(registrationPath, false);
       return { active: false, permission: Notification.permission };
     }
   };

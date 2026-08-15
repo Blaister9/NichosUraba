@@ -347,6 +347,25 @@ publicApi.MapPost("/orders/{code}/push-subscriptions/remove",
     async (string code, WebPushUnsubscribeRequest request, IPushNotificationService push, CancellationToken ct) =>
     { await push.UnregisterClientAsync(PushAudience.PickupOrder, code, request, ct); return Results.NoContent(); })
     .RequireRateLimiting("public-write");
+publicApi.MapPost("/businesses/{slug}/products/{productId:guid}/push-subscriptions",
+    (string slug, Guid productId, WebPushSubscriptionRequest request, IPushNotificationService push,
+        CancellationToken ct) => push.RegisterProductRestockAsync(slug, productId, request, ct))
+    .RequireRateLimiting("public-write");
+publicApi.MapPost("/businesses/{slug}/products/{productId:guid}/push-subscriptions/remove",
+    async (string slug, Guid productId, WebPushUnsubscribeRequest request, IPushNotificationService push,
+        CancellationToken ct) =>
+    { await push.UnregisterProductRestockAsync(slug, productId, request, ct); return Results.NoContent(); })
+    .RequireRateLimiting("public-write");
+publicApi.MapPost("/businesses/{slug}/followers/push-subscriptions",
+    (string slug, WebPushSubscriptionRequest request, IPushNotificationService push, CancellationToken ct)
+        => push.RegisterBusinessFollowerAsync(slug, request, ct))
+    .RequireRateLimiting("public-write");
+publicApi.MapPost("/businesses/{slug}/followers/push-subscriptions/remove",
+    async (string slug, WebPushUnsubscribeRequest request, IPushNotificationService push, CancellationToken ct) =>
+    { await push.UnregisterBusinessFollowerAsync(slug, request, ct); return Results.NoContent(); })
+    .RequireRateLimiting("public-write");
+publicApi.MapGet("/promotions", (IPushNotificationService push, CancellationToken ct)
+    => push.GetPublicPromotionsAsync(ct));
 // PolicyVersion es la versión *efectiva*: la que el servidor exigirá en los formularios públicos.
 publicApi.MapGet("/legal", (IOptions<LegalOptions> legal, IConsentPolicyProvider consent) =>
 {
@@ -759,6 +778,17 @@ privateApi.MapPut("/{businessId:guid}/products/{productId:guid}",
     (Guid businessId, Guid productId, SaveProductRequest request, ClaimsPrincipal user,
         IOrderingUseCases orders, CancellationToken ct)
         => orders.SaveProductAsync(UserId(user), businessId, productId, request, ct));
+privateApi.MapGet("/{businessId:guid}/promotions",
+    (Guid businessId, ClaimsPrincipal user, IPushNotificationService push, CancellationToken ct)
+        => push.GetBusinessPromotionsAsync(UserId(user), businessId, ct));
+privateApi.MapPost("/{businessId:guid}/promotions",
+    async (Guid businessId, SaveBusinessPromotionRequest request, ClaimsPrincipal user,
+        IPushNotificationService push, CancellationToken ct) => Results.Created("",
+            await push.SavePromotionAsync(UserId(user), businessId, null, request, ct)));
+privateApi.MapPut("/{businessId:guid}/promotions/{promotionId:guid}",
+    (Guid businessId, Guid promotionId, SaveBusinessPromotionRequest request, ClaimsPrincipal user,
+        IPushNotificationService push, CancellationToken ct)
+        => push.SavePromotionAsync(UserId(user), businessId, promotionId, request, ct));
 privateApi.MapGet("/{businessId:guid}/orders",
     (Guid businessId, string? status, DateOnly? date, ClaimsPrincipal user,
         IOrderingUseCases orders, CancellationToken ct)

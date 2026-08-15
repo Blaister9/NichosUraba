@@ -11,7 +11,7 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
     IBusinessImageUseCases images, IPlatformHealthProvider health, IOptions<LegalOptions> legal,
     IConsentPolicyProvider consentPolicy, IHttpContextAccessor httpContext,
     AuthenticationStateProvider authentication, IServiceScopeFactory scopeFactory,
-    IOwnerDashboardUseCases dashboard) : IUrabaConectaApi
+    IOwnerDashboardUseCases dashboard, IPushNotificationService push) : IUrabaConectaApi
 {
     public Task<IReadOnlyList<BusinessCardDto>> GetBusinessesAsync(string? search = null, string? municipality = null,
         string? category = null, CancellationToken cancellationToken = default)
@@ -176,6 +176,15 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
     public async Task<ProductDto> SaveProductAsync(Guid businessId, Guid? productId, SaveProductRequest request,
         CancellationToken cancellationToken = default)
         => await orders.SaveProductAsync(await UserId(), businessId, productId, request, cancellationToken);
+    public Task<IReadOnlyList<BusinessPromotionDto>> GetPublicPromotionsAsync(
+        CancellationToken cancellationToken = default)
+        => push.GetPublicPromotionsAsync(cancellationToken);
+    public async Task<IReadOnlyList<BusinessPromotionDto>> GetBusinessPromotionsAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => await push.GetBusinessPromotionsAsync(await UserId(), businessId, cancellationToken);
+    public async Task<BusinessPromotionSaveResultDto> SaveBusinessPromotionAsync(Guid businessId,
+        Guid? promotionId, SaveBusinessPromotionRequest request, CancellationToken cancellationToken = default)
+        => await push.SavePromotionAsync(await UserId(), businessId, promotionId, request, cancellationToken);
     public async Task<PickupOrderBoardDto> GetPickupOrdersAsync(Guid businessId, string? status = null,
         DateOnly? date = null, CancellationToken cancellationToken = default)
         => await orders.ListOrdersAsync(await UserId(), businessId, status, date, cancellationToken);

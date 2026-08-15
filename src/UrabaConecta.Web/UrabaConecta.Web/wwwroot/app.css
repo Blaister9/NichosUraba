@@ -1620,6 +1620,187 @@ a.discovery-category-tile:hover .marca-icono { transform: scale(1.06) rotate(-2d
 }
 
 /* =============================================================================================
+   AHORA V2 — pasillo editorial de disponibilidad local
+   La Home ya no explica el directorio: abre con estado real, una fotografía y una acción.
+   ============================================================================================= */
+.ahora-home {
+    width: min(100vw, 1220px); margin: calc(var(--e5) * -1) auto 0;
+    color: #102d25; background: #fbfcf9; animation: feed-enter .24s ease-out both;
+}
+.site-header.is-home .header-search { display: none }
+.footer-home { background: #fbfcf9 }
+.ahora-context {
+    position: sticky; top: 57px; z-index: 16; display: flex; align-items: center;
+    justify-content: space-between; min-height: 58px; padding: .45rem 1rem;
+    border-bottom: 1px solid rgb(14 46 37 / 8%); background: rgb(251 252 249 / 94%);
+    backdrop-filter: blur(14px);
+}
+.location-trigger, .ahora-search {
+    display: inline-flex; min-height: 44px; align-items: center; gap: .5rem; border: 0;
+    background: transparent; color: var(--marca-900); text-decoration: none;
+}
+.location-trigger { padding: .2rem 0; cursor: pointer; text-align: left }
+.location-trigger > span { display: grid; line-height: 1.05 }
+.location-trigger small { color: var(--texto-suave); font-size: .62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em }
+.location-trigger strong { max-width: 13rem; overflow: hidden; font-size: 1.05rem; white-space: nowrap; text-overflow: ellipsis }
+.ahora-search { padding: .35rem .15rem .35rem .7rem; font-size: .82rem; font-weight: 800 }
+.feed-filters {
+    position: sticky; top: 115px; z-index: 15; display: flex; gap: .25rem; overflow-x: auto;
+    padding: .4rem 1rem .55rem; background: rgb(251 252 249 / 94%); scrollbar-width: none;
+    backdrop-filter: blur(14px);
+}
+.feed-filters::-webkit-scrollbar { display: none }
+.feed-filters button {
+    flex: 0 0 auto; min-height: 38px; padding: .35rem .82rem; border: 0; border-radius: var(--radio-pill);
+    background: transparent; color: var(--texto-suave); font-size: .8rem; font-weight: 750; cursor: pointer;
+    transition: background .14s ease, color .14s ease, transform .12s ease;
+}
+.feed-filters button.active { background: var(--marca-900); color: #fff }
+.feed-filters button:active { transform: scale(.96) }
+.ahora-layout { display: grid; align-items: start }
+.feed-column { width: 100%; max-width: 780px; margin-inline: auto }
+.feed-piece { position: relative; margin: 0; padding: 0 0 1.1rem; background: #fbfcf9 }
+.feed-piece + .feed-piece, .feed-piece + .capture-piece, .capture-piece + .feed-piece {
+    padding-top: .9rem; border-top: 8px solid #eef2ed;
+}
+.feed-media {
+    position: relative; display: block; width: 100%; height: min(74vw, 330px); overflow: hidden;
+    background: #dce9e2; color: var(--marca-700); text-decoration: none;
+}
+.feed-primary .feed-media { height: clamp(320px, 43svh, 365px) }
+.feed-media img { width: 100%; height: 100%; object-fit: cover; transition: transform .24s ease, filter .24s ease }
+.feed-media:active img { transform: scale(1.015); filter: saturate(1.06) }
+.feed-art { display: grid; place-items: center; background:
+    radial-gradient(circle at 75% 20%, rgb(255 255 255 / 75%) 0 12%, transparent 13%),
+    linear-gradient(145deg, #e9dbe3, #f7ede8 55%, #dbeae3) }
+.feed-art-icon { position: relative; z-index: 1; display: grid; place-items: center; width: 8.5rem; height: 8.5rem;
+    border-radius: 50%; background: rgb(255 255 255 / 58%); color: #8c3564 }
+.feed-shade { position: absolute; inset: 0; pointer-events: none; background:
+    linear-gradient(180deg, rgb(7 25 20 / 28%) 0, transparent 32%, transparent 55%, rgb(7 25 20 / 78%) 100%) }
+.feed-badges { position: absolute; inset: .8rem .8rem auto; display: flex; align-items: center; justify-content: space-between; gap: .4rem }
+.live-badge, .sponsored-badge, .promotion-badge {
+    display: inline-flex; align-items: center; gap: .38rem; width: fit-content; padding: .34rem .62rem;
+    border-radius: var(--radio-pill); background: rgb(9 30 24 / 78%); color: #fff;
+    backdrop-filter: blur(10px); font-size: .66rem; font-weight: 900; letter-spacing: .07em; text-transform: uppercase;
+}
+.live-badge i { width: .48rem; height: .48rem; border-radius: 50%; background: #70f0b7;
+    box-shadow: 0 0 0 4px rgb(112 240 183 / 18%); animation: live-pulse 1.8s ease-in-out infinite }
+.sponsored-badge { margin-left: auto; background: rgb(255 255 255 / 86%); color: var(--marca-900) }
+.promotion-badge { margin-left: auto; background: rgb(168 64 31 / 88%) }
+.feed-overlay-copy { position: absolute; right: 1rem; bottom: .9rem; left: 1rem; display: grid; color: #fff }
+.feed-overlay-copy small { overflow: hidden; color: rgb(255 255 255 / 76%); font-size: .72rem; white-space: nowrap; text-overflow: ellipsis }
+.feed-overlay-copy strong { font-size: 1rem }
+.feed-copy { padding: .85rem 1rem .15rem }
+.feed-question { margin: 0 0 .2rem; color: var(--calido-700); font-size: .72rem; font-weight: 850; letter-spacing: .025em }
+.feed-copy h1 { max-width: 28ch; margin: 0 0 .38rem; font-size: clamp(1.45rem, 6vw, 2.15rem); line-height: 1.04 }
+.feed-state { margin: 0; color: var(--marca-800); font-size: .98rem; font-weight: 820 }
+.feed-state.is-live::before { content: ""; display: inline-block; width: .48rem; height: .48rem; margin: 0 .42rem .08rem 0;
+    border-radius: 50%; background: var(--marca-600) }
+.feed-detail { margin: .28rem 0 0; color: var(--texto-suave); font-size: .84rem }
+.feed-action { display: inline-flex; align-items: center; gap: .5rem; min-height: 44px; margin-top: .35rem;
+    color: var(--marca-800); font-weight: 900; text-decoration: none; transition: transform .13s ease, color .13s ease }
+.feed-piece[data-vertical="barberia"] .feed-action { color: #174d78 }
+.feed-piece[data-vertical="belleza"] .feed-action { color: #8c3564 }
+.feed-piece[data-vertical="tienda"] .feed-action { color: var(--calido-700) }
+.feed-action:active { transform: translateX(3px) scale(.985) }
+.capture-piece {
+    display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .8rem; align-items: start;
+    padding: 1.5rem 1rem; background: linear-gradient(120deg, #e9f2ed, #f9eee8); color: var(--marca-900);
+}
+.capture-mark { display: grid; place-items: center; width: 3.5rem; height: 3.5rem; border-radius: 50%; background: #fff }
+.capture-piece h2 { margin: 0; font-size: 1.35rem }
+.capture-piece p:not(.eyebrow) { margin: .25rem 0 0; color: var(--texto-suave); font-size: .88rem }
+.capture-piece .button-link { grid-column: 2; width: fit-content; min-height: 40px; padding: .45rem .8rem }
+.feed-more { display: block; min-height: 48px; margin: 1rem auto 2rem; padding: .55rem 1.1rem; border: 1px solid var(--borde-fuerte);
+    border-radius: var(--radio-pill); background: transparent; color: var(--marca-800); font-weight: 850; cursor: pointer }
+.quiet-feed { min-height: 55vh; padding: 3rem 1.2rem; text-align: center }
+.quiet-feed .icono { margin-inline: auto }
+.quiet-feed h1 { margin: .7rem auto; font-size: 1.7rem }
+.quiet-feed p { max-width: 35ch; margin: 0 auto 1rem; color: var(--texto-suave) }
+.ahora-error { margin: 1rem }
+.skeleton-feed { min-height: 620px }
+.skeleton-feed .skeleton { display: block; height: 465px; border-radius: 0 }
+
+.ahora-rail { display: none }
+.location-backdrop { position: fixed; inset: 0; z-index: 59; background: rgb(6 24 18 / 46%); animation: fade-in .16s ease-out both }
+.location-sheet {
+    position: fixed; right: 0; bottom: 0; left: 0; z-index: 60; max-height: calc(100svh - 2rem); overflow-y: auto;
+    padding: 1rem 1rem calc(var(--alto-nav) + 1rem); border-radius: 26px 26px 0 0; background: #fff;
+    box-shadow: 0 -16px 44px rgb(8 28 23 / 20%); animation: sheet-up .2s cubic-bezier(.2,.8,.2,1) both;
+}
+.location-sheet header { display: flex; align-items: start; justify-content: space-between; gap: 1rem }
+.location-sheet h2 { margin: 0 0 .75rem; font-size: 1.35rem }
+.sheet-close { width: 42px; height: 42px; border: 0; border-radius: 50%; background: var(--superficie-2); font-size: 1.6rem; cursor: pointer }
+.use-location, .location-options button {
+    display: flex; width: 100%; min-height: 52px; align-items: center; gap: .7rem; padding: .55rem .65rem;
+    border: 0; border-radius: 14px; background: transparent; color: var(--texto); text-align: left; cursor: pointer;
+}
+.use-location { margin-bottom: .35rem; background: var(--marca-050); color: var(--marca-800) }
+.use-location > span { display: grid }
+.use-location small { color: var(--texto-suave); font-size: .7rem }
+.location-options { display: grid; gap: .1rem }
+.location-options button span { flex: 1 }
+.location-options button.active { background: var(--superficie-2); color: var(--marca-800); font-weight: 850 }
+.location-options button:active, .use-location:active { transform: scale(.985) }
+
+.push-prompt.is-compact { align-items: flex-start; gap: .55rem; margin: .45rem 0 0; padding: .7rem;
+    border: 0; border-radius: 14px; background: var(--superficie-2); box-shadow: none }
+.push-prompt.is-compact .push-prompt-icon { display: none }
+.push-prompt.is-compact .push-prompt-copy > strong { font-size: .83rem }
+.push-prompt.is-compact p { margin: .1rem 0 .35rem; font-size: .73rem }
+.push-prompt.is-compact button { min-height: 38px; padding: .35rem .65rem; font-size: .76rem }
+.follow-business { max-width: 46rem; margin: .8rem auto; padding-inline: 1rem }
+.tienda-producto.agotado .catalogo-foto { filter: grayscale(.25); opacity: .72 }
+.tienda-producto.agotado .stepper { display: none }
+.stock-status { color: var(--calido-700); font-size: .78rem; font-weight: 850 }
+.promotion-owner-row { align-items: start }
+.promotion-owner-row h3 { margin-top: .45rem }
+
+.feed-entry { animation: feed-piece-in .28s ease-out both }
+.feed-entry:nth-child(2) { animation-delay: .035s }
+.feed-entry:nth-child(3) { animation-delay: .07s }
+.ahora-home.is-leaving { opacity: .72; transform: translateY(-3px); transition: opacity .12s ease, transform .12s ease }
+@keyframes feed-enter { from { opacity: 0 } to { opacity: 1 } }
+@keyframes feed-piece-in { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: translateY(0) } }
+@keyframes live-pulse { 50% { opacity: .55; transform: scale(.82) } }
+@keyframes sheet-up { from { transform: translateY(20px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+@keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
+
+@media (max-width: 900px) {
+    .page-shell:has(.ahora-home) { width: 100%; padding-right: 0; padding-left: 0; padding-bottom: 0 }
+    .footer-home { padding-bottom: calc(var(--alto-nav) + 1.5rem) }
+}
+
+@media (min-width: 901px) {
+    .ahora-home { margin-top: calc(var(--e5) * -1); padding: 1.25rem }
+    .ahora-context, .feed-filters { position: static; max-width: 1120px; margin-inline: auto; padding-inline: 0; background: transparent; backdrop-filter: none }
+    .ahora-context { border-bottom: 0 }
+    .feed-filters { padding-top: .15rem; padding-bottom: 1rem }
+    .ahora-layout { grid-template-columns: minmax(0, 780px) 300px; justify-content: center; gap: 2rem }
+    .feed-column { margin: 0 }
+    .feed-piece { overflow: hidden; border-radius: 0 0 24px 24px }
+    .feed-piece + .feed-piece, .feed-piece + .capture-piece, .capture-piece + .feed-piece { margin-top: 1rem; border-top: 0 }
+    .feed-media { height: 440px; border-radius: 24px 24px 0 0 }
+    .feed-primary .feed-media { height: 540px }
+    .feed-copy { padding: 1rem .25rem 1.25rem }
+    .capture-piece { margin-block: 1rem; border-radius: 22px }
+    .ahora-rail { position: sticky; top: 88px; display: grid; gap: 1px; overflow: hidden; border-radius: 22px; background: var(--borde) }
+    .ahora-rail section { display: grid; padding: 1rem; background: #fff }
+    .ahora-rail section strong { font-size: 1.55rem; line-height: 1.05 }
+    .ahora-rail section span { color: var(--texto-suave); font-size: .78rem }
+    .ahora-rail .inline-button { justify-self: start; margin-top: .35rem }
+    .rail-activity { display: flex; align-items: center; gap: .65rem; padding: 1rem; background: #fff; color: var(--marca-900); text-decoration: none }
+    .rail-activity span { display: grid }
+    .rail-activity small { color: var(--texto-suave); font-size: .72rem }
+    .location-sheet { right: 1.25rem; bottom: 1.25rem; left: auto; width: 390px; padding-bottom: 1rem; border-radius: 24px }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ahora-home, .feed-entry, .location-backdrop, .location-sheet, .live-badge i { animation: none }
+    .feed-media img, .feed-filters button, .feed-action, .ahora-home { transition: none }
+}
+
+/* =============================================================================================
    INTERACTION RESET — portal → municipio → categoría → negocio
    Este bloque reemplaza el modelo de feed visual anterior. La Home ya no acumula secciones ni
    controles: presenta dos decisiones y deja que cada ruta profundice una sola cosa.

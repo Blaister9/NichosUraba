@@ -43,6 +43,8 @@ public sealed class DemoShowcaseSeederTests(PostgresWebFactory factory) : IClass
             x.BusinessId == beauty.Id && x.Module == BusinessModuleKind.PickupOrders).ToListAsync());
         Assert.Equal(3, await db.Services.CountAsync(x => x.BusinessId == barber.Id));
         Assert.Equal(4, await db.Products.CountAsync(x => x.BusinessId == beauty.Id));
+        Assert.Single(await db.BusinessPromotions.AsNoTracking()
+            .Where(x => x.BusinessId == beauty.Id).ToListAsync());
         Assert.False(await db.BusinessMemberships.AnyAsync(x =>
             !db.Businesses.Select(b => b.Id).Contains(x.BusinessId)));
 

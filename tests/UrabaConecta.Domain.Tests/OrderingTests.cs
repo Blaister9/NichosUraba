@@ -16,9 +16,20 @@ public sealed class OrderingTests
     public void Product_update_uses_optimistic_version()
     {
         var product = new Product(Guid.NewGuid(), BusinessId, Guid.NewGuid(), "Arroz", null, 100);
-        product.Update(product.ProductCategoryId, "Arroz", null, 200, 0, true, 0);
+        product.Update(product.ProductCategoryId, "Arroz", null, 200, 0, true, true, 0);
         Assert.Equal("CONCURRENCY_CONFLICT", Assert.Throws<DomainException>(() =>
-            product.Update(product.ProductCategoryId, "Otro", null, 300, 0, true, 0)).Code);
+            product.Update(product.ProductCategoryId, "Otro", null, 300, 0, true, true, 0)).Code);
+    }
+
+    [Fact]
+    public void Visible_product_can_be_unavailable_without_disappearing()
+    {
+        var product = new Product(Guid.NewGuid(), BusinessId, Guid.NewGuid(), "Labial", null, 29900);
+        product.Update(product.ProductCategoryId, product.Name, product.Description, product.ReferencePrice,
+            0, true, false, product.Version);
+        Assert.True(product.IsActive);
+        Assert.False(product.IsAvailable);
+        Assert.Equal("PRODUCT_UNAVAILABLE", Assert.Throws<DomainException>(product.EnsureAvailable).Code);
     }
 
     [Fact]
