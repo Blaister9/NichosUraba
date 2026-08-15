@@ -26,19 +26,23 @@ export function initialize() {
 function queueScrollRestore() {
   if (sessionStorage.getItem(returnKey) !== '1' || location.pathname !== '/') return;
   const top = Number(sessionStorage.getItem(scrollKey) || 0);
-  let attempt = 0;
-  const restore = () => {
-    if (!document.querySelector('[data-testid="feed-piece"]') && attempt < 12) {
-      attempt++;
-      setTimeout(restore, 50);
+  let waitAttempt = 0;
+  const waitForFeed = () => {
+    if (!document.querySelector('[data-testid="feed-piece"]')) {
+      if (waitAttempt++ < 600) setTimeout(waitForFeed, 100);
+      else sessionStorage.removeItem(returnKey);
       return;
     }
-    window.scrollTo({ top, behavior: 'instant' });
-    attempt++;
-    if (attempt < 5) setTimeout(restore, attempt * 70);
-    else sessionStorage.removeItem(returnKey);
+    let restoreAttempt = 0;
+    const restore = () => {
+      window.scrollTo({ top, behavior: 'instant' });
+      restoreAttempt++;
+      if (restoreAttempt < 6) setTimeout(restore, restoreAttempt * 90);
+      else sessionStorage.removeItem(returnKey);
+    };
+    restore();
   };
-  requestAnimationFrame(restore);
+  requestAnimationFrame(waitForFeed);
 }
 
 export function rememberMunicipality(slug) {
