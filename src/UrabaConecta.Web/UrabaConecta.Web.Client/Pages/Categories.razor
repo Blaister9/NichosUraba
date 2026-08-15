@@ -1,89 +1,111 @@
 @page "/categorias"
 @rendermode InteractiveServer
 @inject IUrabaConectaApi Api
+@inject NavigationManager Nav
 
-@* El índice de categorías. Es una pantalla de una sola decisión, así que se resuelve con una
-   rejilla de destinos grandes y nada más.
-
-   Sólo aparecen categorías con negocios publicados detrás: el conteo lo calcula el servidor con el
-   mismo filtro del directorio, de modo que ninguna promete resultados que luego no existen. *@
 <PageTitle>Categorías | UrabáConecta</PageTitle>
 
-<section class="explorar-head">
-    <h1>Categorías</h1>
-    <p class="hero-sub">Todo lo que puedes encontrar en Urabá, por tipo de negocio.</p>
-</section>
-
-@* El municipio acota los conteos: en Turbo importa cuántas barberías hay en Turbo. *@
-<div class="chip-row" role="group" aria-label="Filtrar categorías por municipio">
-    <button type="button" class="chip @(municipio == "" ? "activo" : null)" aria-pressed="@(municipio == "")"
-            disabled="@cargando" @onclick='() => Filtrar("")'>Todo Urabá</button>
-    @foreach (var (slug, nombre) in Municipios)
-    {
-        <button type="button" class="chip @(municipio == slug ? "activo" : null)" aria-pressed="@(municipio == slug)"
-                disabled="@cargando" @onclick="() => Filtrar(slug)">@nombre</button>
-    }
-</div>
-
-@if (cargando)
-{
-    <div class="categoria-grid" aria-hidden="true">
-        @for (var i = 0; i < 6; i++) { <div class="skeleton" style="height:8.5rem;border-radius:20px"></div> }
+<header class="discovery-context categories-context">
+    <span class="context-icon"><Icon Name="categorias" Size="28" /></span>
+    <div>
+        <p class="context-kicker">Explora por tipo</p>
+        <h1>Categorías</h1>
+        <p>@(NombreMunicipio is null ? "Todo lo que puedes encontrar en Urabá." : $"Qué puedes encontrar en {NombreMunicipio}.")</p>
     </div>
-    <p class="visually-hidden" role="status">Cargando categorías…</p>
-}
-else if (error is not null)
-{
-    <p class="error" role="alert">@error</p>
-}
-else if (categorias.Count == 0)
-{
-    <div class="empty">
-        <h2>Todavía no hay categorías con negocios @Ambito</h2>
-        <p class="meta">Prueba en otro municipio o mira todo Urabá.</p>
-        <a class="button-link secondary" href="/explorar">Ver todos los negocios</a>
+</header>
+
+<section class="discovery-section compact" aria-labelledby="categorias-municipio">
+    <div class="seccion-head">
+        <div>
+            <h2 id="categorias-municipio">Elige un municipio</h2>
+            <p>Los conteos cambian según el lugar.</p>
+        </div>
     </div>
-}
-else
-{
-    <div class="categoria-grid">
-        @foreach (var categoria in categorias)
+    <div class="municipality-filter-grid" role="group" aria-label="Filtrar categorías por municipio">
+        <button type="button" class="municipality-filter @(municipio == "" ? "activo" : null)"
+                aria-pressed="@(municipio == "")" disabled="@cargando" @onclick='() => Filtrar("")'>
+            <Icon Name="ubicacion" Size="18" /><span><strong>Todo Urabá</strong><small>Todos los negocios</small></span>
+        </button>
+        @foreach (var item in DiscoveryCatalog.Municipalities)
         {
-            <a class="categoria-card" data-tono="@CategoryLook.Tone(categoria.Slug)" href="@Destino(categoria)">
-                <span class="marca-icono"><Icon Name="@CategoryLook.Icon(categoria.Slug)" Size="24" /></span>
-                <strong>@categoria.Name</strong>
-                <span>@categoria.BusinessCount @(categoria.BusinessCount == 1 ? "negocio" : "negocios")</span>
-            </a>
+            <button type="button" class="municipality-filter @(municipio == item.Slug ? "activo" : null)"
+                    aria-pressed="@(municipio == item.Slug)" disabled="@cargando" @onclick="() => Filtrar(item.Slug)">
+                <Icon Name="ubicacion" Size="18" /><span><strong>@item.Name</strong><small>Ver categorías</small></span>
+            </button>
         }
     </div>
-}
+</section>
+
+<section class="discovery-section" aria-labelledby="categorias-listado">
+    <div class="seccion-head">
+        <div>
+            <h2 id="categorias-listado">@(NombreMunicipio is null ? "Qué necesitas" : $"Qué necesitas en {NombreMunicipio}")</h2>
+            <p>Las categorías sin negocios se anuncian sin llevarte a una pantalla vacía.</p>
+        </div>
+    </div>
+    @if (cargando)
+    {
+        <div class="discovery-category-grid" aria-hidden="true">
+            @for (var i = 0; i < 7; i++) { <span class="skeleton discovery-category-tile"></span> }
+        </div>
+        <p class="visually-hidden" role="status">Cargando categorías…</p>
+    }
+    else if (error is not null)
+    {
+        <p class="error" role="alert">@error</p>
+    }
+    else
+    {
+        <div class="discovery-category-grid category-directory-grid">
+            @foreach (var item in MapaCategorias)
+            {
+                @if (item.IsAvailable)
+                {
+                    <a class="discovery-category-tile" data-tono="@CategoryLook.Tone(item.Slug)" href="@Destino(item)">
+                        <span class="marca-icono"><Icon Name="@CategoryLook.Icon(item.Slug)" Size="24" /></span>
+                        <span><strong>@item.Name</strong><small>@Conteo(item.BusinessCount)</small></span>
+                        <span class="destination-arrow" aria-hidden="true">›</span>
+                    </a>
+                }
+                else
+                {
+                    <div class="discovery-category-tile proximamente" data-tono="@CategoryLook.Tone(item.Slug)"
+                         aria-label="@item.Name, próximamente @Ambito">
+                        <span class="marca-icono"><Icon Name="@CategoryLook.Icon(item.Slug)" Size="24" /></span>
+                        <span><strong>@item.Name</strong><small>Próximamente</small></span>
+                    </div>
+                }
+            }
+        </div>
+    }
+</section>
 
 @code {
+    [SupplyParameterFromQuery(Name = "municipio")] public string? MunicipioUrl { get; set; }
+
     private string municipio = "";
     private string? error;
     private bool cargando = true;
     private IReadOnlyList<CategoryCardDto> categorias = [];
 
-    private static readonly (string Slug, string Nombre)[] Municipios =
-    [
-        ("apartado", "Apartadó"), ("carepa", "Carepa"), ("chigorodo", "Chigorodó"), ("turbo", "Turbo"),
-    ];
+    private string? NombreMunicipio => DiscoveryCatalog.MunicipalityBySlug(municipio)?.Name;
+    private string Ambito => NombreMunicipio is null ? "en Urabá" : $"en {NombreMunicipio}";
+    private IReadOnlyList<DiscoveryCatalog.CategoryEntry> MapaCategorias => DiscoveryCatalog.WithCounts(categorias);
 
-    private string Ambito => Municipios.FirstOrDefault(x => x.Slug == municipio) is { Nombre: { } nombre }
-        ? $"en {nombre}" : "en Urabá";
-
-    /// <summary>El municipio elegido viaja con el destino: perderlo al entrar sería empezar de cero.</summary>
-    private string Destino(CategoryCardDto categoria) => string.IsNullOrEmpty(municipio)
-        ? $"/categorias/{categoria.Slug}"
-        : $"/categorias/{categoria.Slug}?municipio={Uri.EscapeDataString(municipio)}";
-
-    protected override Task OnInitializedAsync() => Cargar();
-
-    private async Task Filtrar(string slug)
+    protected override async Task OnParametersSetAsync()
     {
-        municipio = slug;
+        var next = DiscoveryCatalog.MunicipalityBySlug(MunicipioUrl)?.Slug ?? "";
+        if (!cargando && next == municipio) return;
+        municipio = next;
         await Cargar();
     }
+
+    private void Filtrar(string slug) => Nav.NavigateTo(string.IsNullOrEmpty(slug)
+        ? "/categorias" : $"/categorias?municipio={slug}");
+
+    private string Destino(DiscoveryCatalog.CategoryEntry category) => string.IsNullOrEmpty(municipio)
+        ? $"/categorias/{category.Slug}"
+        : $"/categorias/{category.Slug}?municipio={Uri.EscapeDataString(municipio)}";
 
     private async Task Cargar()
     {
@@ -92,4 +114,6 @@ else
         catch (ApiException ex) { error = ex.Message; }
         finally { cargando = false; }
     }
+
+    private static string Conteo(int count) => count == 1 ? "1 negocio" : $"{count} negocios";
 }

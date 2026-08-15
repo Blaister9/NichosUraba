@@ -1,0 +1,167 @@
+@page "/municipios/{Municipio}"
+@rendermode InteractiveServer
+@inject IUrabaConectaApi Api
+@inject NavigationManager Nav
+
+<PageTitle>@Titulo | UrabáConecta</PageTitle>
+
+@if (Destino is null)
+{
+    <section class="empty discovery-empty">
+        <h1>Municipio no disponible</h1>
+        <p class="meta">Explora Apartadó, Carepa, Chigorodó o Turbo.</p>
+        <a class="button-link" href="/">Volver al inicio</a>
+    </section>
+}
+else
+{
+    <header class="discovery-context municipio-context">
+        <span class="context-icon"><Icon Name="ubicacion" Size="28" /></span>
+        <div>
+            <p class="context-kicker">Explora por municipio</p>
+            <h1>Negocios en @Destino.Name</h1>
+            <p>@Resumen</p>
+        </div>
+    </header>
+
+    <form class="buscador-contexto" @onsubmit="Buscar" @formname="buscar-municipio">
+        <label class="visually-hidden" for="q-municipio">Buscar en @Destino.Name</label>
+        <Icon Name="explorar" Size="20" />
+        <input id="q-municipio" @bind-value="termino" @bind-value:event="oninput" disabled="@(!listo)"
+               placeholder="Buscar barbería, uñas, lifting…" autocomplete="off" />
+        <button type="submit" class="primary" disabled="@(!listo)">Buscar</button>
+    </form>
+
+    <section class="discovery-section" aria-labelledby="municipio-categorias">
+        <div class="seccion-head">
+            <div>
+                <h2 id="municipio-categorias">Qué buscas en @Destino.Name</h2>
+                <p>Elige una categoría para entrar directamente.</p>
+            </div>
+        </div>
+        @if (cargando)
+        {
+            <div class="discovery-category-grid" aria-hidden="true">
+                @for (var i = 0; i < 7; i++) { <span class="skeleton discovery-category-tile"></span> }
+            </div>
+        }
+        else
+        {
+            <div class="discovery-category-grid">
+                @foreach (var item in MapaCategorias)
+                {
+                    @if (item.IsAvailable)
+                    {
+                        <a class="discovery-category-tile" data-tono="@CategoryLook.Tone(item.Slug)"
+                           href="@($"/categorias/{item.Slug}?municipio={Destino.Slug}")">
+                            <span class="marca-icono"><Icon Name="@CategoryLook.Icon(item.Slug)" Size="22" /></span>
+                            <span><strong>@item.Name</strong><small>@Conteo(item.BusinessCount)</small></span>
+                        </a>
+                    }
+                    else
+                    {
+                        <div class="discovery-category-tile proximamente" data-tono="@CategoryLook.Tone(item.Slug)"
+                             aria-label="@item.Name, próximamente en @Destino.Name">
+                            <span class="marca-icono"><Icon Name="@CategoryLook.Icon(item.Slug)" Size="22" /></span>
+                            <span><strong>@item.Name</strong><small>Próximamente</small></span>
+                        </div>
+                    }
+                }
+            </div>
+        }
+    </section>
+
+    <section class="discovery-section" aria-labelledby="municipio-negocios">
+        <div class="seccion-head">
+            <div>
+                <h2 id="municipio-negocios">Opciones disponibles</h2>
+                <p>@(cargando ? "Buscando negocios…" : ResumenResultados)</p>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(BusquedaUrl))
+            {
+                <a href="@($"/municipios/{Destino.Slug}")">Limpiar búsqueda</a>
+            }
+        </div>
+
+        @if (cargando)
+        {
+            <div class="card-grid" aria-hidden="true">
+                @for (var i = 0; i < 3; i++) { <div class="skeleton skeleton-card"></div> }
+            </div>
+        }
+        else if (error is not null)
+        {
+            <p class="error" role="alert">@error</p>
+        }
+        else if (negocios.Count == 0)
+        {
+            <div class="empty">
+                <h2>@(string.IsNullOrWhiteSpace(BusquedaUrl) ? "Estamos sumando negocios" : "No encontramos esa búsqueda")</h2>
+                <p class="meta">@(string.IsNullOrWhiteSpace(BusquedaUrl)
+                    ? $"Las categorías muestran lo que podrás encontrar próximamente en {Destino.Name}."
+                    : "Prueba con el servicio, la categoría o el nombre del negocio.")</p>
+            </div>
+        }
+        else
+        {
+            <div class="card-grid">
+                @foreach (var (negocio, indice) in negocios.Select((x, i) => (x, i)))
+                {
+                    <BusinessCard Business="negocio" Priority="indice == 0" />
+                }
+            </div>
+        }
+    </section>
+}
+
+@code {
+    [Parameter] public string? Municipio { get; set; }
+    [SupplyParameterFromQuery(Name = "q")] public string? BusquedaUrl { get; set; }
+
+    private DiscoveryCatalog.Municipality? Destino;
+    private string termino = "";
+    private string? error;
+    private bool cargando = true, listo;
+    private IReadOnlyList<BusinessCardDto> negocios = [];
+    private IReadOnlyList<CategoryCardDto> categorias = [];
+
+    private string Titulo => Destino is null ? "Municipio" : $"Negocios en {Destino.Name}";
+    private IReadOnlyList<DiscoveryCatalog.CategoryEntry> MapaCategorias => DiscoveryCatalog.WithCounts(categorias);
+    private string Resumen => cargando ? "Organizando categorías y negocios…"
+        : negocios.Count == 1 ? "1 negocio publicado, organizado por categoría."
+        : $"{negocios.Count} negocios publicados, organizados por categoría.";
+    private string ResumenResultados => negocios.Count == 1 ? "1 opción disponible" : $"{negocios.Count} opciones disponibles";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Destino = DiscoveryCatalog.MunicipalityBySlug(Municipio);
+        termino = BusquedaUrl?.Trim() ?? "";
+        if (Destino is null) { cargando = false; return; }
+        await Cargar();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+        listo = true;
+        StateHasChanged();
+    }
+
+    private async Task Cargar()
+    {
+        cargando = true; error = null;
+        try
+        {
+            categorias = await Api.GetCategoriesAsync(Destino!.Slug);
+            negocios = await Api.GetBusinessesAsync(termino, Destino.Slug);
+        }
+        catch (ApiException ex) { error = ex.Message; }
+        finally { cargando = false; }
+    }
+
+    private void Buscar() => Nav.NavigateTo(string.IsNullOrWhiteSpace(termino)
+        ? $"/municipios/{Destino!.Slug}"
+        : $"/municipios/{Destino!.Slug}?q={Uri.EscapeDataString(termino.Trim())}");
+
+    private static string Conteo(int count) => count == 1 ? "1 negocio" : $"{count} negocios";
+}

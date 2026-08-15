@@ -5,64 +5,83 @@
 
 <PageTitle>Negocios de Urabá | UrabáConecta</PageTitle>
 
-@* La Home es una superficie de descubrimiento, no una explicación.
+<section class="home-index" aria-labelledby="home-title">
+    <div class="home-intro">
+        <p class="eyebrow">Tu guía local en Urabá</p>
+        <h1 id="home-title">Encuentra lo que necesitas, cerca de ti</h1>
+        <p>Reserva, toma un turno o pide para recoger desde el celular.</p>
+    </div>
 
-   Cinco segundos: qué es esto, dónde busco, qué categorías hay y qué negocios existen. Por eso el
-   buscador va pegado al titular, las categorías son lo primero que se toca y los negocios empiezan
-   dentro del primer scroll. La explicación del producto quedó al final: quien llega quiere
-   encontrar un negocio, no entender la plataforma. *@
-<section class="hero-home">
-    <p class="eyebrow">Apartadó · Carepa · Chigorodó · Turbo</p>
-    <h1>Los negocios de Urabá, a un toque</h1>
-    <p class="hero-sub">Reserva una cita, toma un turno o pide para recoger. Sin llamar y sin crear cuenta.</p>
-
-    @* Un solo campo y un botón. Los filtros finos viven en Explorar: aquí sobraban tres selectores
-       antes de haber visto un solo negocio. *@
     <form class="buscador-hero" @onsubmit="Buscar" @formname="buscar-home">
         <label class="visually-hidden" for="q-home">Qué buscas</label>
         <Icon Name="explorar" Size="20" />
-        <input id="q-home" @bind-value="termino" @bind-value:event="oninput"
-               placeholder="Salón, barbería, restaurante…" autocomplete="off" />
-        <button type="submit" class="primary">Buscar</button>
+        <input id="q-home" @bind-value="termino" @bind-value:event="oninput" disabled="@(!listo)"
+               placeholder="Barbería, uñas, maquillaje, lifting…" autocomplete="off" />
+        <button type="submit" class="primary" disabled="@(!listo)">Buscar</button>
     </form>
-</section>
 
-@* Atajos de municipio: llevan a Explorar ya filtrado. *@
-<div class="chip-row" role="group" aria-label="Explorar por municipio">
-    <a class="chip" href="/explorar">Todo Urabá</a>
-    @foreach (var (slug, nombre) in Municipios)
-    {
-        <a class="chip" href="@($"/explorar?municipio={slug}")">@nombre</a>
-    }
-</div>
-
-<section class="seccion" aria-labelledby="titulo-categorias">
-    <div class="seccion-head">
-        <div>
-            <h2 id="titulo-categorias">Qué necesitas hoy</h2>
-            <p>Explora por tipo de negocio.</p>
+    <section class="index-block" aria-labelledby="titulo-municipios">
+        <div class="index-heading">
+            <div>
+                <p class="index-step">1 · Elige dónde</p>
+                <h2 id="titulo-municipios">Municipios</h2>
+            </div>
+            <span>Los cuatro, siempre visibles</span>
         </div>
-        <a href="/categorias">Ver todas</a>
-    </div>
-    @if (cargando)
-    {
-        <div class="chip-row" aria-hidden="true">
-            @for (var i = 0; i < 4; i++) { <span class="skeleton" style="width:9rem;height:2.9rem;border-radius:999px"></span> }
-        </div>
-    }
-    else if (categorias.Count > 0)
-    {
-        <div class="chip-row">
-            @foreach (var categoria in categorias)
+        <div class="municipality-grid">
+            @foreach (var municipio in DiscoveryCatalog.Municipalities)
             {
-                <a class="categoria-chip" data-tono="@CategoryLook.Tone(categoria.Slug)"
-                   href="@($"/categorias/{categoria.Slug}")">
-                    <span class="marca-icono"><Icon Name="@CategoryLook.Icon(categoria.Slug)" Size="17" /></span>
-                    @categoria.Name
+                <a class="municipality-card" href="@($"/municipios/{municipio.Slug}")">
+                    <span class="municipality-icon"><Icon Name="ubicacion" Size="20" /></span>
+                    <span>
+                        <strong>@municipio.Name</strong>
+                        <small>@ConteoMunicipio(municipio.Slug)</small>
+                    </span>
+                    <span class="destination-arrow" aria-hidden="true">›</span>
                 </a>
             }
         </div>
-    }
+    </section>
+
+    <section class="index-block" aria-labelledby="titulo-categorias">
+        <div class="index-heading">
+            <div>
+                <p class="index-step">2 · Elige qué</p>
+                <h2 id="titulo-categorias">Categorías</h2>
+            </div>
+            <a href="/categorias">Ver todas</a>
+        </div>
+        @if (cargando)
+        {
+            <div class="discovery-category-grid" aria-hidden="true">
+                @for (var i = 0; i < 7; i++) { <span class="skeleton discovery-category-tile"></span> }
+            </div>
+        }
+        else
+        {
+            <div class="discovery-category-grid home-category-grid">
+                @foreach (var item in MapaCategorias)
+                {
+                    @if (item.IsAvailable)
+                    {
+                        <a class="discovery-category-tile" data-tono="@CategoryLook.Tone(item.Slug)"
+                           href="@($"/categorias/{item.Slug}")">
+                            <span class="marca-icono"><Icon Name="@CategoryLook.Icon(item.Slug)" Size="22" /></span>
+                            <span><strong>@item.Name</strong><small>@Conteo(item.BusinessCount)</small></span>
+                        </a>
+                    }
+                    else
+                    {
+                        <div class="discovery-category-tile proximamente" data-tono="@CategoryLook.Tone(item.Slug)"
+                             aria-label="@item.Name, próximamente">
+                            <span class="marca-icono"><Icon Name="@CategoryLook.Icon(item.Slug)" Size="22" /></span>
+                            <span><strong>@item.Name</strong><small>Próximamente</small></span>
+                        </div>
+                    }
+                }
+            </div>
+        }
+    </section>
 </section>
 
 @if (error is not null)
@@ -71,13 +90,14 @@
 }
 else
 {
-    <section class="seccion" aria-labelledby="titulo-destacados">
+    <section class="seccion home-businesses" aria-labelledby="titulo-destacados">
         <div class="seccion-head">
             <div>
-                <h2 id="titulo-destacados">Negocios en Urabá</h2>
+                <p class="index-step">3 · Elige un negocio</p>
+                <h2 id="titulo-destacados">Opciones para ti</h2>
                 <p>@(cargando ? "Buscando negocios…" : Resumen)</p>
             </div>
-            @if (!cargando && negocios.Count > 0) { <a href="/explorar">Ver todos</a> }
+            @if (!cargando && negocios.Count > 0) { <a href="/explorar">Explorar todo</a> }
         </div>
 
         @if (cargando)
@@ -103,83 +123,29 @@ else
         else
         {
             <div class="card-grid">
-                @foreach (var (negocio, indice) in negocios.Take(Destacados).Select((x, i) => (x, i)))
+                @foreach (var (negocio, indice) in negocios.Take(6).Select((x, i) => (x, i)))
                 {
                     <BusinessCard Business="negocio" Priority="indice == 0" />
                 }
             </div>
         }
     </section>
-
-    @* Una franja por operación: es lo que deja ver que la plataforma hace tres cosas distintas sin
-       tener que explicarlo con texto.
-
-       Sólo con lo que la rejilla de arriba no alcanzó a mostrar. Repetir ahí las mismas tarjetas no
-       es una plataforma viva, es relleno, y se nota enseguida cuando el directorio es pequeño. Así
-       las franjas siempre aportan negocios nuevos, y con pocos negocios simplemente no aparecen. *@
-    @foreach (var franja in Franjas)
-    {
-        var seleccion = negocios.Skip(Destacados).Where(franja.Filtro).Take(8).ToList();
-        if (seleccion.Count == 0) { continue; }
-        <section class="seccion" aria-label="@franja.Titulo">
-            <div class="seccion-head">
-                <div>
-                    <h2>@franja.Titulo</h2>
-                    <p>@franja.Bajada</p>
-                </div>
-            </div>
-            <div class="fila-scroll">
-                @foreach (var negocio in seleccion) { <BusinessCard Business="negocio" /> }
-            </div>
-        </section>
-    }
 }
-
-<section class="capability-grid" aria-label="Cómo funciona UrabáConecta">
-    <div><strong>Reserva una cita</strong><span>Eliges servicio, día y hora disponible.</span></div>
-    <div><strong>Toma un turno</strong><span>Entras a la fila desde el celular y llegas cuando falte poco.</span></div>
-    <div><strong>Pide para recoger</strong><span>Armas tu pedido y eliges a qué hora pasas.</span></div>
-</section>
 
 @code {
     private string termino = "";
     private string? error;
-    private bool cargando = true;
+    private bool cargando = true, listo;
     private IReadOnlyList<BusinessCardDto> negocios = [];
     private IReadOnlyList<CategoryCardDto> categorias = [];
 
-    /// <summary>Los cuatro municipios del foco comercial inicial.</summary>
-    private static readonly (string Slug, string Nombre)[] Municipios =
-    [
-        ("apartado", "Apartadó"), ("carepa", "Carepa"), ("chigorodo", "Chigorodó"), ("turbo", "Turbo"),
-    ];
-
-    /// <summary>
-    /// Cuántos negocios muestra la rejilla principal. Las franjas por operación empiezan justo
-    /// después, de modo que ningún negocio aparece dos veces en la misma pantalla.
-    /// </summary>
-    private const int Destacados = 6;
-
-    private sealed record Franja(string Titulo, string Bajada, Func<BusinessCardDto, bool> Filtro);
-
-    private static readonly Franja[] Franjas =
-    [
-        new("Reserva tu cita", "Salones, estética y cuidado personal.", x => x.HasScheduling),
-        new("Toma tu turno", "Llega cuando falte poco para tu atención.", x => x.HasVirtualQueue),
-        new("Pide y recoge", "Arma el pedido y pasa por él.", x => x.HasPickupOrdering),
-    ];
-
-    private string Resumen => negocios.Count == 1
-        ? "1 negocio publicado" : $"{negocios.Count} negocios publicados";
+    private IReadOnlyList<DiscoveryCatalog.CategoryEntry> MapaCategorias => DiscoveryCatalog.WithCounts(categorias);
+    private string Resumen => negocios.Count == 1 ? "1 negocio publicado" : $"{negocios.Count} negocios publicados";
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            // Secuencial a propósito. Con InteractiveServer las dos lecturas comparten el
-            // AppDbContext del circuito, y lanzarlas a la vez lo rompe con "a second operation was
-            // started on this context". Ambas están cacheadas en el servidor, así que lo que se
-            // ahorraría en paralelo es una espera que casi nunca llega hasta la base.
             negocios = await Api.GetBusinessesAsync();
             categorias = await Api.GetCategoriesAsync();
         }
@@ -187,7 +153,21 @@ else
         finally { cargando = false; }
     }
 
-    private void Buscar()
-        => Nav.NavigateTo(string.IsNullOrWhiteSpace(termino)
-            ? "/explorar" : $"/explorar?q={Uri.EscapeDataString(termino.Trim())}");
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+        listo = true;
+        StateHasChanged();
+    }
+
+    private string ConteoMunicipio(string slug)
+    {
+        var count = negocios.Count(x => x.Municipality.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase));
+        return count == 0 ? "Explorar" : Conteo(count);
+    }
+
+    private static string Conteo(int count) => count == 1 ? "1 negocio" : $"{count} negocios";
+
+    private void Buscar() => Nav.NavigateTo(string.IsNullOrWhiteSpace(termino)
+        ? "/explorar" : $"/explorar?q={Uri.EscapeDataString(termino.Trim())}");
 }

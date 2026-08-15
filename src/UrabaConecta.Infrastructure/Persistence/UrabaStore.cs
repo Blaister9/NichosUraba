@@ -26,7 +26,19 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
         if (!string.IsNullOrWhiteSpace(search))
         {
             var pattern = $"%{search}%";
-            query = query.Where(x => EF.Functions.ILike(x.b.Name, pattern));
+            // La gente busca lo que quiere hacer ("lifting", "uñas") o comprar
+            // ("maquillaje"), no necesariamente el nombre comercial. La consulta sigue siendo
+            // PostgreSQL puro y acotado al catálogo actual: no introduce otro motor de búsqueda.
+            query = query.Where(x =>
+                EF.Functions.ILike(x.b.Name, pattern) ||
+                EF.Functions.ILike(x.b.ShortDescription, pattern) ||
+                EF.Functions.ILike(x.b.Description, pattern) ||
+                EF.Functions.ILike(x.c.Name, pattern) ||
+                db.Services.Any(s => s.BusinessId == x.b.Id && s.IsActive &&
+                    (EF.Functions.ILike(s.Name, pattern) || EF.Functions.ILike(s.Description, pattern))) ||
+                db.Products.Any(p => p.BusinessId == x.b.Id && p.IsActive &&
+                    (EF.Functions.ILike(p.Name, pattern) ||
+                     p.Description != null && EF.Functions.ILike(p.Description, pattern))));
         }
         if (!string.IsNullOrWhiteSpace(municipality)) query = query.Where(x => x.m.Slug == municipality);
         if (!string.IsNullOrWhiteSpace(category)) query = query.Where(x => x.c.Slug == category);

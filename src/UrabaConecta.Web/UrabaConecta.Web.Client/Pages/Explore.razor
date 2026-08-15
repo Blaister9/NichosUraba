@@ -15,15 +15,19 @@
    la persona había elegido. *@
 <PageTitle>@Titulo | UrabáConecta</PageTitle>
 
-<section class="explorar-head">
-    <h1>@Titulo</h1>
-    <p class="hero-sub">@Bajada</p>
-</section>
+<header class="discovery-context category-context" data-tono="@CategoryLook.Tone(categoria)">
+    <span class="context-icon"><Icon Name="@(categoria.Length > 0 ? CategoryLook.Icon(categoria) : "explorar")" Size="28" /></span>
+    <div>
+        <p class="context-kicker">@(categoria.Length > 0 ? "Explora por categoría" : "Directorio local")</p>
+        <h1>@Titulo</h1>
+        <p>@Bajada</p>
+    </div>
+</header>
 
 <fieldset class="search-panel directory-search" aria-label="Buscar y filtrar por municipio" disabled="@(!listo)">
     <label>Qué buscas
         <input @bind-value="termino" @bind-value:event="oninput" @onkeydown="AlTeclear"
-               placeholder="Nombre del negocio…" autocomplete="off" />
+               placeholder="Negocio, servicio o producto…" autocomplete="off" />
     </label>
     <label>Municipio
         <select @bind="municipio" @bind:after="Aplicar">
@@ -42,7 +46,7 @@
 {
     <div class="category-filter" role="group" aria-label="Filtrar por categoría">
         <span class="filter-label">Categoría</span>
-        <div class="chip-row">
+        <div class="category-filter-grid">
             <button type="button" class="categoria-chip category-all" aria-pressed="@(categoria == "")"
                     disabled="@(!listo || cargando)" @onclick='() => AplicarCategoria("")'>
                 <span class="marca-icono"><Icon Name="explorar" Size="17" /></span> Todas
@@ -129,20 +133,34 @@ else
     private IReadOnlyList<BusinessCardDto> negocios = [];
     private IReadOnlyList<CategoryCardDto> categorias = [];
 
-    private static readonly (string Slug, string Nombre)[] Municipios =
-    [
-        ("apartado", "Apartadó"), ("carepa", "Carepa"), ("chigorodo", "Chigorodó"), ("turbo", "Turbo"),
-    ];
+    private static readonly (string Slug, string Nombre)[] Municipios = DiscoveryCatalog.Municipalities
+        .Select(x => (x.Slug, x.Name)).ToArray();
 
     private string NombreCategoria
         => categorias.FirstOrDefault(x => x.Slug == categoria)?.Name ?? "";
 
-    private string Titulo => categoria is { Length: > 0 } && NombreCategoria is { Length: > 0 } nombre
-        ? nombre : "Explorar negocios";
+    private string Titulo
+    {
+        get
+        {
+            var baseTitle = categoria is { Length: > 0 } && NombreCategoria is { Length: > 0 } nombre
+                ? nombre : "Explorar negocios";
+            return DiscoveryCatalog.MunicipalityBySlug(municipio) is { } destino
+                ? $"{baseTitle} en {destino.Name}" : baseTitle;
+        }
+    }
 
-    private string Bajada => categoria is { Length: > 0 } && NombreCategoria is { Length: > 0 }
-        ? "Filtra por municipio o busca por nombre."
-        : "Busca por nombre, filtra por municipio y por categoría.";
+    private string Bajada
+    {
+        get
+        {
+            if (cargando) return "Organizando los negocios disponibles…";
+            var count = negocios.Count == 1 ? "1 negocio" : $"{negocios.Count} negocios";
+            return categoria is { Length: > 0 }
+                ? $"{count}. Busca un servicio o cambia de municipio."
+                : $"{count}. Busca por negocio, servicio, producto o categoría.";
+        }
+    }
 
     private string Ambito => Municipios.FirstOrDefault(x => x.Slug == municipio) is { Nombre: { } nombre }
         ? $"en {nombre}" : "en Urabá";

@@ -293,6 +293,112 @@ progress::-moz-progress-bar { background: var(--marca-700); border-radius: var(-
 }
 .hero-sub { max-width: 46ch; margin: 0; font-size: 1.08rem; color: var(--texto-suave) }
 
+/* El primer bloque de Home es el índice del producto: una búsqueda y dos decisiones visibles,
+   municipio y categoría. No depende de carruseles ni de contenido explicativo. */
+.home-index {
+    padding: clamp(1.1rem, 3vw, 2rem);
+    border: 1px solid var(--borde); border-radius: var(--radio-lg);
+    background:
+        radial-gradient(90% 70% at 100% 0, var(--calido-100), transparent 62%),
+        linear-gradient(145deg, #fbfdfb, var(--marca-050));
+}
+.home-intro { display: grid; gap: .35rem; max-width: 54rem }
+.home-intro h1 { max-width: 20ch; margin: 0; font-size: clamp(2rem, 5vw, 3.35rem) }
+.home-intro p:not(.eyebrow) { margin: 0; color: var(--texto-suave); font-size: 1rem }
+.home-index .buscador-hero { max-width: 48rem; margin-block: var(--e4) 0 }
+.index-block { margin-top: var(--e5); padding-top: var(--e4); border-top: 1px solid rgb(22 91 70 / 12%) }
+.index-heading {
+    display: flex; align-items: end; justify-content: space-between; gap: var(--e3); margin-bottom: var(--e3);
+}
+.index-heading h2 { margin: .05rem 0 0; font-size: 1.2rem }
+.index-heading > span { color: var(--texto-suave); font-size: .82rem }
+.index-heading > a { font-size: .88rem; font-weight: 750; text-decoration: none }
+.index-step {
+    margin: 0; color: var(--calido-700); font-size: .72rem; line-height: 1.2;
+    font-weight: 850; letter-spacing: .075em; text-transform: uppercase;
+}
+.municipality-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--e2) }
+.municipality-card {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .65rem;
+    min-height: 66px; padding: .65rem .75rem; border: 1px solid var(--borde);
+    border-radius: var(--radio); background: rgb(255 255 255 / 88%); color: var(--texto);
+    text-decoration: none; box-shadow: var(--sombra-sm);
+    transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.municipality-card:hover { transform: translateY(-2px); border-color: var(--marca-600); box-shadow: var(--sombra) }
+.municipality-card > span:nth-child(2) { display: grid; min-width: 0 }
+.municipality-card strong { line-height: 1.15 }
+.municipality-card small { color: var(--texto-suave); font-size: .76rem }
+.municipality-icon {
+    display: grid; place-items: center; width: 2.35rem; height: 2.35rem;
+    border-radius: 12px; background: var(--marca-050); color: var(--marca-700);
+}
+.destination-arrow { color: var(--marca-600); font-size: 1.45rem; line-height: 1 }
+
+/* Una sola anatomía para categorías en Home, municipio e índice general. */
+.discovery-category-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: var(--e2);
+}
+.discovery-category-tile {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .7rem;
+    min-height: 72px; padding: .65rem .75rem; border: 1px solid var(--borde);
+    border-radius: var(--radio); background: var(--superficie); color: var(--texto);
+    text-decoration: none; box-shadow: var(--sombra-sm);
+    transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+a.discovery-category-tile:hover { transform: translateY(-2px); border-color: var(--tono-borde); box-shadow: var(--sombra) }
+.discovery-category-tile .marca-icono {
+    display: grid; place-items: center; width: 2.5rem; height: 2.5rem;
+    border-radius: 13px; background: var(--tono-fondo); color: var(--tono-texto);
+}
+.discovery-category-tile > span:nth-child(2) { display: grid; gap: .12rem; min-width: 0 }
+.discovery-category-tile strong { font-size: .92rem; line-height: 1.12 }
+.discovery-category-tile small { color: var(--texto-suave); font-size: .75rem }
+.discovery-category-tile.proximamente { opacity: .62; box-shadow: none; border-style: dashed }
+
+.discovery-context {
+    display: flex; align-items: center; gap: var(--e4); margin-bottom: var(--e4); padding: var(--e4);
+    border: 1px solid var(--borde); border-radius: var(--radio-lg);
+    background: linear-gradient(145deg, var(--tono-fondo, var(--marca-050)), var(--superficie) 75%);
+}
+.discovery-context .context-icon {
+    display: grid; place-items: center; flex: 0 0 3.5rem; width: 3.5rem; height: 3.5rem;
+    border-radius: 18px; background: var(--superficie); color: var(--tono-texto, var(--marca-700));
+    box-shadow: var(--sombra-sm);
+}
+.discovery-context h1 { margin: .05rem 0 .18rem; font-size: clamp(1.7rem, 5vw, 2.35rem) }
+.discovery-context p { margin: 0; color: var(--texto-suave) }
+.discovery-context .context-kicker {
+    color: var(--tono-texto, var(--marca-700)); font-size: .74rem; font-weight: 850;
+    letter-spacing: .075em; text-transform: uppercase;
+}
+.municipio-context { --tono-fondo: var(--marca-050); --tono-texto: var(--marca-700) }
+.categories-context { --tono-fondo: var(--calido-100); --tono-texto: var(--calido-700) }
+.discovery-section { margin-top: var(--e6) }
+.discovery-section.compact { margin-top: var(--e4) }
+.buscador-contexto { max-width: 50rem; margin-bottom: var(--e5) }
+.buscador-contexto { display: flex; align-items: center; gap: .5rem; padding: .4rem .4rem .4rem .9rem;
+    background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio-pill); box-shadow: var(--sombra) }
+.buscador-contexto input { flex: 1 1 auto; min-height: 44px; padding: .3rem 0; border: 0; background: none }
+.buscador-contexto input:focus-visible { outline: none }
+.buscador-contexto:focus-within { border-color: var(--marca-600); box-shadow: var(--sombra), 0 0 0 3px var(--marca-100) }
+.buscador-contexto button { flex: 0 0 auto; min-height: 44px; border-radius: var(--radio-pill) }
+
+.municipality-filter-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--e2) }
+.municipality-filter {
+    display: flex; align-items: center; gap: .55rem; min-height: 58px; padding: .55rem .7rem;
+    border: 1px solid var(--borde); border-radius: var(--radio); background: var(--superficie);
+    color: var(--texto); text-align: left;
+}
+.municipality-filter > span { display: grid; gap: .08rem }
+.municipality-filter small { color: var(--texto-suave); font-size: .72rem }
+.municipality-filter.activo { border-color: var(--marca-700); background: var(--marca-700); color: #fff }
+.municipality-filter.activo small { color: rgb(255 255 255 / 78%) }
+
+.category-filter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: var(--e2) }
+.category-filter-grid .categoria-chip { width: 100%; min-width: 0; white-space: normal; text-align: left }
+.home-businesses { margin-top: var(--e6) }
+
 .search-panel {
     display: grid; grid-template-columns: 1.6fr 1fr 1fr auto; gap: var(--e3); align-items: end;
     margin: 0 0 var(--e3); padding: var(--e4);
@@ -1129,6 +1235,9 @@ a.card-media { display: block; color: inherit }
     .search-panel { grid-template-columns: 1fr 1fr }
     .search-panel > label:first-child { grid-column: 1 / -1 }
     .permission-set { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+    .municipality-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+    .municipality-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+    .municipality-filter:first-child { grid-column: 1 / -1 }
 }
 
 @media (max-width: 900px) {
@@ -1167,6 +1276,41 @@ a.card-media { display: block; color: inherit }
     .site-header nav { flex: 0 0 auto; gap: .15rem }
     .site-header nav a { padding: .4rem .45rem; font-size: .86rem }
     .page-shell { padding: var(--e4) var(--e4) var(--e6) }
+    .home-index {
+        margin: calc(var(--e4) * -1) calc(var(--e4) * -1) 0; padding: var(--e4);
+        border-inline: 0; border-top: 0; border-radius: 0 0 var(--radio-lg) var(--radio-lg);
+    }
+    .home-intro h1 { max-width: 18ch; font-size: clamp(1.85rem, 8vw, 2.35rem) }
+    .home-intro p:not(.eyebrow) { font-size: .92rem }
+    .home-index .buscador-hero { margin-top: var(--e3) }
+    .home-index .buscador-hero button, .buscador-contexto button { padding-inline: .9rem }
+    .index-block { margin-top: var(--e4); padding-top: var(--e3) }
+    .index-heading { margin-bottom: var(--e2) }
+    .index-heading > span { display: none }
+    .municipality-grid { gap: .45rem }
+    .municipality-card { min-height: 58px; padding: .5rem; gap: .48rem }
+    .municipality-icon { width: 2rem; height: 2rem; border-radius: 10px }
+    .municipality-card strong { font-size: .9rem }
+    .municipality-card small { font-size: .7rem }
+    .discovery-category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .45rem }
+    .discovery-category-tile {
+        grid-template-columns: auto minmax(0, 1fr); min-height: 61px; gap: .48rem; padding: .5rem;
+    }
+    .discovery-category-tile .marca-icono { width: 2.1rem; height: 2.1rem; border-radius: 10px }
+    .discovery-category-tile strong { font-size: .82rem }
+    .discovery-category-tile small { font-size: .68rem }
+    .discovery-category-tile .destination-arrow { display: none }
+    .discovery-context { align-items: flex-start; gap: var(--e3); margin-inline: calc(var(--e4) * -1);
+        padding: var(--e4); border-inline: 0; border-radius: 0 }
+    .discovery-context .context-icon { flex-basis: 2.8rem; width: 2.8rem; height: 2.8rem; border-radius: 14px }
+    .discovery-context h1 { font-size: 1.65rem }
+    .discovery-context p:not(.context-kicker) { font-size: .9rem }
+    .buscador-contexto { margin-bottom: var(--e4) }
+    .discovery-section { margin-top: var(--e5) }
+    .municipality-filter-grid { gap: .45rem }
+    .municipality-filter { min-height: 54px; padding: .48rem .55rem; font-size: .85rem }
+    .category-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .45rem }
+    .category-filter-grid .categoria-chip { min-height: 54px; padding: .4rem .5rem; font-size: .78rem }
     .categoria-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--e2) }
     .categoria-card { padding: var(--e3) }
     .catalogo-item { grid-template-columns: 74px minmax(0, 1fr); gap: var(--e3) .8rem }

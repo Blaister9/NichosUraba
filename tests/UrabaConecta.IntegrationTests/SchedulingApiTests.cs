@@ -23,6 +23,12 @@ public sealed partial class SchedulingApiTests(PostgresWebFactory factory) : ICl
         using var client = factory.CreateClient();
         var businesses = await client.GetFromJsonAsync<List<BusinessCardDto>>("/api/v1/public/businesses?q=Bella", Json);
         Assert.Contains(businesses!, x => x.Slug == "salon-bella-uraba");
+        Assert.Contains((await client.GetFromJsonAsync<List<BusinessCardDto>>(
+            "/api/v1/public/businesses?q=Manicure", Json))!, x => x.Slug == "salon-bella-uraba");
+        Assert.Contains((await client.GetFromJsonAsync<List<BusinessCardDto>>(
+            "/api/v1/public/businesses?q=Limonada", Json))!, x => x.Slug == "restaurante-sazon-local");
+        Assert.Contains((await client.GetFromJsonAsync<List<BusinessCardDto>>(
+            "/api/v1/public/businesses?q=Barber%C3%ADa", Json))!, x => x.Slug == "barberia-el-corte");
         Assert.Empty((await client.GetFromJsonAsync<List<BusinessCardDto>>(
             "/api/v1/public/businesses?municipality=turbo", Json))!);
 
