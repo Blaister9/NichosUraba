@@ -788,19 +788,45 @@ a.card-media { display: block; color: inherit }
    PÚBLICO — ficha del negocio
    Tiene que leerse como la mini-web del establecimiento, no como una pantalla del sistema.
    ============================================================================================= */
-/* La portada es la superficie de la ficha, no una imagen dentro de una caja: llega a los bordes y
-   no lleva radio. Lo que sí es un panel superpuesto —y por eso conserva sus 20px y su sombra— es
-   la identidad que se monta encima. */
-.ficha-hero { margin: 0 0 var(--e5) }
+/* La ficha cambia de superficie a mitad de página, y el cambio es la información: mientras se
+   está mirando —foto, nombre, si está abierto, la acción— manda la selva y la fotografía. En
+   cuanto empieza a usarse —servicios, precios, horarios, formularios— vuelve el papel, que es
+   donde se lee y se elige sin cansarse. El corte cae justo donde mirar se convierte en hacer. */
+.ficha-hero {
+    position: relative; margin: 0 0 var(--e5); padding-bottom: var(--e4);
+    background: var(--uc-jungle); color: var(--uc-paper);
+}
+.profile-media { position: relative; isolation: isolate }
 .profile-cover {
-    display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover;
-    border-radius: var(--radio-0); background: var(--uc-stone);
+    display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: cover;
+    border-radius: var(--radio-0); background: var(--uc-jungle-soft);
 }
+/* El velo mide exactamente lo que mide la portada y cierra en selva sólida: la fotografía se funde
+   con el fondo en vez de terminar en un corte. */
+.profile-shade {
+    position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(180deg, transparent 46%, rgb(12 22 19 / 78%) 86%, rgb(12 22 19) 100%);
+}
+/* Sólo el logo cruza el borde de la fotografía. El nombre y el estado se quedan sobre selva
+   sólida, que es donde se leen: montarlos sobre la foto los dejaba a merced de lo que hubiera
+   detrás, y cada negocio trae una foto distinta. */
 .profile-head {
-    position: relative; margin: -3.5rem var(--e2) 0; padding: var(--e5) var(--e4) var(--e4);
-    background: var(--uc-paper); border: 0; border-radius: var(--radio-lg);
-    box-shadow: var(--sombra-lg);
+    position: relative; z-index: 1; margin: 0; padding: 0 var(--e4);
+    background: transparent; border: 0; border-radius: var(--radio-0);
+    box-shadow: none;
 }
+.profile-head .profile-logo { margin-top: -3.5rem }
+.ficha-hero h1, .ficha-hero .lead { color: var(--uc-paper) }
+.ficha-hero .meta, .ficha-hero .ficha-direccion { color: rgb(255 253 249 / 68%) }
+.ficha-hero .tag { background: rgb(255 253 249 / 16%); color: var(--uc-paper) }
+.ficha-hero .profile-logo { box-shadow: 0 0 0 3px rgb(255 253 249 / 22%) }
+/* Abierto y cerrado son estado operativo, no algo en vivo: ámbar y neutro, nunca coral. */
+.ficha-hero .abierto { background: rgb(255 203 87 / 20%); color: var(--uc-amber) }
+.ficha-hero .cerrado { background: rgb(255 253 249 / 12%); color: rgb(255 253 249 / 68%) }
+.ficha-hero .secondary {
+    background: transparent; border-color: rgb(255 253 249 / 34%); color: var(--uc-paper);
+}
+.ficha-hero .secondary:hover { background: rgb(255 253 249 / 12%); border-color: var(--uc-paper) }
 .profile-cover + .profile-head { margin-top: -3.5rem }
 .profile-identity { display: flex; align-items: flex-start; gap: var(--e3) }
 .profile-logo {
@@ -1376,13 +1402,18 @@ a.card-media { display: block; color: inherit }
        clase suelta, así que ".nav-escritorio { display:none }" nunca llegaba a aplicarse y la
        barra de escritorio seguía dibujándose encima de la inferior. */
     .site-header .nav-escritorio, .site-header .solo-escritorio { display: none }
+    /* La barra inferior se queda en papel a propósito, y es la única superficie clara del
+       descubrimiento: sobre la selva funciona como ancla: siempre en el mismo sitio, siempre del
+       mismo color, sea cual sea la fotografía que esté pasando por encima. Sin borde superior,
+       porque contra un fondo oscuro el propio papel ya es el corte. */
     .nav-inferior {
         display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
         position: fixed; inset: auto 0 0; z-index: 30;
         padding: .35rem .25rem calc(.35rem + env(safe-area-inset-bottom));
-        background: rgb(255 253 249 / 96%); backdrop-filter: blur(10px);
+        background: var(--uc-paper); backdrop-filter: blur(10px);
         border-top: 1px solid var(--borde);
     }
+    body:has(.ahora-home) .nav-inferior { border-top: 0 }
     .nav-inferior a {
         display: grid; justify-items: center; gap: .15rem; padding: .35rem .2rem;
         min-height: 52px; border-radius: var(--radio-sm);
@@ -1463,12 +1494,15 @@ a.card-media { display: block; color: inherit }
     .card-grid { gap: var(--e3) }
     .negocio-card, .business-card { border-radius: var(--radio) }
 
-    /* La portada de la ficha sale del relleno de la página y toca los dos bordes de la pantalla:
-       en móvil es donde de verdad se nota que la fotografía es la superficie y no un adorno
-       dentro de una caja. */
-    .ficha-hero .profile-cover { margin-inline: calc(var(--e4) * -1); width: calc(100% + var(--e4) * 2) }
-    .profile-head { margin: -2.5rem .35rem 0; padding: var(--e4) }
+    /* El bloque oscuro entero sale del relleno de la página y toca los dos bordes: la fotografía
+       es la superficie, y la superficie no puede tener márgenes laterales. */
+    .ficha-hero {
+        margin-inline: calc(var(--e4) * -1); width: calc(100% + var(--e4) * 2);
+        margin-top: calc(var(--e4) * -1);
+    }
+    .profile-head { margin: 0; padding-inline: var(--e4) }
     .profile-logo { width: 60px; height: 60px }
+    .profile-head .profile-logo { margin-top: -2.75rem }
     .bloque, .contact-block, .legal-document, .queue-promo { padding: var(--e5) 0 0 }
     .narrow { padding: var(--e4) }
     .live-queue { grid-template-columns: 1fr; gap: var(--e4); padding: var(--e5) var(--e4) }
@@ -1750,66 +1784,121 @@ a.discovery-category-tile:hover .marca-icono { transform: scale(1.06) rotate(-2d
    AHORA V2 — pasillo editorial de disponibilidad local
    La Home ya no explica el directorio: abre con estado real, una fotografía y una acción.
    ============================================================================================= */
+/* SELVA-FIRST — descubrir es entrar a un sitio, no abrir un documento.
+   El papel dejó de ser el fondo de Discovery. Manda la selva, y encima de ella sólo hay
+   fotografía: el color de la pantalla lo pone lo que se está fotografiando, no la superficie.
+   El papel no desaparece —vuelve entero en cuanto empieza la operación: hoja, formulario,
+   catálogo, selección— pero ya no es lo primero que se ve. */
+/* El shell oscuro se engancha a la presencia del feed, no a una clase que haya que acordarse de
+   poner: donde vive Ahora, el armazón entero es selva. Explorar, reservar y configurar siguen
+   sobre papel a propósito —son selección y lectura, no descubrimiento. */
+body:has(.ahora-home) { background: var(--uc-jungle) }
+body:has(.ahora-home) .site-header {
+    background: rgb(12 22 19 / 88%); border-bottom-color: rgb(255 253 249 / 10%);
+}
+body:has(.ahora-home) .brand { color: var(--uc-paper) }
+body:has(.ahora-home) .site-header nav a { color: rgb(255 253 249 / 78%) }
+body:has(.ahora-home) .site-header nav a:hover { background: rgb(255 253 249 / 12%); color: var(--uc-paper) }
+body:has(.ahora-home) .nav-escritorio a.activo { background: rgb(255 253 249 / 14%); color: var(--uc-paper) }
+body:has(.ahora-home) .boton-identidad { border-color: rgb(255 253 249 / 28%); color: var(--uc-paper) }
+body:has(.ahora-home) .boton-identidad:hover { border-color: var(--uc-green-lift); background: rgb(255 253 249 / 10%) }
+body:has(.ahora-home) .header-search { color: var(--uc-paper) }
+body:has(.ahora-home) .header-search:hover { background: rgb(255 253 249 / 12%) }
+body:has(.ahora-home) .page-shell { background: var(--uc-jungle) }
+body:has(.ahora-home) footer {
+    background: var(--uc-jungle); border-top-color: rgb(255 253 249 / 10%); color: rgb(255 253 249 / 55%);
+}
+body:has(.ahora-home) footer a { color: rgb(255 253 249 / 55%) }
+body:has(.ahora-home) footer strong { color: var(--uc-paper) }
+
+/* La ficha empieza dentro del mismo pasillo oscuro del que se viene, así que el encabezado y el
+   enlace de vuelta pertenecen todavía a la fotografía. El papel entra más abajo, cuando empieza
+   lo utilitario, y ese salto es lo que marca el cambio de mirar a hacer. No se oscurece el resto
+   del armazón: el pie, los formularios y el catálogo siguen claros. */
+body:has(.ficha-hero) .site-header {
+    background: rgb(12 22 19 / 88%); border-bottom-color: transparent;
+}
+body:has(.ficha-hero) .brand,
+body:has(.ficha-hero) .header-search { color: var(--uc-paper) }
+body:has(.ficha-hero) .site-header nav a { color: rgb(255 253 249 / 78%) }
+body:has(.ficha-hero) .site-header nav a:hover,
+body:has(.ficha-hero) .header-search:hover { background: rgb(255 253 249 / 12%); color: var(--uc-paper) }
+body:has(.ficha-hero) .boton-identidad { border-color: rgb(255 253 249 / 28%); color: var(--uc-paper) }
+/* El enlace de vuelta se sienta sobre la franja de selva que continúa hacia la portada: sin esto
+   quedaba una banda clara suelta entre el encabezado oscuro y la fotografía. */
+body:has(.ficha-hero) .page-shell { background: linear-gradient(var(--uc-jungle) 0 12rem, var(--uc-paper) 12rem) }
+body:has(.ficha-hero) .back-link { color: rgb(255 253 249 / 78%) }
+
 .ahora-home {
     width: min(100vw, 1220px); margin: calc(var(--e5) * -1) auto 0;
-    color: var(--uc-jungle); background: var(--uc-paper); animation: feed-enter .18s ease-out both;
+    color: var(--uc-paper); background: var(--uc-jungle); animation: feed-enter .18s ease-out both;
 }
 .site-header.is-home .header-search { display: none }
-.footer-home { background: var(--uc-paper) }
+.footer-home { background: var(--uc-jungle) }
 .ahora-context {
     position: sticky; top: 57px; z-index: 16; display: flex; align-items: center;
     justify-content: space-between; min-height: 58px; padding: .45rem 1rem;
-    border-bottom: 1px solid var(--borde); background: rgb(255 253 249 / 94%);
+    border-bottom: 0; background: rgb(12 22 19 / 92%);
     backdrop-filter: blur(14px);
 }
 .location-trigger, .ahora-search {
     display: inline-flex; min-height: var(--alto-tocable); align-items: center; gap: .5rem; border: 0;
-    background: transparent; color: var(--uc-jungle); text-decoration: none;
+    background: transparent; color: var(--uc-paper); text-decoration: none;
 }
 .location-trigger { padding: .2rem 0; cursor: pointer; text-align: left }
 .location-trigger > span { display: grid; line-height: 1.05 }
-.location-trigger small { color: var(--texto-suave); font-size: var(--t-11); font-weight: var(--p-fuerte); text-transform: uppercase; letter-spacing: .08em }
+.location-trigger small { color: rgb(255 253 249 / 58%); font-size: var(--t-11); font-weight: var(--p-fuerte); text-transform: uppercase; letter-spacing: .08em }
 .location-trigger strong { max-width: 13rem; overflow: hidden; font-family: var(--fuente-titular);
     font-size: var(--t-17); font-weight: var(--p-titular); letter-spacing: -.03em; white-space: nowrap; text-overflow: ellipsis }
 .ahora-search { padding: .35rem .15rem .35rem .7rem; font-size: var(--t-13); font-weight: var(--p-fuerte) }
+/* La cinta de filtros vivía en una banda blanca que partía la pantalla en dos justo antes de la
+   primera fotografía. Ahora es parte del mismo shell oscuro y sólo el chip elegido se ilumina. */
 .feed-filters {
-    position: sticky; top: 115px; z-index: 15; display: flex; gap: .25rem; overflow-x: auto;
-    padding: .35rem 1rem .5rem; background: rgb(255 253 249 / 94%); scrollbar-width: none;
+    position: sticky; top: 115px; z-index: 15; display: flex; gap: .3rem; overflow-x: auto;
+    padding: .35rem 1rem .55rem; background: rgb(12 22 19 / 92%); scrollbar-width: none;
     backdrop-filter: blur(14px);
 }
 .feed-filters::-webkit-scrollbar { display: none }
 .feed-filters button {
     flex: 0 0 auto; min-height: var(--alto-tocable); padding: .35rem .95rem; border: 0; border-radius: var(--radio-pill);
-    background: transparent; color: var(--texto-suave); font-size: var(--t-13); font-weight: var(--p-fuerte); cursor: pointer;
+    background: rgb(255 253 249 / 10%); color: rgb(255 253 249 / 76%); font-size: var(--t-13);
+    font-weight: var(--p-fuerte); cursor: pointer;
     transition: background .14s ease, color .14s ease, transform .12s ease;
 }
-/* El chip activo es una acción de plataforma, así que es verde: no compite con el coral de lo que
-   está pasando ni con el ámbar de los números. */
-.feed-filters button.active { background: var(--uc-green); color: var(--uc-paper) }
+/* Sobre selva el chip elegido se lee mejor en papel que en verde: el verde queda para el botón
+   que hace algo, y la cinta sólo dice dónde estás mirando. */
+.feed-filters button.active { background: var(--uc-paper); color: var(--uc-jungle) }
 .feed-filters button:active { transform: scale(.96) }
 .ahora-layout { display: grid; align-items: start }
 .feed-column { width: 100%; max-width: 780px; margin-inline: auto }
-.feed-piece { position: relative; margin: 0; padding: 0 0 1.1rem; background: var(--uc-paper) }
-/* Lo que separa dos piezas es una franja de piedra, no el borde de una tarjeta. */
+.feed-piece { position: relative; margin: 0; padding: 0 0 1.1rem; background: var(--uc-jungle) }
+/* Ocho píxeles de selva entre escena y escena. No es el borde de una tarjeta: es el aire del
+   pasillo, y es lo único que separa una fotografía de la siguiente. */
 .feed-piece + .feed-piece, .feed-piece + .capture-piece, .capture-piece + .feed-piece {
-    padding-top: .9rem; border-top: 8px solid var(--uc-stone);
+    padding-top: 8px;
 }
 /* La fotografía no vive dentro de una card: es la superficie. A sangre, sin margen lateral y sin
    radio, en móvil y en escritorio. El contenido se monta encima con velo. */
 .feed-media {
-    position: relative; display: block; width: 100%; height: min(74vw, 330px); overflow: hidden;
-    border-radius: var(--radio-0); background: var(--uc-stone); color: var(--uc-green); text-decoration: none;
+    position: relative; display: block; width: 100%; height: min(88vw, 400px); overflow: hidden;
+    border-radius: var(--radio-0); background: var(--uc-jungle-soft); color: var(--uc-paper); text-decoration: none;
 }
-.feed-primary .feed-media { height: clamp(320px, 43svh, 365px) }
+/* La primera fotografía se queda con todo el alto que sobra después de la cinta y de la barra
+   inferior, menos lo que ocupa la lectura. Un pixel más y la acción cae bajo el pliegue: el primer
+   viewport tiene que entregar oscuridad, foto, estado y acción, y sin la acción no entrega nada. */
+.feed-primary .feed-media { height: clamp(340px, 44svh, 400px) }
 .feed-media img { width: 100%; height: 100%; object-fit: cover; transition: transform .18s ease }
 .feed-media:active img { transform: scale(1.015) }
+/* Un negocio sin foto cae sobre selva, no sobre un pastel: la variedad cromática la pone la
+   fotografía, y donde no la hay el hueco es oscuro y se nota que falta una foto. */
 .feed-art { display: grid; place-items: center; background:
-    radial-gradient(circle at 75% 20%, rgb(255 253 249 / 70%) 0 12%, transparent 13%),
-    linear-gradient(145deg, var(--uc-stone), var(--uc-green-wash)) }
+    radial-gradient(circle at 50% 35%, rgb(15 138 98 / 22%) 0, transparent 62%), var(--uc-jungle-soft) }
 .feed-art-icon { position: relative; z-index: 1; display: grid; place-items: center; width: 8.5rem; height: 8.5rem;
-    border-radius: 50%; background: rgb(255 253 249 / 62%); color: var(--uc-green) }
+    border-radius: 50%; background: rgb(255 253 249 / 8%); color: rgb(255 253 249 / 62%) }
+/* El velo se apoya abajo, que es donde se monta el texto, y cierra a fondo contra la selva para
+   que la fotografía no termine en un corte duro. */
 .feed-shade { position: absolute; inset: 0; pointer-events: none; background:
-    linear-gradient(180deg, rgb(12 22 19 / 30%) 0, transparent 32%, transparent 52%, rgb(12 22 19 / 82%) 100%) }
+    linear-gradient(180deg, rgb(12 22 19 / 42%) 0, transparent 26%, transparent 44%, rgb(12 22 19 / 88%) 92%, rgb(12 22 19) 100%) }
 .feed-badges { position: absolute; inset: .8rem .8rem auto; display: flex; align-items: center; justify-content: space-between; gap: .4rem }
 /* Tres distintivos y no hay un cuarto: EN VIVO, HOY, PATROCINADO. */
 .live-badge, .sponsored-badge, .promotion-badge {
@@ -1830,44 +1919,57 @@ a.discovery-category-tile:hover .marca-icono { transform: scale(1.06) rotate(-2d
 /* El dato operativo sobre fotografía va en ámbar puro: es el número que se verifica de un vistazo. */
 .feed-overlay-copy strong { color: var(--uc-amber); font-size: var(--t-17); font-weight: var(--p-titular);
     font-variant-numeric: tabular-nums }
-.feed-copy { padding: .85rem 1rem .15rem }
-.feed-question { margin: 0 0 .25rem; color: var(--texto-suave); font-size: var(--t-11); font-weight: var(--p-fuerte);
+/* El texto ya no cae sobre papel: cae sobre la selva, en continuidad con la fotografía de arriba.
+   El velo cierra en selva sólida, así que no hay costura entre la foto y lo que se lee debajo. */
+.feed-copy { padding: .9rem 1rem .25rem }
+.feed-question { margin: 0 0 .3rem; color: rgb(255 253 249 / 55%); font-size: var(--t-11); font-weight: var(--p-fuerte);
     letter-spacing: .06em; text-transform: uppercase }
 /* 27px sobre fotografía, tal cual: un clamp fluido devolvía 23.4px a 390px de ancho, que no es
    ningún paso de la escala aprobada. El titular crece a 34 en escritorio y en ningún punto
    intermedio. */
-.feed-copy h1 { max-width: 28ch; margin: 0 0 .4rem; font-size: var(--t-27) }
-/* Precio, minutos, cupos, hora: ámbar oscurecido para que se lea sobre papel. */
-.feed-state { margin: 0; color: var(--uc-amber-ink); font-size: var(--t-15); font-weight: var(--p-titular);
+.feed-copy h1 { max-width: 28ch; margin: 0 0 .45rem; font-size: var(--t-27); color: var(--uc-paper) }
+/* Sobre selva el ámbar puro ya es legible, así que el dato operativo recupera el color de la
+   paleta en vez de la versión oscurecida que hacía falta sobre papel. */
+.feed-state { margin: 0; color: var(--uc-amber); font-size: var(--t-15); font-weight: var(--p-titular);
     font-variant-numeric: tabular-nums }
 /* "1 esperando · ~25 min" sigue siendo un dato operativo aunque la fila esté abierta, así que la
    cifra no se vuelve coral: el coral es el punto que late al lado, y eso es lo que está pasando. */
 .feed-state.is-live::before { content: ""; display: inline-block; width: .48rem; height: .48rem; margin: 0 .42rem .08rem 0;
     border-radius: 50%; background: var(--uc-live); animation: live-pulse 1.8s ease-in-out infinite }
-.feed-detail { margin: .28rem 0 0; color: var(--texto-suave); font-size: var(--t-13)}
-/* Una sola acción por pieza, y siempre del verde de la plataforma: antes cada vertical tenía su
-   color —azul barbería, magenta belleza, naranja tienda— y la acción dejaba de reconocerse. */
-.feed-action { display: inline-flex; align-items: center; gap: .5rem; min-height: var(--alto-tocable); margin-top: .35rem;
-    color: var(--uc-green-ink); font-weight: var(--p-titular); text-decoration: none; transition: transform .13s ease }
+.feed-detail { margin: .3rem 0 0; color: rgb(255 253 249 / 62%); font-size: var(--t-13)}
+/* Una sola acción por pieza. Sobre selva el verde de marca pierde contraste contra el fondo, así
+   que la acción se escribe en papel y la reconoce la flecha, no el color. */
+.feed-action { display: inline-flex; align-items: center; gap: .5rem; min-height: var(--alto-tocable); margin-top: .3rem;
+    color: var(--uc-paper); font-weight: var(--p-titular); text-decoration: none; transition: transform .13s ease }
 .feed-action:active { transform: translateX(3px) scale(.985) }
 .capture-piece {
     display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .8rem; align-items: start;
-    padding: 1.5rem 1rem; background: var(--uc-stone); color: var(--uc-jungle);
+    padding: 1.5rem 1rem; background: var(--uc-jungle-soft); color: var(--uc-paper);
 }
 .capture-mark { display: grid; place-items: center; width: 3.5rem; height: 3.5rem; border-radius: 50%;
     background: var(--uc-paper); color: var(--uc-green) }
-.capture-piece h2 { margin: 0; font-size: var(--t-21)}
-.capture-piece p:not(.eyebrow) { margin: .25rem 0 0; color: var(--texto-suave); font-size: var(--t-15)}
-.capture-piece .button-link { grid-column: 2; width: fit-content; min-height: var(--alto-tocable); padding: .45rem .8rem }
-.feed-more { display: block; min-height: 48px; margin: 1rem auto 2rem; padding: .55rem 1.1rem; border: 1px solid var(--borde-fuerte);
-    border-radius: var(--radio-pill); background: transparent; color: var(--marca-800); font-weight: var(--p-titular); cursor: pointer }
-.quiet-feed { min-height: 55vh; padding: 3rem 1.2rem; text-align: center }
-.quiet-feed .icono { margin-inline: auto }
-.quiet-feed h1 { margin: .7rem auto; font-size: var(--t-27)}
-.quiet-feed p { max-width: 35ch; margin: 0 auto 1rem; color: var(--texto-suave) }
+.capture-piece h2 { margin: 0; font-size: var(--t-21); color: var(--uc-paper) }
+.capture-piece .eyebrow { color: rgb(255 253 249 / 55%) }
+.capture-piece p:not(.eyebrow) { margin: .25rem 0 0; color: rgb(255 253 249 / 70%); font-size: var(--t-15)}
+.capture-piece .button-link { grid-column: 2; width: fit-content; min-height: var(--alto-tocable); padding: .45rem .8rem;
+    background: var(--uc-paper); border-color: var(--uc-paper); color: var(--uc-jungle) }
+.capture-piece .button-link:hover { background: var(--uc-stone); border-color: var(--uc-stone) }
+.feed-more { display: block; min-height: 48px; margin: 1.25rem auto 2rem; padding: .55rem 1.1rem;
+    border: 1px solid rgb(255 253 249 / 32%);
+    border-radius: var(--radio-pill); background: transparent; color: var(--uc-paper); font-weight: var(--p-titular); cursor: pointer }
+.feed-more:hover { background: rgb(255 253 249 / 10%) }
+.quiet-feed { min-height: 55vh; padding: 3rem 1.2rem; text-align: center; color: var(--uc-paper) }
+.quiet-feed .icono { margin-inline: auto; color: rgb(255 253 249 / 55%) }
+.quiet-feed h1 { margin: .7rem auto; font-size: var(--t-27); color: var(--uc-paper) }
+.quiet-feed p { max-width: 35ch; margin: 0 auto 1rem; color: rgb(255 253 249 / 70%) }
+.quiet-feed .secondary { background: var(--uc-paper); border-color: var(--uc-paper); color: var(--uc-jungle) }
 .ahora-error { margin: 1rem }
 .skeleton-feed { min-height: 620px }
-.skeleton-feed .skeleton { display: block; height: 465px; border-radius: 0}
+/* El esqueleto también nace oscuro: si arrancara claro, cada carga daría un fogonazo blanco justo
+   antes de la primera fotografía. */
+.skeleton-feed .skeleton { display: block; height: 465px; border-radius: 0;
+    background: linear-gradient(90deg, var(--uc-jungle-soft) 25%, #22332C 50%, var(--uc-jungle-soft) 75%);
+    background-size: 200% 100% }
 
 .ahora-rail { display: none }
 .location-backdrop { position: fixed; inset: 0; z-index: 59; background: rgb(12 22 19 / 52%); animation: fade-in .16s ease-out both }
@@ -1934,31 +2036,38 @@ a.discovery-category-tile:hover .marca-icono { transform: scale(1.06) rotate(-2d
 }
 
 /* ESCRITORIO — la misma dirección artística, otra composición: columna editorial y rail.
-   Aquí es donde la implementación anterior se volvía otra cosa: la fotografía se metía en una
-   card de 24px, el rail se llenaba de cajas blancas y la pantalla acababa pareciendo un tablero.
-   La fotografía sigue siendo la superficie y el rail es selva, no una pila de tarjetas. */
+   El monitor es donde más se notaba el fondo claro: media pantalla de crema alrededor de una
+   columna. Ahora el monitor entero es selva y lo que ocupa el ancho es la fotografía; el rail se
+   separa por tono, no por color, porque ya no puede apoyarse en el contraste contra un fondo
+   pálido que dejó de existir. */
 @media (min-width: 901px) {
-    .ahora-home { margin-top: calc(var(--e5) * -1); padding: 1.25rem 1.25rem 0 }
-    .ahora-context, .feed-filters { position: static; max-width: 1120px; margin-inline: auto; padding-inline: 0; background: transparent; backdrop-filter: none }
+    /* El armazón deja de estar limitado a los 1120px del resto del producto: la Home ya no es una
+       página con márgenes, es una sala. La cinta y la barra de ubicación se alinean con el ancho
+       exacto de la rejilla —780 + 320 + 32— para que el borde izquierdo de la fotografía y el de
+       los filtros sean la misma línea. */
+    body:has(.ahora-home) .page-shell { width: 100%; max-width: none; padding-inline: 0 }
+    .ahora-home { max-width: none; width: 100%; margin-top: calc(var(--e5) * -1); padding: 1.25rem 1.25rem 0 }
+    .ahora-context, .feed-filters { position: static; width: min(1132px, 100%); margin-inline: auto; padding-inline: 0; background: transparent; backdrop-filter: none }
     .ahora-context { border-bottom: 0 }
     .feed-filters { padding-top: .15rem; padding-bottom: 1rem }
-    .ahora-layout { grid-template-columns: minmax(0, 780px) 300px; justify-content: center; gap: 2.5rem }
+    .ahora-layout { grid-template-columns: minmax(0, 780px) 320px; justify-content: center; gap: 2rem }
     .feed-column { margin: 0 }
     .feed-piece { border-radius: var(--radio-0) }
+    /* También en escritorio la separación es aire de selva, no un margen de tarjeta. */
     .feed-piece + .feed-piece, .feed-piece + .capture-piece, .capture-piece + .feed-piece {
-        margin-top: 1.75rem; padding-top: 1.75rem;
+        margin-top: 8px; padding-top: 1.25rem;
     }
-    .feed-media { height: 440px; border-radius: var(--radio-0) }
-    .feed-primary .feed-media { height: 540px }
-    .feed-copy { padding: 1.1rem 0 1.25rem }
+    .feed-media { height: 520px; border-radius: var(--radio-0) }
+    .feed-primary .feed-media { height: 620px }
+    .feed-copy { padding: 1.1rem 0 1.5rem }
     .feed-copy h1, .feed-primary .feed-copy h1 { font-size: var(--t-34) }
-    .capture-piece { margin-block: 1.75rem; padding: 1.75rem }
+    .capture-piece { margin-block: 8px; padding: 1.75rem }
 
-    /* El rail es una sola superficie selva, no cuatro tarjetas. El número manda y va en ámbar,
-       porque es exactamente lo que el Design Spec llama dato operativo. */
+    /* El rail es una sola superficie, un tono por encima de la selva del shell. El número manda y
+       va en ámbar, porque es exactamente lo que el Design Spec llama dato operativo. */
     .ahora-rail {
         position: sticky; top: 88px; display: grid; align-content: start;
-        overflow: hidden; border-radius: var(--radio-lg); background: var(--uc-jungle); color: var(--uc-paper);
+        overflow: hidden; border-radius: var(--radio-lg); background: var(--uc-jungle-soft); color: var(--uc-paper);
     }
     .ahora-rail section { display: grid; padding: 1.1rem 1.2rem; background: transparent }
     .ahora-rail section + section { border-top: 1px solid rgb(255 253 249 / 10%) }

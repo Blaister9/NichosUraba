@@ -9,20 +9,27 @@
    identidad, una acción dominante y después el detalle. Quien llega por un enlace directo tiene que
    pensar "ésta es la página de este negocio", no "estoy dentro de un sistema". *@
 
+@* La portada va envuelta, igual que la fotografía del feed: el velo tiene que medir lo que mide la
+   imagen, no lo que mide la sección entera. Sin la envoltura, el degradado se calculaba sobre todo
+   el bloque —foto, nombre, descripción y botones— y acababa oscureciendo lo que ya estaba oscuro
+   mientras el nombre caía sobre la parte clara de la foto, ilegible. *@
 <section class="ficha-hero" data-tono="@CategoryLook.Tone(Profile.Category.Slug)">
-    @if (Cover is not null)
-    {
-        <img class="profile-cover" src="@Cover.Url" alt="@(Cover.AltText ?? $"Portada de {Profile.Name}")"
-             width="@Cover.Width" height="@Cover.Height" fetchpriority="high" />
-    }
-    else
-    {
-        @* Un negocio sin portada conserva la forma de la ficha en vez de empezar con el título
-           pegado al encabezado: la mini-web sigue pareciendo una mini-web. *@
-        <div class="profile-cover cover-vacia" aria-hidden="true">
-            <Icon Name="@CategoryLook.Icon(Profile.Category.Slug)" Size="64" />
-        </div>
-    }
+    <div class="profile-media">
+        @if (Cover is not null)
+        {
+            <img class="profile-cover" src="@Cover.Url" alt="@(Cover.AltText ?? $"Portada de {Profile.Name}")"
+                 width="@Cover.Width" height="@Cover.Height" fetchpriority="high" />
+        }
+        else
+        {
+            @* Un negocio sin portada conserva la forma de la ficha en vez de empezar con el título
+               pegado al encabezado: la mini-web sigue pareciendo una mini-web. *@
+            <div class="profile-cover cover-vacia" aria-hidden="true">
+                <Icon Name="@CategoryLook.Icon(Profile.Category.Slug)" Size="64" />
+            </div>
+        }
+        <span class="profile-shade" aria-hidden="true"></span>
+    </div>
     <div class="profile-head">
         <div class="profile-identity">
             @if (Logo is not null)
