@@ -145,6 +145,66 @@ public sealed class PushNotificationApiTests(PushWebFactory factory) : IClassFix
     }
 
     [Fact]
+    public async Task Appointment_and_order_cover_owner_client_transport_and_deep_links()
+    {
+        using var appointmentOwner = factory.CreateClient(new() { AllowAutoRedirect = false, HandleCookies = true });
+        using var orderOwner = factory.CreateClient(new() { AllowAutoRedirect = false, HandleCookies = true });
+        using var visitor = factory.CreateClient();
+        await PlatformAdministrationApiTests.Login(appointmentOwner, DevelopmentSeeder.BellaOwnerEmail);
+        await PlatformAdministrationApiTests.Login(orderOwner, DevelopmentSeeder.SazonOwnerEmail);
+        await appointmentOwner.PostAsJsonAsync(
+            $"/api/v1/businesses/{DevelopmentSeeder.BellaBusinessId}/push-subscriptions", Subscription("bella-owner"));
+        await orderOwner.PostAsJsonAsync(
+            $"/api/v1/businesses/{DevelopmentSeeder.SazonBusinessId}/push-subscriptions", Subscription("sazon-owner"));
+
+        factory.Transport.Reset();
+        var appointment = await CreateAppointment(visitor);
+        var order = await CreateOrder(visitor);
+        Assert.Contains(factory.Transport.Sent, x => x.Audience == PushAudience.Owner &&
+            x.Message.Title == "Nueva cita" &&
+            x.Message.Url.StartsWith($"/panel/{DevelopmentSeeder.BellaBusinessId}/citas#appointment-"));
+        Assert.Contains(factory.Transport.Sent, x => x.Audience == PushAudience.Owner &&
+            x.Message.Title == "Nuevo pedido para recoger" &&
+            x.Message.Url.StartsWith($"/panel/{DevelopmentSeeder.SazonBusinessId}/pedidos#order-"));
+
+        factory.Transport.Reset();
+        Assert.Equal(HttpStatusCode.OK, (await visitor.PostAsJsonAsync(
+            $"/api/v1/public/appointments/{appointment.TrackingCode}/push-subscriptions",
+            Subscription("appointment-client"))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await visitor.PostAsJsonAsync(
+            $"/api/v1/public/orders/{order.TrackingCode}/push-subscriptions",
+            Subscription("order-client"))).StatusCode);
+        Assert.Contains(factory.Transport.Sent, x => x.Audience == PushAudience.Appointment &&
+            x.Message.Url == $"/seguimiento/citas/{appointment.TrackingCode}");
+        Assert.Contains(factory.Transport.Sent, x => x.Audience == PushAudience.PickupOrder &&
+            x.Message.Url == $"/seguimiento/pedidos/{order.TrackingCode}");
+
+        factory.Transport.Reset();
+        var appointments = await appointmentOwner.GetFromJsonAsync<AppointmentBoardDto>(
+            $"/api/v1/businesses/{DevelopmentSeeder.BellaBusinessId}/appointments");
+        var storedAppointment = appointments!.Items.Where(x => x.Status == "Pending" &&
+                x.Start.ToUniversalTime() == appointment.Start.ToUniversalTime())
+            .OrderByDescending(x => x.CreatedAt).First();
+        Assert.Equal(HttpStatusCode.OK, (await appointmentOwner.PostAsJsonAsync(
+            $"/api/v1/businesses/{DevelopmentSeeder.BellaBusinessId}/appointments/{storedAppointment.Id}/status",
+            new ChangeAppointmentStatusRequest { TargetStatus = "Confirmed" })).StatusCode);
+
+        var board = await orderOwner.GetFromJsonAsync<PickupOrderBoardDto>(
+            $"/api/v1/businesses/{DevelopmentSeeder.SazonBusinessId}/orders");
+        var storedOrder = board!.Items.Single(x => x.OrderNumber == order.OrderNumber);
+        storedOrder = await ChangeOrder(orderOwner, storedOrder, "accept");
+        storedOrder = await ChangeOrder(orderOwner, storedOrder, "prepare");
+        _ = await ChangeOrder(orderOwner, storedOrder, "ready");
+
+        Assert.Contains(factory.Transport.Sent, x => x.Audience == PushAudience.Appointment &&
+            x.Message.Title == "Cita confirmada" &&
+            x.Message.Url == $"/seguimiento/citas/{appointment.TrackingCode}");
+        Assert.Contains(factory.Transport.Sent, x => x.Audience == PushAudience.PickupOrder &&
+            x.Message.Title == "Pedido listo para recoger" &&
+            x.Message.Url == $"/seguimiento/pedidos/{order.TrackingCode}");
+    }
+
+    [Fact]
     public async Task Gone_subscription_is_deactivated_after_delivery_attempt()
     {
         factory.Transport.Reset();
@@ -171,5 +231,58 @@ public sealed class PushNotificationApiTests(PushWebFactory factory) : IClassFix
                 ConsentNoticeVersion = ConsentPolicyProvider.FallbackVersion });
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         return (await response.Content.ReadFromJsonAsync<QueueTicketCreatedDto>())!;
+    }
+
+    private static async Task<AppointmentCreatedDto> CreateAppointment(HttpClient client)
+    {
+        var profile = await client.GetFromJsonAsync<BusinessProfileDto>(
+            "/api/v1/public/businesses/salon-bella-uraba");
+        var service = profile!.Services.First();
+        var date = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1);
+        SlotListDto? available = null;
+        for (var attempt = 0; attempt < 20 && (available is null || available.Slots.Count == 0); attempt++)
+        {
+            available = await client.GetFromJsonAsync<SlotListDto>(
+                $"/api/v1/public/businesses/salon-bella-uraba/appointment-slots?serviceId={service.Id}&date={date:yyyy-MM-dd}");
+            if (available is null || available.Slots.Count == 0) date = date.AddDays(1);
+        }
+        Assert.NotNull(available);
+        Assert.NotEmpty(available!.Slots);
+        var response = await client.PostAsJsonAsync("/api/v1/public/businesses/salon-bella-uraba/appointments",
+            new CreateAppointmentRequest
+            {
+                ServiceId = service.Id, Start = available.Slots.Last().Start, CustomerAlias = "Push cita",
+                Phone = "3001234567", ConsentAccepted = true, ConsentNoticeVersion = "pilot-1"
+            });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<AppointmentCreatedDto>())!;
+    }
+
+    private static async Task<PickupOrderCreatedDto> CreateOrder(HttpClient client)
+    {
+        var menu = await client.GetFromJsonAsync<PickupMenuDto>(
+            "/api/v1/public/businesses/restaurante-sazon-local/menu");
+        var slots = await client.GetFromJsonAsync<PickupSlotListDto>(
+            "/api/v1/public/businesses/restaurante-sazon-local/pickup-slots");
+        Assert.NotEmpty(slots!.Slots);
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/public/businesses/restaurante-sazon-local/orders", new CreatePickupOrderRequest
+            {
+                CustomerAlias = "Push pedido", Phone = "3001234567", PickupStart = slots.Slots.Last().Start,
+                ConsentAccepted = true, ConsentNoticeVersion = "pilot-1",
+                Lines = [new() { ProductId = menu!.Products.First().Id, Quantity = 1 }]
+            });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<PickupOrderCreatedDto>())!;
+    }
+
+    private static async Task<PickupOrderAdminDto> ChangeOrder(HttpClient owner, PickupOrderAdminDto order,
+        string action)
+    {
+        var response = await owner.PostAsJsonAsync(
+            $"/api/v1/businesses/{DevelopmentSeeder.SazonBusinessId}/orders/{order.Id}/{action}",
+            new PickupOrderCommandRequest { Version = order.Version });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<PickupOrderAdminDto>())!;
     }
 }
