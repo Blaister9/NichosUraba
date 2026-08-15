@@ -24,25 +24,47 @@
     </div>
 </header>
 
-<fieldset class="search-panel directory-search" aria-label="Buscar y filtrar por municipio" disabled="@(!listo)">
-    <label>Qué buscas
-        <input @bind-value="termino" @bind-value:event="oninput" @onkeydown="AlTeclear"
-               placeholder="Negocio, servicio o producto…" autocomplete="off" />
-    </label>
-    <label>Municipio
-        <select @bind="municipio" @bind:after="Aplicar">
-            <option value="">Todos</option>
-            @foreach (var (slug, nombre) in Municipios) { <option value="@slug">@nombre</option> }
-        </select>
-    </label>
-    <button class="primary" @onclick="Aplicar" disabled="@(!listo || cargando)">
-        @(cargando ? "Buscando…" : "Buscar")
-    </button>
-</fieldset>
+@if (IsCategoryPage)
+{
+    <nav class="category-place-selector" data-tono="@CategoryLook.Tone(categoria)" aria-label="Elegir municipio para @NombreCategoria">
+        <a href="@MunicipalityDestination("")" aria-current="@(municipio == "" ? "page" : null)">
+            <Icon Name="ubicacion" Size="17" /> Todo Urabá
+        </a>
+        @foreach (var (slug, nombre) in Municipios)
+        {
+            <a href="@MunicipalityDestination(slug)" aria-current="@(municipio == slug ? "page" : null)">@nombre</a>
+        }
+    </nav>
+    <fieldset class="category-search-bar" aria-label="Buscar en @Titulo" disabled="@(!listo)">
+        <label class="visually-hidden" for="q-category">Buscar en @Titulo</label>
+        <Icon Name="explorar" Size="19" />
+        <input id="q-category" @bind-value="termino" @bind-value:event="oninput" @onkeydown="AlTeclear"
+               placeholder="Buscar dentro de @NombreCategoria.ToLowerInvariant()…" autocomplete="off" />
+        <button class="primary" @onclick="Aplicar" disabled="@(!listo || cargando)">Buscar</button>
+    </fieldset>
+}
+else
+{
+    <fieldset class="search-panel directory-search" aria-label="Buscar y filtrar por municipio" disabled="@(!listo)">
+        <label>Qué buscas
+            <input @bind-value="termino" @bind-value:event="oninput" @onkeydown="AlTeclear"
+                   placeholder="Negocio, servicio o producto…" autocomplete="off" />
+        </label>
+        <label>Municipio
+            <select @bind="municipio" @bind:after="Aplicar">
+                <option value="">Todos</option>
+                @foreach (var (slug, nombre) in Municipios) { <option value="@slug">@nombre</option> }
+            </select>
+        </label>
+        <button class="primary" @onclick="Aplicar" disabled="@(!listo || cargando)">
+            @(cargando ? "Buscando…" : "Buscar")
+        </button>
+    </fieldset>
+}
 
 @* La categoría se elige viendo su identidad, no leyendo un select. La tira conserva el municipio
    y la búsqueda actuales, así los tres filtros siguen componiéndose en una sola dirección. *@
-@if (categorias.Count > 0)
+@if (categorias.Count > 0 && !IsCategoryPage)
 {
     <div class="category-filter" role="group" aria-label="Filtrar por categoría">
         <span class="filter-label">Categoría</span>
@@ -80,6 +102,13 @@
     </div>
 }
 
+@if (!cargando && Featured is { } featured && PromotionCatalog.For(featured.Slug) is { } promotion)
+{
+    <section class="featured-placement category-featured" aria-label="Negocio destacado">
+        <CommercialBanner Business="featured" Promotion="promotion" />
+    </section>
+}
+
 @if (cargando)
 {
     <div class="card-grid" aria-hidden="true">
@@ -112,9 +141,9 @@ else
         <h2 aria-live="polite">@negocios.Count @(negocios.Count == 1 ? "negocio" : "negocios") @Ambito</h2>
     </div>
     <div class="card-grid">
-        @foreach (var (negocio, indice) in negocios.Select((x, i) => (x, i)))
+        @foreach (var (negocio, indice) in OrderedBusinesses.Select((x, i) => (x, i)))
         {
-            <BusinessCard Business="negocio" Priority="indice == 0" />
+            <BusinessCard Business="negocio" Priority="indice == 0 && Featured is null" />
         }
     </div>
 }
@@ -137,7 +166,11 @@ else
         .Select(x => (x.Slug, x.Name)).ToArray();
 
     private string NombreCategoria
-        => categorias.FirstOrDefault(x => x.Slug == categoria)?.Name ?? "";
+        => DiscoveryCatalog.CategoryBySlug(categoria)?.Name
+           ?? categorias.FirstOrDefault(x => x.Slug == categoria)?.Name ?? "";
+    private bool IsCategoryPage => Categoria is { Length: > 0 };
+    private IReadOnlyList<BusinessCardDto> OrderedBusinesses => PromotionCatalog.Order(negocios);
+    private BusinessCardDto? Featured => OrderedBusinesses.FirstOrDefault(PromotionCatalog.IsFeatured);
 
     private string Titulo
     {
@@ -241,6 +274,8 @@ else
         categoria = slug;
         Nav.NavigateTo(Direccion(termino, municipio, categoria));
     }
+
+    private string MunicipalityDestination(string slug) => Direccion(termino, slug, categoria);
 
     private void Quitar(string clave) => Nav.NavigateTo(Direccion(
         clave == "q" ? "" : termino,

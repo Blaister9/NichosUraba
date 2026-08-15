@@ -34,7 +34,7 @@ public sealed class CommercialReadinessTests(BrowserFixture fixture) : IClassFix
         await page.GetByRole(AriaRole.Link, new() { NameRegex = new Regex("Belleza y estética") }).ClickAsync();
         await page.WaitForURLAsync(url => url.Contains("/categorias/belleza-cuidado-personal") &&
                                            url.Contains("municipio=apartado"));
-        await Assertions.Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Belleza y cuidado personal en Apartadó" }))
+        await Assertions.Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Belleza y estética en Apartadó" }))
             .ToBeVisibleAsync();
 
         await page.GotoAsync(fixture.BaseUrl);

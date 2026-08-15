@@ -1400,3 +1400,221 @@ a.card-media { display: block; color: inherit }
 .catalog-image-editor{display:grid;grid-template-columns:8rem minmax(0,1fr);gap:1rem;align-items:start;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--borde)}.catalog-image-preview{position:relative;aspect-ratio:1;border-radius:.9rem;overflow:hidden;background:#eef4f1}.catalog-image-preview img{width:100%;height:100%;object-fit:cover}.catalog-image-preview .tag{position:absolute;left:.4rem;bottom:.4rem}.catalog-image-empty{display:grid;height:100%;place-items:center;align-content:center;gap:.3rem;color:var(--texto-suave)}.catalog-image-controls{min-width:0}.catalog-image-controls input[type=file]{width:100%;font-size:.86rem}.catalog-image-controls .actions{margin-top:.55rem}
 .operation-tabs{display:flex;gap:.45rem;margin:1rem 0;padding:.15rem 0 .45rem;overflow-x:auto;scrollbar-width:none}.operation-tabs::-webkit-scrollbar{display:none}.operation-tabs button{display:flex;flex:0 0 auto;gap:.45rem;align-items:center;min-height:44px;padding:.55rem .8rem;border:1px solid var(--borde);border-radius:999px;background:var(--superficie);color:var(--texto-suave)}.operation-tabs button strong{display:grid;place-items:center;min-width:1.5rem;height:1.5rem;border-radius:999px;background:var(--superficie-2);font-size:.78rem}.operation-tabs button.active{border-color:var(--marca-700);background:var(--marca-700);color:#fff}.operation-tabs button.active strong{background:#ffffff2b}.appointment-card:target,.queue-row:target{outline:3px solid var(--calido-500);outline-offset:3px;animation:target-pulse 1.5s ease-out}@keyframes target-pulse{from{box-shadow:0 0 0 8px rgb(243 179 61 / 35%)}to{box-shadow:var(--sombra-sm)}}
 @media(max-width:520px){.catalog-image-editor{grid-template-columns:6.5rem minmax(0,1fr);gap:.75rem}.catalog-image-controls .actions{display:grid;grid-template-columns:1fr}.catalog-image-controls button{min-height:44px}}
+
+/* =============================================================================================
+   VISUAL-FIRST — descubrimiento que se entiende mirando
+   ============================================================================================= */
+.visual-home { display: grid; gap: var(--e4) }
+.visual-home .visual-search { width: min(100%, 48rem); margin: 0 auto }
+.visual-home .index-block { margin-top: var(--e2); padding-top: 0; border-top: 0 }
+.compact-heading { align-items: center; margin-bottom: var(--e3) }
+.compact-heading h2 { font-size: clamp(1.18rem, 3.5vw, 1.45rem) }
+.visual-section-head { align-items: center }
+
+/* Pieza comercial reusable: foto completa, lectura corta y una sola salida. */
+.commercial-banner {
+    position: relative; isolation: isolate; min-height: clamp(310px, 38vw, 410px); overflow: hidden;
+    border-radius: 28px; background: var(--tono-fondo); color: #fff;
+    box-shadow: 0 20px 48px rgb(15 46 37 / 18%);
+}
+.commercial-banner-media, .commercial-banner-media img,
+.commercial-banner-shade { position: absolute; inset: 0; width: 100%; height: 100% }
+.commercial-banner-media img { display: block; object-fit: cover; transition: transform .45s cubic-bezier(.2,.8,.2,1) }
+.commercial-banner:hover .commercial-banner-media img { transform: scale(1.025) }
+.commercial-banner-placeholder { display: grid; width: 100%; height: 100%; place-items: center;
+    background: linear-gradient(145deg, var(--tono-borde), var(--tono-texto)); color: #fff }
+.commercial-banner-shade {
+    z-index: 1; pointer-events: none;
+    background: linear-gradient(90deg, rgb(8 28 23 / 91%) 0, rgb(8 28 23 / 72%) 44%, rgb(8 28 23 / 12%) 78%),
+                linear-gradient(0deg, rgb(8 28 23 / 45%), transparent 58%);
+}
+.commercial-banner-copy {
+    position: relative; z-index: 2; display: flex; min-height: inherit; max-width: 38rem;
+    flex-direction: column; align-items: flex-start; justify-content: center; padding: clamp(1.4rem, 5vw, 3.5rem);
+}
+.commercial-label {
+    display: inline-flex; align-items: center; gap: .35rem; margin-bottom: auto; padding: .3rem .65rem;
+    border: 1px solid rgb(255 255 255 / 38%); border-radius: var(--radio-pill);
+    background: rgb(255 255 255 / 16%); backdrop-filter: blur(8px);
+    font-size: .72rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+}
+.commercial-business { margin: auto 0 .1rem; font-weight: 800; font-size: .9rem }
+.commercial-eyebrow { margin: 0; color: #f9d38a; font-size: .75rem; font-weight: 850;
+    letter-spacing: .075em; text-transform: uppercase }
+.commercial-banner h2 { max-width: 16ch; margin: .2rem 0 .45rem; color: #fff;
+    font-size: clamp(1.75rem, 4.2vw, 3rem); line-height: 1.02; letter-spacing: -.035em }
+.commercial-description { max-width: 42ch; margin: 0 0 1rem; color: rgb(255 255 255 / 84%); font-size: .94rem }
+.commercial-cta {
+    display: inline-flex; align-items: center; gap: .55rem; min-height: 46px; padding: .65rem 1rem;
+    border-radius: var(--radio-pill); background: #fff; color: var(--marca-900);
+    font-weight: 850; text-decoration: none; box-shadow: 0 8px 20px rgb(0 0 0 / 16%);
+    transition: transform .15s ease, box-shadow .15s ease;
+}
+.commercial-cta:hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgb(0 0 0 / 22%) }
+.banner-skeleton { box-shadow: none }
+
+/* Tres capacidades en lenguaje de app, no como explicación. */
+.intent-panel { position: relative; z-index: 3; margin: -2rem var(--e4) 0; padding: var(--e4);
+    border-radius: 22px; background: rgb(255 255 255 / 96%); box-shadow: var(--sombra-lg); backdrop-filter: blur(12px) }
+.intent-panel.without-banner { margin-top: 0 }
+.intent-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .65rem }
+.intent-action {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .7rem;
+    min-height: 76px; padding: .7rem .85rem; border-radius: 18px; color: var(--texto); text-decoration: none;
+    transition: transform .14s ease, background .14s ease;
+}
+.intent-action:hover { transform: translateY(-2px); background: var(--superficie-2) }
+.intent-action:active, .municipality-card:active, a.discovery-category-tile:active { transform: scale(.97) }
+.intent-action > span:nth-child(2) { display: grid }
+.intent-action strong { font-size: .94rem; line-height: 1.1 }
+.intent-action small { color: var(--texto-suave); font-size: .74rem }
+.intent-icon { display: grid; place-items: center; width: 3rem; height: 3rem; border-radius: 17px }
+.intent-action[data-intent="booking"] .intent-icon { background: #fbe6ef; color: #98356a }
+.intent-action[data-intent="queue"] .intent-icon { background: #e4ecf6; color: #1d4f7c }
+.intent-action[data-intent="order"] .intent-icon { background: var(--calido-100); color: var(--calido-700) }
+.intent-arrow { color: var(--texto-suave) }
+
+/* Municipios: cuatro destinos con superficie propia, siempre visibles. */
+.municipality-launcher { padding-top: var(--e2) }
+.municipality-grid { gap: .7rem }
+.municipality-card {
+    min-height: 88px; padding: .85rem; border: 0; border-radius: 20px; box-shadow: none;
+    background: linear-gradient(135deg, #e2f1eb, #f5faf7); overflow: hidden;
+}
+.municipality-card[data-place="1"] { background: linear-gradient(135deg, #fae8df, #fff8f3) }
+.municipality-card[data-place="2"] { background: linear-gradient(135deg, #e5ebf6, #f6f8fc) }
+.municipality-card[data-place="3"] { background: linear-gradient(135deg, #e4efdd, #f5faf1) }
+.municipality-card:hover { border-color: transparent; box-shadow: var(--sombra); transform: translateY(-3px) }
+.municipality-icon { width: 2.65rem; height: 2.65rem; border-radius: 16px; background: rgb(255 255 255 / 74%);
+    color: var(--marca-700); box-shadow: 0 4px 12px rgb(15 46 37 / 7%) }
+.municipality-card strong { font-size: 1rem }
+.municipality-card small { margin-top: .08rem }
+
+/* Launcher: el icono es el destino. Se eliminan borde, flecha y caja repetida. */
+.discovery-category-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .7rem }
+.discovery-category-tile {
+    display: flex; min-height: 104px; padding: .65rem .25rem; border: 0; border-radius: 18px;
+    flex-direction: column; justify-content: flex-start; gap: .45rem; background: transparent;
+    box-shadow: none; text-align: center;
+}
+a.discovery-category-tile:hover { border-color: transparent; background: rgb(255 255 255 / 72%);
+    box-shadow: none; transform: translateY(-3px) }
+.discovery-category-tile .marca-icono { width: 3.35rem; height: 3.35rem; border-radius: 19px;
+    box-shadow: 0 6px 16px color-mix(in srgb, var(--tono-borde) 18%, transparent);
+    transition: transform .16s ease, border-radius .16s ease }
+a.discovery-category-tile:hover .marca-icono { transform: scale(1.06) rotate(-2deg); border-radius: 16px }
+.discovery-category-tile > span:nth-child(2) { gap: .05rem }
+.discovery-category-tile strong { font-size: .82rem; line-height: 1.08 }
+.discovery-category-tile small { font-size: .68rem }
+.discovery-category-tile.proximamente { border-style: none; opacity: .55 }
+.category-directory-grid { max-width: 64rem }
+
+/* Contexto de municipio/categoría con personalidad, sin otra caja administrativa. */
+.discovery-context { position: relative; overflow: hidden; border: 0; padding: clamp(1.25rem, 4vw, 2rem);
+    background: linear-gradient(135deg, var(--tono-fondo, var(--marca-050)), #fff 82%); box-shadow: none }
+.discovery-context::after { content: ""; position: absolute; right: -3rem; bottom: -4rem; width: 12rem; height: 12rem;
+    border: 2rem solid color-mix(in srgb, var(--tono-borde, var(--marca-600)) 12%, transparent); border-radius: 50% }
+.discovery-context > * { position: relative; z-index: 1 }
+.discovery-context .context-icon { background: rgb(255 255 255 / 82%); box-shadow: 0 10px 28px rgb(15 46 37 / 9%) }
+.featured-placement { margin-top: var(--e5) }
+.featured-placement .commercial-banner { min-height: 330px }
+
+/* Página de categoría: primero contexto y municipios; buscar queda como acelerador compacto. */
+.category-place-selector { display: flex; flex-wrap: wrap; gap: .45rem; margin: 0 0 var(--e3) }
+.category-place-selector a { display: inline-flex; align-items: center; gap: .35rem; min-height: 42px;
+    padding: .45rem .8rem; border-radius: var(--radio-pill); background: var(--superficie); color: var(--texto-suave);
+    font-size: .86rem; font-weight: 700; text-decoration: none; box-shadow: var(--sombra-sm) }
+.category-place-selector a[aria-current="page"] { background: var(--tono-fondo); color: var(--tono-texto);
+    box-shadow: inset 0 0 0 1px var(--tono-borde) }
+.category-search-bar { display: flex; align-items: center; gap: .5rem; max-width: 42rem; margin: 0 0 var(--e4);
+    padding: .35rem .35rem .35rem .8rem; border: 0; border-radius: var(--radio-pill); background: var(--superficie);
+    box-shadow: var(--sombra) }
+.category-search-bar input { flex: 1; min-height: 42px; padding: .25rem 0; border: 0; background: transparent }
+.category-search-bar input:focus-visible { outline: 0 }
+.category-search-bar button { min-height: 42px; border-radius: var(--radio-pill) }
+.category-featured { margin-bottom: var(--e5) }
+
+/* Cards: la imagen toma el protagonismo y las señales viven encima o junto al nombre. */
+.visual-card-grid, .card-grid { align-items: stretch }
+.negocio-card { border: 0; border-radius: 24px; box-shadow: 0 10px 30px rgb(15 46 37 / 9%); overflow: hidden }
+.negocio-card:hover { box-shadow: 0 18px 44px rgb(15 46 37 / 14%); transform: translateY(-4px) }
+.card-cover { aspect-ratio: 4 / 3 }
+.card-media.sin-foto { aspect-ratio: 4 / 3 }
+.card-media::after { content: ""; position: absolute; inset: auto 0 0; height: 42%; pointer-events: none;
+    background: linear-gradient(transparent, rgb(8 28 23 / 35%)) }
+.card-category-overlay, .card-promotion { position: absolute; z-index: 2; display: inline-flex; align-items: center; gap: .3rem;
+    top: .75rem; padding: .3rem .55rem; border-radius: var(--radio-pill); font-size: .7rem; font-weight: 800;
+    backdrop-filter: blur(10px); box-shadow: 0 4px 14px rgb(0 0 0 / 12%) }
+.card-category-overlay { left: .75rem; max-width: calc(100% - 1.5rem); overflow: hidden; white-space: nowrap;
+    text-overflow: ellipsis; background: rgb(255 255 255 / 88%); color: var(--tono-texto) }
+.card-promotion { right: .75rem; background: rgb(15 46 37 / 78%); color: #fff }
+.card-promotion + .card-logo { display: none }
+.card-logo { z-index: 2; left: .85rem; bottom: .7rem; width: 48px; height: 48px; border-radius: 15px }
+.card-body, .card-media + .card-body { gap: .3rem; padding: .9rem 1rem 1rem }
+.card-body h3 { font-size: 1.28rem }
+.card-place { display: flex; align-items: center; gap: .25rem; margin: 0; color: var(--texto-suave); font-size: .8rem }
+.card-body .card-desc { -webkit-line-clamp: 1; font-size: .86rem }
+.card-señales { min-height: 27px }
+.card-action { display: flex; align-items: center; justify-content: space-between; min-height: 46px; margin-top: .35rem;
+    border-radius: 15px; transition: transform .14s ease }
+.card-action:active { transform: scale(.98) }
+.negocio-card[data-vertical="turnos"] .card-action { background: #1d4f7c }
+.negocio-card[data-vertical="citas"] .card-action { background: #8c3564 }
+.negocio-card[data-vertical="productos"] .card-action { background: var(--calido-600) }
+
+@media (max-width: 720px) {
+    .visual-home { gap: var(--e3) }
+    .visual-home .visual-search { margin-top: -.15rem }
+    .commercial-banner { min-height: 272px; border-radius: 22px }
+    .commercial-banner-shade { background: linear-gradient(0deg, rgb(8 28 23 / 92%) 0, rgb(8 28 23 / 55%) 62%, rgb(8 28 23 / 8%) 100%) }
+    .commercial-banner-copy { justify-content: flex-end; padding: 1rem }
+    .commercial-label { margin: 0 0 auto }
+    .commercial-business { margin: auto 0 .05rem; font-size: .82rem }
+    .commercial-banner h2 { max-width: 19ch; margin-bottom: .3rem; font-size: 1.55rem }
+    .commercial-description { display: none }
+    .commercial-cta { min-height: 42px; padding: .55rem .8rem; font-size: .88rem }
+    .intent-panel { margin: -1.65rem .55rem 0; padding: .75rem; border-radius: 19px }
+    .intent-panel .index-heading { margin-bottom: .55rem }
+    .intent-panel .index-step { display: none }
+    .intent-panel h2 { font-size: 1rem }
+    .intent-grid { gap: .25rem }
+    .intent-action { display: flex; min-height: 82px; padding: .45rem .2rem; flex-direction: column; gap: .3rem; text-align: center }
+    .intent-action > span:nth-child(2) { gap: .05rem }
+    .intent-icon { width: 2.7rem; height: 2.7rem; border-radius: 15px }
+    .intent-action strong { font-size: .78rem }
+    .intent-action small { display: none }
+    .intent-arrow { display: none }
+    .municipality-launcher { padding-top: .1rem }
+    .municipality-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem }
+    .municipality-card { min-height: 74px; padding: .6rem; gap: .5rem; border-radius: 17px }
+    .municipality-icon { width: 2.25rem; height: 2.25rem; border-radius: 13px }
+    .municipality-card strong { font-size: .9rem }
+    .municipality-card .destination-arrow { display: none }
+    .discovery-category-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .3rem }
+    .discovery-category-tile { min-height: 88px; padding: .45rem .1rem; gap: .38rem }
+    .discovery-category-tile .marca-icono { width: 2.8rem; height: 2.8rem; border-radius: 16px }
+    .discovery-category-tile strong { font-size: .7rem }
+    .discovery-category-tile small { font-size: .62rem }
+    .discovery-context { margin-inline: calc(var(--e4) * -1); border-radius: 0 0 24px 24px }
+    .featured-placement .commercial-banner { min-height: 265px }
+    .category-place-selector { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .4rem }
+    .category-place-selector a { justify-content: center; padding: .4rem .35rem; font-size: .76rem }
+    .category-place-selector a:first-child { grid-column: 1 / -1 }
+    .category-search-bar { margin-bottom: var(--e3) }
+    .category-search-bar button { padding-inline: .8rem }
+    .card-grid { grid-template-columns: 1fr }
+    .negocio-card { border-radius: 22px }
+    .card-cover, .card-media.sin-foto { aspect-ratio: 16 / 11 }
+}
+
+@media (min-width: 721px) {
+    .visual-home .commercial-banner { margin-top: .15rem }
+    .intent-panel { max-width: calc(100% - 4rem); margin-inline: auto }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .commercial-banner-media img, .commercial-cta, .intent-action, .intent-icon,
+    .municipality-card, .discovery-category-tile, .negocio-card, .card-action { transition: none !important }
+    .commercial-banner:hover .commercial-banner-media img,
+    .intent-action:hover, .municipality-card:hover, a.discovery-category-tile:hover, .negocio-card:hover { transform: none }
+}

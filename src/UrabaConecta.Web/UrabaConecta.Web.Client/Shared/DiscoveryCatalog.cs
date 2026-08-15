@@ -52,4 +52,7 @@ public static class DiscoveryCatalog
 
     public static Municipality? MunicipalityBySlug(string? slug)
         => Municipalities.FirstOrDefault(x => x.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase));
+
+    public static Category? CategoryBySlug(string? slug)
+        => Categories.FirstOrDefault(x => x.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase));
 }

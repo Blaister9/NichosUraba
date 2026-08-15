@@ -1,0 +1,41 @@
+<article class="commercial-banner" data-tono="@CategoryLook.Tone(Business.Category.Slug)" data-testid="commercial-banner">
+    <a class="commercial-banner-media" href="@ProfileDestination" tabindex="-1" aria-label="Ver @Business.Name">
+        @if (Business.CoverUrl is { Length: > 0 } cover)
+        {
+            <img src="@cover" alt="@(Business.CoverAltText ?? $"Portada de {Business.Name}")"
+                 width="1120" height="560" loading="@(Priority ? "eager" : "lazy")"
+                 fetchpriority="@(Priority ? "high" : "auto")" />
+        }
+        else
+        {
+            <span class="commercial-banner-placeholder"><Icon Name="@CategoryLook.Icon(Business.Category.Slug)" Size="62" /></span>
+        }
+    </a>
+    <div class="commercial-banner-shade" aria-hidden="true"></div>
+    <div class="commercial-banner-copy">
+        <span class="commercial-label"><Icon Name="brillo" Size="14" /> @Promotion.Label</span>
+        <p class="commercial-business">@Business.Name</p>
+        <p class="commercial-eyebrow">@Promotion.Eyebrow</p>
+        <h2>@Promotion.Headline</h2>
+        <p class="commercial-description">@Promotion.Description</p>
+        <a class="commercial-cta" href="@ActionDestination">
+            @ActionLabel <Icon Name="flecha" Size="18" />
+        </a>
+    </div>
+</article>
+
+@code {
+    [Parameter, EditorRequired] public BusinessCardDto Business { get; set; } = default!;
+    [Parameter, EditorRequired] public PromotionCatalog.Placement Promotion { get; set; } = default!;
+    [Parameter] public bool Priority { get; set; }
+
+    private string ProfileDestination => $"/negocios/{Business.Slug}";
+    private string ActionDestination => Business.HasPickupOrdering ? $"{ProfileDestination}/pedidos"
+        : Business.HasVirtualQueue ? $"{ProfileDestination}/turnos"
+        : Business.HasScheduling ? $"{ProfileDestination}/citas"
+        : ProfileDestination;
+    private string ActionLabel => Business.HasPickupOrdering ? "Pedir ahora"
+        : Business.HasVirtualQueue ? "Tomar turno"
+        : Business.HasScheduling ? "Reservar"
+        : "Ver negocio";
+}

@@ -71,6 +71,13 @@ else
         }
     </section>
 
+    @if (!cargando && Featured is { } featured && PromotionCatalog.For(featured.Slug) is { } promotion)
+    {
+        <section class="discovery-section featured-placement" aria-label="Destacado en @Destino.Name">
+            <CommercialBanner Business="featured" Promotion="promotion" />
+        </section>
+    }
+
     <section class="discovery-section" aria-labelledby="municipio-negocios">
         <div class="seccion-head">
             <div>
@@ -105,9 +112,9 @@ else
         else
         {
             <div class="card-grid">
-                @foreach (var (negocio, indice) in negocios.Select((x, i) => (x, i)))
+                @foreach (var (negocio, indice) in OrderedBusinesses.Select((x, i) => (x, i)))
                 {
-                    <BusinessCard Business="negocio" Priority="indice == 0" />
+                    <BusinessCard Business="negocio" Priority="indice == 0 && Featured is null" />
                 }
             </div>
         }
@@ -127,6 +134,8 @@ else
 
     private string Titulo => Destino is null ? "Municipio" : $"Negocios en {Destino.Name}";
     private IReadOnlyList<DiscoveryCatalog.CategoryEntry> MapaCategorias => DiscoveryCatalog.WithCounts(categorias);
+    private IReadOnlyList<BusinessCardDto> OrderedBusinesses => PromotionCatalog.Order(negocios);
+    private BusinessCardDto? Featured => OrderedBusinesses.FirstOrDefault(PromotionCatalog.IsFeatured);
     private string Resumen => cargando ? "Organizando categorías y negocios…"
         : negocios.Count == 1 ? "1 negocio publicado, organizado por categoría."
         : $"{negocios.Count} negocios publicados, organizados por categoría.";

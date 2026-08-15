@@ -6,7 +6,7 @@
 
    Una sola acción dominante, elegida por lo que ese negocio realmente hace. Tres botones apilados
    convertían la tarjeta en un menú de funciones y dejaban la decisión al visitante. *@
-<article class="negocio-card" data-tono="@CategoryLook.Tone(Business.Category.Slug)">
+<article class="negocio-card" data-tono="@CategoryLook.Tone(Business.Category.Slug)" data-vertical="@Vertical">
     <a class="card-media @(Business.CoverUrl is { Length: > 0 } ? null : "sin-foto")"
        href="@($"/negocios/{Business.Slug}")" aria-label="@($"Ver {Business.Name}")" tabindex="-1">
         @if (Business.CoverUrl is { Length: > 0 } cover)
@@ -21,6 +21,11 @@
         {
             <Icon Name="@CategoryLook.Icon(Business.Category.Slug)" Size="46" />
         }
+        <span class="card-category-overlay"><Icon Name="@CategoryLook.Icon(Business.Category.Slug)" Size="14" /> @Business.Category.Name</span>
+        @if (PromotionCatalog.For(Business.Slug) is { } promotion)
+        {
+            <span class="card-promotion"><Icon Name="brillo" Size="13" /> @promotion.Label</span>
+        }
         @if (Business.LogoUrl is { Length: > 0 } logo)
         {
             <img class="card-logo" src="@logo" alt="@(Business.LogoAltText ?? $"Logo de {Business.Name}")"
@@ -28,11 +33,8 @@
         }
     </a>
     <div class="card-body">
-        <p class="card-meta">
-            <span class="tag">@Business.Category.Name</span>
-            <span class="meta">@Business.Municipality.Name</span>
-        </p>
         <h3><a class="card-titulo" href="@($"/negocios/{Business.Slug}")">@Business.Name</a></h3>
+        <p class="card-place"><Icon Name="ubicacion" Size="15" /> @Business.Municipality.Name</p>
         <p class="card-desc">
             @(string.IsNullOrWhiteSpace(Business.ShortDescription) ? Business.Description : Business.ShortDescription)
         </p>
@@ -55,7 +57,7 @@
             }
         </p>
 
-        <a class="button-link" href="@Destino">@Verbo</a>
+        <a class="button-link card-action" href="@Destino">@Verbo <Icon Name="flecha" Size="17" /></a>
     </div>
 </article>
 
@@ -77,6 +79,11 @@
         : Business.HasVirtualQueue ? "Tomar turno"
         : Business.HasScheduling ? "Reservar"
         : "Ver negocio";
+
+    private string Vertical => Business.HasPickupOrdering ? "productos"
+        : Business.HasVirtualQueue ? "turnos"
+        : Business.HasScheduling ? "citas"
+        : "directorio";
 
     /// <summary>Pesos colombianos sin decimales: nadie cotiza un corte en centavos.</summary>
     internal static string Dinero(decimal valor)
