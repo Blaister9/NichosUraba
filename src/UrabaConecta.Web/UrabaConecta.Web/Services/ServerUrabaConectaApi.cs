@@ -13,16 +13,22 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
     AuthenticationStateProvider authentication, IServiceScopeFactory scopeFactory,
     IOwnerDashboardUseCases dashboard, IPushNotificationService push) : IUrabaConectaApi
 {
+    // InteractiveServer mantiene una instancia scoped durante todo el circuito. Una navegación
+    // hacia una ficha y un Atrás inmediato pueden solapar la última consulta de una pantalla con
+    // la primera de la siguiente; EF no permite dos operaciones simultáneas sobre el mismo contexto.
+    private readonly SemaphoreSlim publicReadGate = new(1, 1);
+
     public Task<IReadOnlyList<BusinessCardDto>> GetBusinessesAsync(string? search = null, string? municipality = null,
         string? category = null, CancellationToken cancellationToken = default)
-        => useCases.GetBusinessesAsync(search, municipality, category, cancellationToken);
+        => Serialized(() => useCases.GetBusinessesAsync(search, municipality, category, cancellationToken),
+            cancellationToken);
     public Task<IReadOnlyList<CategoryCardDto>> GetCategoriesAsync(string? municipality = null,
         CancellationToken cancellationToken = default)
-        => useCases.GetCategoriesAsync(municipality, cancellationToken);
+        => Serialized(() => useCases.GetCategoriesAsync(municipality, cancellationToken), cancellationToken);
     public Task<BusinessProfileDto?> GetBusinessAsync(string slug, CancellationToken cancellationToken = default)
-        => useCases.GetBusinessAsync(slug, cancellationToken);
+        => Serialized(() => useCases.GetBusinessAsync(slug, cancellationToken), cancellationToken);
     public Task<SlotListDto> GetSlotsAsync(string slug, Guid serviceId, DateOnly date, CancellationToken cancellationToken = default)
-        => useCases.GetSlotsAsync(slug, serviceId, date, cancellationToken);
+        => Serialized(() => useCases.GetSlotsAsync(slug, serviceId, date, cancellationToken), cancellationToken);
     public Task<AppointmentCreatedDto> CreateAppointmentAsync(string slug, CreateAppointmentRequest request,
         CancellationToken cancellationToken = default) => useCases.CreateAppointmentAsync(slug, request, cancellationToken);
     public Task<AppointmentTrackingDto?> GetAppointmentTrackingAsync(string code, CancellationToken cancellationToken = default)
@@ -121,7 +127,7 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
         => await useCases.ListMembershipAuditAsync(await UserId(), businessId, membershipId, cancellationToken);
 
     public Task<QueuePublicStatusDto?> GetPublicQueueAsync(string slug, CancellationToken cancellationToken = default)
-        => queues.GetPublicAsync(slug, cancellationToken);
+        => Serialized(() => queues.GetPublicAsync(slug, cancellationToken), cancellationToken);
     public Task<QueueTicketCreatedDto> JoinQueueAsync(string slug, CreateQueueTicketRequest request,
         CancellationToken cancellationToken = default) => queues.JoinAsync(slug, request, cancellationToken);
     public Task<QueueTicketTrackingDto?> GetQueueTicketAsync(string code, CancellationToken cancellationToken = default)
@@ -152,9 +158,10 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
         => await queues.ChangeTicketAsync(await UserId(), businessId, ticketId, action, request, cancellationToken);
 
     public Task<PickupMenuDto?> GetPickupMenuAsync(string slug, CancellationToken cancellationToken = default)
-        => orders.GetMenuAsync(slug, cancellationToken);
+        => Serialized(() => orders.GetMenuAsync(slug, cancellationToken), cancellationToken);
     public Task<PickupSlotListDto> GetPickupSlotsAsync(string slug, DateOnly? date = null,
-        CancellationToken cancellationToken = default) => orders.GetSlotsAsync(slug, date, cancellationToken);
+        CancellationToken cancellationToken = default)
+        => Serialized(() => orders.GetSlotsAsync(slug, date, cancellationToken), cancellationToken);
     public Task<PickupOrderCreatedDto> CreatePickupOrderAsync(string slug, CreatePickupOrderRequest request,
         CancellationToken cancellationToken = default) => orders.CreateAsync(slug, request, cancellationToken);
     public Task<PickupOrderTrackingDto?> GetPickupOrderAsync(string code, CancellationToken cancellationToken = default)
@@ -178,7 +185,7 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
         => await orders.SaveProductAsync(await UserId(), businessId, productId, request, cancellationToken);
     public Task<IReadOnlyList<BusinessPromotionDto>> GetPublicPromotionsAsync(
         CancellationToken cancellationToken = default)
-        => push.GetPublicPromotionsAsync(cancellationToken);
+        => Serialized(() => push.GetPublicPromotionsAsync(cancellationToken), cancellationToken);
     public async Task<IReadOnlyList<BusinessPromotionDto>> GetBusinessPromotionsAsync(Guid businessId,
         CancellationToken cancellationToken = default)
         => await push.GetBusinessPromotionsAsync(await UserId(), businessId, cancellationToken);
@@ -357,6 +364,13 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
         // PolicyVersion es la versión efectiva que el servidor exigirá en los formularios públicos.
         return Task.FromResult(new LegalInfoDto(value.ResponsibleName, value.Identification, value.Address,
             value.PrivacyEmail, value.SupportEmail, consentPolicy.CurrentVersion, value.PolicyEffectiveDate));
+    }
+
+    private async Task<T> Serialized<T>(Func<Task<T>> operation, CancellationToken cancellationToken)
+    {
+        await publicReadGate.WaitAsync(cancellationToken);
+        try { return await operation(); }
+        finally { publicReadGate.Release(); }
     }
 
     private async Task<Guid> UserId()

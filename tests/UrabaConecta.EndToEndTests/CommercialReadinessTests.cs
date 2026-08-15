@@ -38,9 +38,6 @@ public sealed class CommercialReadinessTests(BrowserFixture fixture) : IClassFix
         await page.EvaluateAsync("window.scrollTo(0, 260)");
         await page.Locator(".feed-business-link").First.ClickAsync();
         await page.WaitForURLAsync(url => url.Contains("/negocios/", StringComparison.Ordinal));
-        await page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
-        await Assertions.Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Solicitar una cita" }))
-            .ToBeVisibleAsync();
         var savedScroll = int.Parse(await page.EvaluateAsync<string>("() => sessionStorage.getItem('urabaAhoraScroll')"));
         await page.GoBackAsync();
         var returnReady = false;
