@@ -1,5 +1,4 @@
 using Microsoft.Playwright;
-using System.Text.RegularExpressions;
 using UrabaConecta.Infrastructure.Persistence;
 
 namespace UrabaConecta.EndToEndTests;
@@ -10,36 +9,62 @@ public sealed class CommercialReadinessTests(BrowserFixture fixture) : IClassFix
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
 
     [Fact]
-    public async Task Discovery_exposes_four_municipalities_categories_and_reproducible_search_on_mobile()
+    public async Task Ahora_feed_opens_with_content_and_location_category_controls_on_mobile()
     {
         await using var context = await fixture.Browser.NewContextAsync(new() { ViewportSize = new() { Width = 390, Height = 844 } });
         var page = await context.NewPageAsync();
         await page.GotoAsync(fixture.BaseUrl);
 
-        var municipalityLinks = page.Locator(".portal-municipalities .portal-municipality");
-        await Assertions.Expect(municipalityLinks).ToHaveCountAsync(4);
-        foreach (var name in new[] { "Apartadó", "Carepa", "Chigorodó", "Turbo" })
-            await Assertions.Expect(municipalityLinks.GetByText(name, new() { Exact = true })).ToBeVisibleAsync();
-        foreach (var box in await municipalityLinks.EvaluateAllAsync<double[][]>(
-                     "items => items.map(x => { const r=x.getBoundingClientRect(); return [r.left,r.right]; })"))
-        {
-            Assert.True(box[0] >= 0, $"El municipio empieza fuera del viewport: {box[0]}");
-            Assert.True(box[1] <= 390, $"El municipio termina fuera del viewport: {box[1]}");
-        }
-        await Assertions.Expect(page.Locator(".portal-category-grid .portal-category")).ToHaveCountAsync(3);
-        await Assertions.Expect(page.GetByText("Pronto", new() { Exact = true })).ToHaveCountAsync(0);
-
-        await municipalityLinks.GetByText("Apartadó", new() { Exact = true }).ClickAsync();
-        await page.WaitForURLAsync(url => url.Contains("/municipios/apartado"));
-        await Assertions.Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Apartadó" })).ToBeVisibleAsync();
-        await page.GetByRole(AriaRole.Link, new() { NameRegex = new Regex("Belleza") }).ClickAsync();
-        await page.WaitForURLAsync(url => url.Contains("/categorias/belleza-cuidado-personal") &&
-                                           url.Contains("municipio=apartado"));
-        await Assertions.Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Belleza y estética en Apartadó" }))
+        await Assertions.Expect(page.Locator("[data-testid=location-trigger]")).ToBeEnabledAsync();
+        await Assertions.Expect(page.Locator("[data-testid=live-feed] [data-testid=feed-piece]").First)
             .ToBeVisibleAsync();
+        await Assertions.Expect(page.Locator(".portal-municipalities, .portal-category-grid")).ToHaveCountAsync(0);
+        await Assertions.Expect(page.GetByText("Pronto", new() { Exact = true })).ToHaveCountAsync(0);
+        var firstPiece = await page.Locator("[data-testid=feed-piece]").First.BoundingBoxAsync();
+        Assert.NotNull(firstPiece);
+        Assert.True(firstPiece!.Y < 190, $"El contenido empieza demasiado abajo: {firstPiece.Y}");
+        Assert.True(firstPiece.Height > 480, $"La primera pieza no domina el viewport: {firstPiece.Height}");
+
+        await page.Locator("[data-testid=location-trigger]").ClickAsync();
+        await Assertions.Expect(page.Locator("[data-testid=location-sheet]")).ToBeVisibleAsync();
+        foreach (var name in new[] { "Apartadó", "Carepa", "Chigorodó", "Turbo", "Todo Urabá" })
+            await Assertions.Expect(page.Locator("[data-testid=location-sheet]").GetByText(name, new() { Exact = true }))
+                .ToBeVisibleAsync();
+        await page.Locator("[data-testid=location-sheet]").GetByText("Apartadó", new() { Exact = true }).ClickAsync();
+        await Assertions.Expect(page.Locator("[data-testid=location-trigger]")).ToContainTextAsync("Apartadó");
+        await page.Locator("[data-testid=feed-filters]").GetByRole(AriaRole.Button, new() { Name = "Belleza" }).ClickAsync();
+        await Assertions.Expect(page.Locator("[data-testid=feed-piece]").First).ToContainTextAsync("Bella");
+
+        await page.EvaluateAsync("window.scrollTo(0, 260)");
+        await page.Locator(".feed-business-link").First.ClickAsync();
+        await page.WaitForURLAsync(url => url.Contains("/negocios/", StringComparison.Ordinal));
+        await page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
+        await Assertions.Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Solicitar una cita" }))
+            .ToBeVisibleAsync();
+        var savedScroll = int.Parse(await page.EvaluateAsync<string>("() => sessionStorage.getItem('urabaAhoraScroll')"));
+        await page.GoBackAsync();
+        var returnReady = false;
+        for (var attempt = 0; attempt < 60 && !returnReady; attempt++)
+        {
+            returnReady = await page.EvaluateAsync<bool>("() => sessionStorage.getItem('urabaAhoraReturn') === null && Boolean(document.querySelector('[data-testid=feed-piece]'))");
+            if (!returnReady) await Task.Delay(50);
+        }
+        var returnDebug = await page.EvaluateAsync<string>("() => JSON.stringify({ url: location.href, returning: sessionStorage.getItem('urabaAhoraReturn'), stored: sessionStorage.getItem('urabaAhoraScroll'), filter: sessionStorage.getItem('urabaAhoraFilter'), municipality: localStorage.getItem('urabaPreferredMunicipality'), pieces: document.querySelectorAll('[data-testid=feed-piece]').length, home: Boolean(document.querySelector('.ahora-home')), state: document.querySelector('.quiet-feed,.ahora-error,.skeleton-feed')?.textContent })");
+        var logTail = string.Join(Environment.NewLine, fixture.RecentLog.Split(Environment.NewLine).TakeLast(40));
+        Assert.True(returnReady, $"La Home no restauró el feed después de volver desde el negocio: {returnDebug}\n{logTail}");
+        await Assertions.Expect(page.Locator("[data-testid=location-trigger]")).ToContainTextAsync("Apartadó");
+        await Assertions.Expect(page.Locator("[data-testid=feed-filters] button.active")).ToHaveTextAsync("Belleza");
+        var restoredScroll = await page.EvaluateAsync<int>("window.scrollY");
+        Assert.InRange(Math.Abs(restoredScroll - savedScroll), 0, 12);
+
+        var bottomNav = page.Locator(".nav-inferior a");
+        await Assertions.Expect(bottomNav).ToHaveCountAsync(3);
+        await Assertions.Expect(page.Locator(".nav-inferior")).ToContainTextAsync("Ahora");
+        await Assertions.Expect(page.Locator(".nav-inferior")).ToContainTextAsync("Buscar");
+        await Assertions.Expect(page.Locator(".nav-inferior")).ToContainTextAsync("Mi actividad");
 
         await page.GotoAsync(fixture.BaseUrl);
-        await page.GetByRole(AriaRole.Link, new() { Name = "Buscar negocios" }).ClickAsync();
+        await page.GetByRole(AriaRole.Link, new() { Name = "Buscar" }).First.ClickAsync();
         await page.WaitForURLAsync(url => url.Contains("/explorar"));
         await Assertions.Expect(page.GetByRole(AriaRole.Button, new() { Name = "Buscar" })).ToBeEnabledAsync();
         await page.GetByLabel("Qué buscas").FillAsync("Manicure");

@@ -145,7 +145,7 @@ public sealed class FounderProductionJourneyTests(BrowserFixture fixture) : ICla
 
         // 13. El negocio aparece públicamente, con su logo y su ficha completa.
         await visitor.GotoAsync($"{fixture.BaseUrl}/");
-        await Expect(visitor.GetByText($"Piloto {slug}", new() { Exact = true })).ToBeVisibleAsync();
+        await Expect(visitor.GetByText($"Piloto {slug}", new() { Exact = false }).First).ToBeVisibleAsync();
         await visitor.GotoAsync($"{fixture.BaseUrl}/negocios/{slug}");
         await Expect(visitor.GetByAltText("Imagen ficticia de prueba").First).ToBeVisibleAsync();
         await Expect(visitor.GetByText("Frente al parque principal")).ToBeVisibleAsync();
@@ -207,7 +207,7 @@ public sealed class FounderProductionJourneyTests(BrowserFixture fixture) : ICla
             new PlatformBusinessStateRequest { Version = suspended.Version });
         Assert.Equal(200, reactivated.Status);
         await visitor.GotoAsync($"{fixture.BaseUrl}/");
-        await Expect(visitor.GetByText($"Piloto {slug}", new() { Exact = true })).ToBeVisibleAsync();
+        await Expect(visitor.GetByText($"Piloto {slug}", new() { Exact = false }).First).ToBeVisibleAsync();
 
         var history = JsonSerializer.Deserialize<List<BusinessStatusChangeDto>>(
             (await Fetch(admin, "GET", $"/api/v1/admin/businesses/{businessId}/status-history")).Body, Json)!;

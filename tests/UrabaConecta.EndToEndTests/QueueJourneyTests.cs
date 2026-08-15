@@ -12,9 +12,9 @@ public sealed class QueueJourneyTests(BrowserFixture fixture) : IClassFixture<Br
         await using var visitorContext = await MobileContext();
         var visitor = await visitorContext.NewPageAsync();
 
-        // 1. Directorio -> perfil -> fila.
+        // 1. Ahora -> Buscar -> perfil -> fila.
         await visitor.GotoAsync(fixture.BaseUrl);
-        await visitor.GetByRole(AriaRole.Link, new() { Name = "Buscar negocios" }).ClickAsync();
+        await visitor.GetByRole(AriaRole.Link, new() { Name = "Buscar", Exact = true }).First.ClickAsync();
         await visitor.WaitForURLAsync(url => url.Contains("/explorar"));
         await Expect(visitor.GetByRole(AriaRole.Heading, new() { Name = "Explorar negocios" }))
             .ToBeVisibleAsync(new() { Timeout = 30_000 });

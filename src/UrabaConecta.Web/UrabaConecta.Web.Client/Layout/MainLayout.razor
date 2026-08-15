@@ -8,7 +8,7 @@
    identidad, y el recorrido se mueve abajo, al alcance del pulgar: Inicio, Explorar, Categorías y lo
    propio de cada quien. Antes había que conocer las direcciones o volver con el botón atrás, que es
    justamente lo que hace que algo se sienta una página suelta y no una aplicación. *@
-<header class="site-header">
+<header class="site-header @(Ruta() == "/" ? "is-home" : null)">
     <a class="brand" href="/"><span aria-hidden="true">U</span> UrabáConecta</a>
     <nav class="nav-escritorio" aria-label="Navegación principal">
         @foreach (var item in Publicas)
@@ -38,7 +38,7 @@
 
 <main class="page-shell">@Body</main>
 
-<footer>
+<footer class="@(Ruta() == "/" ? "footer-home" : null)">
     <p><strong>UrabáConecta</strong> · Apartadó · Carepa · Chigorodó · Turbo</p>
     @* El aviso se escribe siempre y lo muestra el CSS sólo en los ambientes de demostración: la
        marca del ambiente la pone el servidor en <body>, así que la línea no puede quedarse pegada
@@ -67,7 +67,7 @@
         <Authorized>
             <a href="/panel" class="@(EsActiva("/panel") ? "activo" : null)"
                aria-current="@(EsActiva("/panel") ? "page" : null)">
-                <Icon Name="panel" Size="22" /><span>Panel</span>
+                <Icon Name="actividad" Size="22" /><span>Mi actividad</span>
             </a>
         </Authorized>
         <NotAuthorized>
@@ -93,15 +93,14 @@
 
     private static readonly Destino[] Publicas =
     [
-        new("/", "Inicio", "inicio"),
-        new("/explorar", "Explorar", "explorar", ["/negocios"]),
-        new("/categorias", "Categorías", "categorias"),
+        new("/", "Ahora", "inicio"),
+        new("/explorar", "Buscar", "explorar", ["/negocios", "/categorias", "/municipios"]),
     ];
 
     private static readonly Destino[] Moviles =
     [
-        new("/", "Inicio", "inicio"),
-        new("/explorar", "Explorar", "explorar", ["/negocios", "/categorias", "/municipios"]),
+        new("/", "Ahora", "inicio"),
+        new("/explorar", "Buscar", "explorar", ["/negocios", "/categorias", "/municipios"]),
     ];
 
     protected override void OnInitialized() => Nav.LocationChanged += AlNavegar;
