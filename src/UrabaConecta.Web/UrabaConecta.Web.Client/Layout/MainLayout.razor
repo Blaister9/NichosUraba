@@ -17,19 +17,19 @@
                aria-current="@(EsActiva(item.Href) ? "page" : null)">@item.Label</a>
         }
     </nav>
-    <a class="header-search" href="/explorar" data-enhance-nav="false" aria-label="Buscar negocios"><Icon Name="explorar" Size="20" /></a>
+    <a class="header-search" href="/explorar" data-enhance-nav="false" aria-label="Buscar negocios"><Icon Name="explorar" Size="22" /></a>
     <nav class="nav-identidad" aria-label="Tu cuenta">
         <AuthorizeView>
             <Authorized>
                 <a class="solo-escritorio" href="/panel">Panel</a>
                 <a href="/Account/Manage" target="_self" class="boton-identidad">
-                    <Icon Name="cuenta" Size="20" /><span class="solo-escritorio">Cuenta</span>
+                    <Icon Name="cuenta" Size="22" /><span class="solo-escritorio">Cuenta</span>
                 </a>
             </Authorized>
             <NotAuthorized>
                 <a class="solo-escritorio" href="/para-negocios">Para negocios</a>
                 <a href="/Account/Login" target="_self" class="boton-identidad">
-                    <Icon Name="cuenta" Size="20" /><span class="solo-escritorio">Ingresar</span>
+                    <Icon Name="cuenta" Size="22" /><span class="solo-escritorio">Ingresar</span>
                 </a>
             </NotAuthorized>
         </AuthorizeView>

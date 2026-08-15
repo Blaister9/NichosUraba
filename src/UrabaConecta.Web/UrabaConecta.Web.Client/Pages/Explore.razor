@@ -17,7 +17,7 @@
 
 @if (IsCategoryPage)
 {
-    <a class="screen-back" href="/categorias"><Icon Name="atras" Size="18" /> Categorías</a>
+    <a class="screen-back" href="/categorias"><Icon Name="atras" Size="16" /> Categorías</a>
 }
 
 <header class="discovery-context category-context @(IsCategoryPage ? "category-destination-hero" : null)" data-tono="@CategoryLook.Tone(categoria)">
@@ -34,14 +34,14 @@
     <p class="category-place-question">¿Dónde quieres buscar?</p>
     <nav class="category-place-selector" data-tono="@CategoryLook.Tone(categoria)" aria-label="Elegir municipio para @NombreCategoria">
         <a class="category-place-all" href="@MunicipalityDestination("")" aria-current="@(municipio == "" ? "page" : null)">
-            <Icon Name="ubicacion" Size="17" /> Todo Urabá
+            <Icon Name="ubicacion" Size="16" /> Todo Urabá
         </a>
         @foreach (var (slug, nombre) in Municipios)
         {
             var look = MunicipalityLook.For(slug);
             <a class="category-place" data-place="@look.Tone" href="@MunicipalityDestination(slug)"
                aria-current="@(municipio == slug ? "page" : null)">
-                <span><Icon Name="@look.Icon" Size="21" /></span><strong>@nombre</strong>
+                <span><Icon Name="@look.Icon" Size="22" /></span><strong>@nombre</strong>
             </a>
         }
     </nav>
@@ -74,14 +74,14 @@ else
         <div class="category-filter-grid">
             <button type="button" class="categoria-chip category-all" aria-pressed="@(categoria == "")"
                     disabled="@(!listo || cargando)" @onclick='() => AplicarCategoria("")'>
-                <span class="marca-icono"><Icon Name="explorar" Size="17" /></span> Todas
+                <span class="marca-icono"><Icon Name="explorar" Size="16" /></span> Todas
             </button>
             @foreach (var opcion in categorias)
             {
                 <button type="button" class="categoria-chip" data-tono="@CategoryLook.Tone(opcion.Slug)"
                         aria-pressed="@(categoria == opcion.Slug)" disabled="@(!listo || cargando)"
                         @onclick="() => AplicarCategoria(opcion.Slug)">
-                    <span class="marca-icono"><Icon Name="@CategoryLook.Icon(opcion.Slug)" Size="17" /></span>
+                    <span class="marca-icono"><Icon Name="@CategoryLook.Icon(opcion.Slug)" Size="16" /></span>
                     @opcion.Name
                 </button>
             }

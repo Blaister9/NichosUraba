@@ -44,7 +44,7 @@ else
                         <h3>@elegido.Name</h3>
                         @if (!string.IsNullOrWhiteSpace(elegido.Description)) { <p>@elegido.Description</p> }
                         <p class="catalogo-datos">
-                            <span class="duracion"><Icon Name="reloj" Size="14" /> @Duracion(elegido.DurationMinutes)</span>
+                            <span class="duracion"><Icon Name="reloj" Size="16" /> @Duracion(elegido.DurationMinutes)</span>
                             @if (elegido.RequiresDeposit)
                             {
                                 <span>Adelanto <strong data-testid="deposit-amount">@elegido.DepositAmount.ToString("C0", Colombia)</strong></span>

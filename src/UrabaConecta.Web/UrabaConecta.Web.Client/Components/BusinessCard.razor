@@ -21,10 +21,10 @@
         {
             <Icon Name="@CategoryLook.Icon(Business.Category.Slug)" Size="46" />
         }
-        <span class="card-category-overlay"><Icon Name="@CategoryLook.Icon(Business.Category.Slug)" Size="14" /> @Business.Category.Name</span>
+        <span class="card-category-overlay"><Icon Name="@CategoryLook.Icon(Business.Category.Slug)" Size="16" /> @Business.Category.Name</span>
         @if (PromotionCatalog.For(Business.Slug) is { } promotion)
         {
-            <span class="card-promotion"><Icon Name="brillo" Size="13" /> @promotion.Label</span>
+            <span class="card-promotion"><Icon Name="brillo" Size="16" /> @promotion.Label</span>
         }
         @if (Business.LogoUrl is { Length: > 0 } logo)
         {
@@ -34,7 +34,7 @@
     </a>
     <div class="card-body">
         <h3><a class="card-titulo" href="@($"/negocios/{Business.Slug}")">@Business.Name</a></h3>
-        <p class="card-place"><Icon Name="ubicacion" Size="15" /> @Business.Municipality.Name</p>
+        <p class="card-place"><Icon Name="ubicacion" Size="16" /> @Business.Municipality.Name</p>
         <p class="card-desc">
             @(string.IsNullOrWhiteSpace(Business.ShortDescription) ? Business.Description : Business.ShortDescription)
         </p>
@@ -57,7 +57,7 @@
             }
         </p>
 
-        <a class="button-link card-action" href="@Destino">@Verbo <Icon Name="flecha" Size="17" /></a>
+        <a class="button-link card-action" href="@Destino">@Verbo <Icon Name="flecha" Size="16" /></a>
     </div>
 </article>
 

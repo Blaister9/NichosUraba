@@ -10,12 +10,12 @@
     <header class="ahora-context">
         <button type="button" class="location-trigger" disabled="@(!interactiveReady)" @onclick="() => locationOpen = true"
                 aria-haspopup="dialog" aria-expanded="@locationOpen" data-testid="location-trigger">
-            <Icon Name="ubicacion" Size="18" />
+            <Icon Name="ubicacion" Size="16" />
             <span><small>Ahora en</small><strong>@ActiveMunicipalityName</strong></span>
             <Icon Name="chevron" Size="16" />
         </button>
         <a class="ahora-search" href="/explorar" data-enhance-nav="false">
-            <Icon Name="explorar" Size="20" /><span>Buscar</span>
+            <Icon Name="explorar" Size="22" /><span>Buscar</span>
         </a>
     </header>
 
@@ -43,7 +43,12 @@
     else
     {
         <div class="ahora-layout">
-            <main class="feed-column" aria-label="Qué puedes hacer ahora" data-testid="live-feed">
+            @* La clave compuesta es lo que produce el crossfade del Design Spec: al cambiar de
+               municipio o de filtro, Blazor descarta la columna y monta otra, así que la animación
+               de entrada vuelve a correr sin que nadie la dispare a mano. El modelo de navegación
+               no se toca: sigue siendo la misma pantalla. *@
+            <main class="feed-column" aria-label="Qué puedes hacer ahora" data-testid="live-feed"
+                  @key="@($"{activeMunicipality}|{activeVertical}")" data-swap="@lastSwap">
                 @if (VisiblePieces.Count == 0)
                 {
                     <section class="quiet-feed">
@@ -83,10 +88,13 @@
                                         <span class="feed-art-icon"><Icon Name="@piece.Icon" Size="72" /></span>
                                     }
                                     <span class="feed-shade" aria-hidden="true"></span>
+                                    @* Tres distintivos y no hay un cuarto. "Promoción" decía qué
+                                       era la pieza, no qué le pasa a quien la mira: lo que importa
+                                       de una promoción es que se puede aprovechar hoy. *@
                                     <span class="feed-badges">
                                         @if (piece.IsLive) { <span class="live-badge"><i></i> EN VIVO</span> }
                                         @if (piece.IsSponsored) { <span class="sponsored-badge">Patrocinado</span> }
-                                        @if (piece.IsPromotion) { <span class="promotion-badge">Promoción</span> }
+                                        @if (piece.IsPromotion) { <span class="promotion-badge">Hoy</span> }
                                     </span>
                                     <span class="feed-overlay-copy">
                                         <small>@piece.BusinessLine</small>
@@ -99,7 +107,7 @@
                                     <p class="feed-state @(piece.IsLive ? "is-live" : null)">@piece.State</p>
                                     @if (!string.IsNullOrWhiteSpace(piece.Detail)) { <p class="feed-detail">@piece.Detail</p> }
                                     <a class="feed-action feed-business-link" href="@piece.Url" data-enhance-nav="false">
-                                        @piece.CtaLabel <Icon Name="flecha" Size="18" />
+                                        @piece.CtaLabel <Icon Name="flecha" Size="16" />
                                     </a>
                                 </div>
                             </article>
@@ -115,7 +123,9 @@
             <aside class="ahora-rail" aria-label="Contexto local">
                 <section><p class="eyebrow">En vivo</p><strong>@LiveCount</strong><span>@(LiveCount == 1 ? "estado activo" : "estados activos")</span></section>
                 <section><p class="eyebrow">Hoy</p><strong>@ActionableCount</strong><span>opciones con acción directa</span></section>
-                <section><p class="eyebrow">Tu lugar</p><strong>@ActiveMunicipalityName</strong><button type="button" class="inline-button" @onclick="() => locationOpen = true">Cambiar</button></section>
+                @* El nombre del municipio no es un dato operativo, así que no se pinta de ámbar:
+                   el ámbar es para el número que se verifica. *@
+                <section><p class="eyebrow">Tu lugar</p><strong class="rail-place">@ActiveMunicipalityName</strong><button type="button" class="inline-button" @onclick="() => locationOpen = true">Cambiar</button></section>
                 <a class="rail-activity" href="/seguimiento"><Icon Name="actividad" Size="22" /><span><strong>Mi actividad</strong><small>Turnos, citas y pedidos</small></span></a>
             </aside>
         </div>
@@ -129,7 +139,7 @@
         <header><div><p class="eyebrow">Tu zona</p><h2 id="location-title">¿Dónde estás buscando?</h2></div>
             <button type="button" class="sheet-close" aria-label="Cerrar" @onclick="() => locationOpen = false">×</button></header>
         <button type="button" class="use-location" disabled="@locating" @onclick="UseLocation">
-            <Icon Name="ubicacion" Size="20" /><span><strong>@(locating ? "Ubicándote…" : "Usar mi ubicación")</strong><small>Sólo preguntaremos al tocar aquí</small></span>
+            <Icon Name="ubicacion" Size="22" /><span><strong>@(locating ? "Ubicándote…" : "Usar mi ubicación")</strong><small>Sólo preguntaremos al tocar aquí</small></span>
         </button>
         @if (locationMessage is not null) { <p class="meta" role="status">@locationMessage</p> }
         <div class="location-options">
@@ -137,14 +147,14 @@
             {
                 <button type="button" class="@(activeMunicipality == municipality.Slug ? "active" : null)"
                         @onclick="() => SelectMunicipality(municipality.Slug, municipality.Name)">
-                    <Icon Name="@municipality.Icon" Size="21" /><span>@municipality.Name</span>
-                    @if (activeMunicipality == municipality.Slug) { <Icon Name="check" Size="18" /> }
+                    <Icon Name="@municipality.Icon" Size="22" /><span>@municipality.Name</span>
+                    @if (activeMunicipality == municipality.Slug) { <Icon Name="check" Size="16" /> }
                 </button>
             }
             <button type="button" class="@(activeMunicipality.Length == 0 ? "active" : null)"
                     @onclick="SelectAllMunicipalities">
-                <Icon Name="ubicacion" Size="21" /><span>Todo Urabá</span>
-                @if (activeMunicipality.Length == 0) { <Icon Name="check" Size="18" /> }
+                <Icon Name="ubicacion" Size="22" /><span>Todo Urabá</span>
+                @if (activeMunicipality.Length == 0) { <Icon Name="check" Size="16" /> }
             </button>
         </div>
     </section>
@@ -172,6 +182,11 @@
     private string activeMunicipalityName = "Todo Urabá";
     private string activeVertical = "ahora";
     private string? error, locationMessage;
+    /// <summary>
+    /// Qué provocó el último cambio del feed. El municipio entra desde abajo y el filtro se funde:
+    /// son dos gestos distintos y el Design Spec les da dos entradas distintas.
+    /// </summary>
+    private string lastSwap = "filter";
     private bool loading = true, locationOpen, locating, showAll, interactiveReady;
 
     private string ActiveMunicipalityName => activeMunicipality.Length == 0 ? "Todo Urabá" : activeMunicipalityName;
@@ -364,13 +379,14 @@
 
     private async Task SelectFilter(string key)
     {
-        activeVertical = key; showAll = false;
+        activeVertical = key; showAll = false; lastSwap = "filter";
         if (module is not null)
             try { await module.InvokeVoidAsync("rememberVertical", key); } catch (JSException) { }
     }
     private async Task SelectMunicipality(string slug, string name)
     {
         activeMunicipality = slug; activeMunicipalityName = name; locationOpen = false; showAll = false;
+        lastSwap = "place";
         if (module is not null) try { await module.InvokeVoidAsync("rememberMunicipality", slug); } catch (JSException) { }
     }
     private async Task UseLocation()

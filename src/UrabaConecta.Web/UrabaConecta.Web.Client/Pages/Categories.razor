@@ -24,13 +24,13 @@
     <div class="municipality-filter-grid" role="group" aria-label="Filtrar categorías por municipio">
         <button type="button" class="municipality-filter @(municipio == "" ? "activo" : null)"
                 aria-pressed="@(municipio == "")" disabled="@cargando" @onclick='() => Filtrar("")'>
-            <Icon Name="ubicacion" Size="18" /><span><strong>Todo Urabá</strong><small>Todos los negocios</small></span>
+            <Icon Name="ubicacion" Size="16" /><span><strong>Todo Urabá</strong><small>Todos los negocios</small></span>
         </button>
         @foreach (var item in DiscoveryCatalog.Municipalities)
         {
             <button type="button" class="municipality-filter @(municipio == item.Slug ? "activo" : null)"
                     aria-pressed="@(municipio == item.Slug)" disabled="@cargando" @onclick="() => Filtrar(item.Slug)">
-                <Icon Name="ubicacion" Size="18" /><span><strong>@item.Name</strong><small>Ver categorías</small></span>
+                <Icon Name="ubicacion" Size="16" /><span><strong>@item.Name</strong><small>Ver categorías</small></span>
             </button>
         }
     </div>

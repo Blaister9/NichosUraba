@@ -3,8 +3,12 @@
    navegación justo cuando alguien la está mirando por primera vez.
 
    Todos comparten rejilla de 24 y heredan el color y el grosor del texto que acompañan, así que un
-   icono dentro de un botón activo se tiñe solo. *@
-<svg class="icono @(Class)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+   icono dentro de un botón activo se tiñe solo.
+
+   Trazo 1.7 y extremos redondeados, que es lo que fija el Design Spec. Dos tamaños mandan —22 para
+   navegación y acciones, 16 para lo que acompaña a un texto— y el valor por omisión es 22: pedir un
+   icono sin decir de qué tamaño ya no devuelve uno de 24 suelto fuera del sistema. *@
+<svg class="icono @(Class)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
      stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"
      width="@Size" height="@Size">
     @((MarkupString)Path(Name))
@@ -12,7 +16,7 @@
 
 @code {
     [Parameter, EditorRequired] public string Name { get; set; } = "";
-    [Parameter] public int Size { get; set; } = 24;
+    [Parameter] public int Size { get; set; } = 22;
     [Parameter] public string? Class { get; set; }
 
     /// <summary>

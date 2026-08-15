@@ -64,7 +64,7 @@
                        rel="noopener noreferrer nofollow">Cómo llegar</a>
                 }
                 <button type="button" class="secondary" @onclick="Compartir">
-                    <Icon Name="compartir" Size="18" /> Compartir
+                    <Icon Name="compartir" Size="16" /> Compartir
                 </button>
             </div>
             @if (avisoCompartir is { Length: > 0 })
@@ -118,7 +118,7 @@
                         <h3>@service.Name</h3>
                         @if (!string.IsNullOrWhiteSpace(service.Description)) { <p>@service.Description</p> }
                         <p class="catalogo-datos">
-                            <span class="duracion"><Icon Name="reloj" Size="14" /> @Duracion(service.DurationMinutes)</span>
+                            <span class="duracion"><Icon Name="reloj" Size="16" /> @Duracion(service.DurationMinutes)</span>
                             @if (service.RequiresDeposit) { <span>Requiere adelanto</span> }
                         </p>
                     </div>

@@ -16,7 +16,7 @@ else
 {
     var look = MunicipalityLook.For(Destino.Slug);
     <div class="municipality-screen" data-place="@look.Tone">
-        <a class="screen-back" href="/"><Icon Name="atras" Size="18" /> Urabá</a>
+        <a class="screen-back" href="/"><Icon Name="atras" Size="16" /> Urabá</a>
 
         <header class="municipality-hero">
             <span class="municipality-hero-mark" aria-hidden="true">@look.Monogram</span>
@@ -60,7 +60,7 @@ else
                            href="@($"/categorias/{category.Slug}?municipio={Destino.Slug}")">
                             <span class="destination-category-art"><Icon Name="@CategoryLook.Icon(category.Slug)" Size="48" /></span>
                             <span><strong>@ShortName(category.Slug, category.Name)</strong><small>@Count(category.BusinessCount)</small></span>
-                            <Icon Name="flecha" Size="19" Class="destination-category-arrow" />
+                            <Icon Name="flecha" Size="16" Class="destination-category-arrow" />
                         </a>
                     }
                 </div>
