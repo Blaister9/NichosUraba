@@ -801,6 +801,10 @@ a.card-media { display: block; color: inherit }
     display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: cover;
     border-radius: var(--radio-0); background: var(--uc-jungle-soft);
 }
+/* Misma regla que en el feed: sin portada no se reserva el alto de una portada. Un 4/3 vacío eran
+   casi 300px de nada justo donde el negocio se presenta. */
+.ficha-hero .cover-vacia { aspect-ratio: auto; height: 11rem }
+.ficha-hero .cover-vacia svg { width: 44px; height: 44px }
 /* El velo mide exactamente lo que mide la portada y cierra en selva sólida: la fotografía se funde
    con el fondo en vez de terminar en un corte. */
 .profile-shade {
@@ -1889,12 +1893,16 @@ body:has(.ficha-hero) .back-link { color: rgb(255 253 249 / 78%) }
 .feed-primary .feed-media { height: clamp(340px, 44svh, 400px) }
 .feed-media img { width: 100%; height: 100%; object-fit: cover; transition: transform .18s ease }
 .feed-media:active img { transform: scale(1.015) }
-/* Un negocio sin foto cae sobre selva, no sobre un pastel: la variedad cromática la pone la
-   fotografía, y donde no la hay el hueco es oscuro y se nota que falta una foto. */
-.feed-art { display: grid; place-items: center; background:
-    radial-gradient(circle at 50% 35%, rgb(15 138 98 / 22%) 0, transparent 62%), var(--uc-jungle-soft) }
-.feed-art-icon { position: relative; z-index: 1; display: grid; place-items: center; width: 8.5rem; height: 8.5rem;
-    border-radius: 50%; background: rgb(255 253 249 / 8%); color: rgb(255 253 249 / 62%) }
+/* Sin fotografía no hay escena. Ahora que el color lo pone la foto, una pieza sin imagen sobre
+   selva es un agujero de 400px, así que no se le da el alto de una escena: se encoge hasta lo que
+   ocupa su propio icono y la lectura pasa a mandar. El negocio que sube una foto se lleva la
+   pantalla; el que no, ocupa lo que le corresponde. */
+.feed-art { display: grid; place-items: center; height: 10.5rem; background:
+    radial-gradient(circle at 50% 40%, rgb(15 138 98 / 20%) 0, transparent 64%), var(--uc-jungle-soft) }
+.feed-primary .feed-art { height: 12rem }
+.feed-art-icon { position: relative; z-index: 1; display: grid; place-items: center; width: 4.5rem; height: 4.5rem;
+    border-radius: 50%; background: rgb(255 253 249 / 8%); color: rgb(255 253 249 / 55%) }
+.feed-art .feed-art-icon svg { width: 32px; height: 32px }
 /* El velo se apoya abajo, que es donde se monta el texto, y cierra a fondo contra la selva para
    que la fotografía no termine en un corte duro. */
 .feed-shade { position: absolute; inset: 0; pointer-events: none; background:
