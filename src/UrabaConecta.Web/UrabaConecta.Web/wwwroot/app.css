@@ -332,7 +332,7 @@ input, select, textarea {
     border: 1px solid var(--borde-fuerte); border-radius: var(--radio-sm);
     background: var(--superficie); color: var(--texto); font-weight: var(--p-regular);
 }
-input::placeholder, textarea::placeholder { color: #8B948F }
+input::placeholder, textarea::placeholder { color: var(--texto-suave) }
 textarea { min-height: 92px; resize: vertical }
 fieldset:disabled input, fieldset:disabled select, fieldset:disabled textarea { background: var(--superficie-2) }
 .field-label { display: block }
@@ -764,7 +764,7 @@ a.card-media { display: block; color: inherit }
    Reservan exactamente el sitio que ocupará el contenido, así que al llegar los negocios nada
    salta. */
 .skeleton {
-    background: linear-gradient(90deg, var(--superficie-2) 25%, #e7eee9 50%, var(--superficie-2) 75%);
+    background: linear-gradient(90deg, var(--uc-stone) 25%, var(--uc-paper) 50%, var(--superficie-2) 75%);
     background-size: 200% 100%; animation: brillo-carga 1.3s ease-in-out infinite;
     border-radius: var(--radio-sm);
 }
@@ -1529,7 +1529,7 @@ a.card-media { display: block; color: inherit }
 }
 /* El permiso del navegador sólo se pide desde esta tarjeta contextual, nunca al abrir Home. */
 .push-prompt{display:flex;gap:.85rem;align-items:flex-start;margin:1rem 0;padding:1rem;border:1px solid var(--borde);border-radius:var(--radio);background:var(--uc-green-wash)}.push-prompt-icon{display:grid;place-items:center;flex:0 0 2rem;width:2rem;height:2rem;border-radius:50%;background:var(--uc-green);color:var(--uc-paper)}.push-prompt-copy{min-width:0}.push-prompt-copy p{margin:.25rem 0 .65rem}.push-prompt-copy .error{margin-top:.6rem}
-.catalog-image-editor{display:grid;grid-template-columns:8rem minmax(0,1fr);gap:1rem;align-items:start;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--borde)}.catalog-image-preview{position:relative;aspect-ratio:1;border-radius: 14px;overflow:hidden;background:#eef4f1}.catalog-image-preview img{width:100%;height:100%;object-fit:cover}.catalog-image-preview .tag{position:absolute;left:.4rem;bottom:.4rem}.catalog-image-empty{display:grid;height:100%;place-items:center;align-content:center;gap:.3rem;color:var(--texto-suave)}.catalog-image-controls{min-width:0}.catalog-image-controls input[type=file]{width:100%;font-size: var(--t-13)}.catalog-image-controls .actions{margin-top:.55rem}
+.catalog-image-editor{display:grid;grid-template-columns:8rem minmax(0,1fr);gap:1rem;align-items:start;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--borde)}.catalog-image-preview{position:relative;aspect-ratio:1;border-radius: 14px;overflow:hidden;background:var(--uc-stone)}.catalog-image-preview img{width:100%;height:100%;object-fit:cover}.catalog-image-preview .tag{position:absolute;left:.4rem;bottom:.4rem}.catalog-image-empty{display:grid;height:100%;place-items:center;align-content:center;gap:.3rem;color:var(--texto-suave)}.catalog-image-controls{min-width:0}.catalog-image-controls input[type=file]{width:100%;font-size: var(--t-13)}.catalog-image-controls .actions{margin-top:.55rem}
 .operation-tabs{display:flex;gap:.45rem;margin:1rem 0;padding:.15rem 0 .45rem;overflow-x:auto;scrollbar-width:none}.operation-tabs::-webkit-scrollbar{display:none}.operation-tabs button{display:flex;flex:0 0 auto;gap:.45rem;align-items:center;min-height:44px;padding:.55rem .8rem;border:1px solid var(--borde);border-radius:999px;background:var(--superficie);color:var(--texto-suave)}.operation-tabs button strong{display:grid;place-items:center;min-width:1.5rem;height:1.5rem;border-radius:999px;background:var(--superficie-2);font-size: var(--t-13)}.operation-tabs button.active{border-color:var(--marca-700);background:var(--marca-700);color:var(--uc-paper)}.operation-tabs button.active strong{background:rgb(255 253 249 / 22%)}.appointment-card:target,.queue-row:target{outline:3px solid var(--uc-green);outline-offset:3px;animation:target-pulse 1.5s ease-out}@keyframes target-pulse{from{box-shadow:0 0 0 8px rgb(15 138 98 / 30%)}to{box-shadow:0 0 0 0 rgb(15 138 98 / 0%)}}
 @media(max-width:520px){.catalog-image-editor{grid-template-columns:6.5rem minmax(0,1fr);gap:.75rem}.catalog-image-controls .actions{display:grid;grid-template-columns:1fr}.catalog-image-controls button{min-height:44px}}
 
