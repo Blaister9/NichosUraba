@@ -379,7 +379,7 @@
             {
                 var offset = found.Date.DayNumber - today.DayNumber;
                 return new(found.Slots.Count, offset == 0 ? "hoy" : offset == 1 ? "mañana" :
-                    $"el {found.Date:dddd}");
+                    $"el {found.Date.ToString("dddd", Colombiano)}");
             }
         }
         catch (ApiException) { }
@@ -429,7 +429,13 @@
         => Math.Pow(lat1 - lat2, 2) + Math.Pow(lon1 - lon2, 2);
     private static string Vertical(string category) => category == "barberia" ? "barberia"
         : category == "maquillaje-y-cosmeticos" ? "tienda" : "belleza";
-    private static string Money(decimal value) => value.ToString("C0", new System.Globalization.CultureInfo("es-CO"));
+    /// <summary>
+    /// El contenedor arranca con la cultura invariante, así que un día de la semana sin cultura
+    /// explícita salía en inglés —"el Monday"— cada vez que el horario más cercano caía a dos días
+    /// o más. El precio ya fijaba es-CO; la fecha no.
+    /// </summary>
+    private static readonly System.Globalization.CultureInfo Colombiano = new("es-CO");
+    private static string Money(decimal value) => value.ToString("C0", Colombiano);
     private static string Duration(int minutes) => minutes < 60 ? $"{minutes} min" : $"{minutes / 60} h";
     private static string PickupText(DateTimeOffset? start) => start is null ? "consulta disponibilidad"
         : TimeZoneInfo.ConvertTime(start.Value, Colombia).Date == TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Colombia).Date
