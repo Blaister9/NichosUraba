@@ -276,6 +276,10 @@ publicApi.MapGet("/categories", (string? municipality, IUrabaUseCases useCases, 
     => useCases.GetCategoriesAsync(municipality, ct));
 publicApi.MapGet("/businesses/{slug}", async (string slug, IUrabaUseCases useCases, CancellationToken ct) =>
     await useCases.GetBusinessAsync(slug, ct) is { } business ? Results.Ok(business) : Results.NotFound());
+// El feed de la Home en una sola lectura. La pantalla es la misma; lo que cambia es que ya no
+// reconstruye su contenido llamando una vez por negocio.
+publicApi.MapGet("/home-feed", (DateOnly? today, int? days, IUrabaUseCases useCases, CancellationToken ct)
+    => useCases.GetHomeFeedAsync(today ?? DateOnly.FromDateTime(DateTime.UtcNow), days ?? 4, ct));
 publicApi.MapGet("/businesses/{slug}/appointment-slots",
     (string slug, Guid serviceId, DateOnly date, IUrabaUseCases useCases, CancellationToken ct)
         => useCases.GetSlotsAsync(slug, serviceId, date, ct));

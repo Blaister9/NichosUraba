@@ -30,8 +30,11 @@ public sealed class HomeCompositionTests(PostgresWebFactory factory) : IClassFix
         // El feed se prerenderiza en el servidor: sin piezas, el conteo no estaría midiendo nada.
         Assert.Contains("data-testid=\"feed-piece\"", html);
         // Eran 36 con la disponibilidad de citas preguntada día por día y la ficha de la tienda
-        // pedida para no mirarla.
-        Assert.True(sentencias <= 24, $"Componer la Home costó {sentencias} sentencias.");
+        // pedida para no mirarla; 18 después de agrupar esas dos, porque la fila, la carta, las
+        // franjas y los horarios seguían pidiéndose negocio por negocio. Con el feed resuelto en
+        // una lectura son 6, y —esto es lo que importa— seis con cualquier número de negocios.
+        // El escalado lo fija HomeFeedScalingTests; este techo protege la pantalla completa.
+        Assert.True(sentencias <= 8, $"Componer la Home costó {sentencias} sentencias.");
     }
 
     [Fact]

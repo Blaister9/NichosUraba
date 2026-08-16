@@ -39,6 +39,38 @@ public sealed record BusinessCardDto(string Slug, string Name, OptionDto Categor
     string? LogoAltText = null, string? CoverAltText = null, string ShortDescription = "",
     decimal? PriceFrom = null, bool QueueIsOpen = false, string? OpenStatus = null);
 public sealed record BusinessHourDto(DayOfWeek Day, string OpensAt, string ClosesAt);
+
+// --- Lo que la Home necesita, y nada más ------------------------------------------------------
+// La Home se componía pidiendo la ficha completa de cada negocio y después, uno por uno, su fila,
+// su disponibilidad, su carta y sus franjas de recogida. Eran dieciocho idas y vueltas a una base
+// que vive en otra región, y crecían con cada negocio publicado. Estos tipos existen para que esa
+// misma pantalla quepa en una lectura de tamaño fijo: llevan los campos que el feed pinta y ningún
+// otro, así que no hay ficha completa que traer para mirarle cinco propiedades.
+
+/// <summary>Estado de la fila que el feed enseña. Es el mismo cálculo que la ficha pública.</summary>
+public sealed record HomeQueueDto(bool IsOpen, int WaitingCount, int ApproximateWaitMinutes);
+
+/// <summary>Un servicio del escaparate. Sin descripción ni adelanto: el feed no los pinta.</summary>
+public sealed record HomeServiceDto(Guid Id, string Name, decimal ReferencePrice, int DurationMinutes,
+    string? ImageUrl, string? ImageAltText);
+
+/// <summary>El día más cercano con horarios y cuántos hay. Las horas concretas se piden al entrar.</summary>
+public sealed record HomeAvailabilityDto(DateOnly Date, int SlotCount);
+
+public sealed record HomeProductDto(Guid Id, string Name, decimal ReferencePrice, bool IsAvailable,
+    string? ImageUrl, string? ImageAltText);
+
+/// <param name="Services">
+/// Ordenados como la ficha —DisplayOrder y después nombre— y recortados a lo que el feed puede
+/// llegar a pintar: la pieza principal usa el primero y las editoriales los tres primeros.
+/// </param>
+public sealed record HomeFeedBusinessDto(string Slug, string Name, OptionDto Category, OptionDto Municipality,
+    bool HasVirtualQueue, bool HasPickupOrdering, bool HasScheduling, string? CoverUrl, string? CoverAltText,
+    decimal? PriceFrom, string? OpenStatus, HomeQueueDto? Queue, IReadOnlyList<HomeServiceDto> Services,
+    HomeAvailabilityDto? Availability, HomeProductDto? Product, DateTimeOffset? NextPickupStart);
+
+public sealed record HomeFeedDto(IReadOnlyList<HomeFeedBusinessDto> Businesses,
+    IReadOnlyList<BusinessPromotionDto> Promotions);
 /// <summary>
 /// <paramref name="DepositAmount"/> llega ya calculado por el servidor: el cliente nunca repite la
 /// aritmética del adelanto ni el redondeo a pesos.
@@ -514,6 +546,13 @@ public interface IUrabaConectaApi
     /// días uno detrás de otro cuando sólo necesita saber si hay hueco cerca y cuánto.
     /// </summary>
     Task<SlotListDto?> FindNextAvailabilityAsync(string slug, Guid serviceId, DateOnly from, int days,
+        CancellationToken cancellationToken = default);
+    /// <summary>
+    /// El feed de la Home entero en una lectura. La pantalla llegó a pedir la ficha de cada negocio
+    /// y después, uno por uno, su fila, sus horarios, su carta y sus franjas; el coste crecía con
+    /// cada negocio publicado y la base vive en otra región.
+    /// </summary>
+    Task<HomeFeedDto> GetHomeFeedAsync(DateOnly today, int availabilityDays,
         CancellationToken cancellationToken = default);
     Task<AppointmentCreatedDto> CreateAppointmentAsync(string slug, CreateAppointmentRequest request,
         CancellationToken cancellationToken = default);

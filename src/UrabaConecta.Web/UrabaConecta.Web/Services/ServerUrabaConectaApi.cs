@@ -33,6 +33,10 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
         CancellationToken cancellationToken = default)
         => Serialized(() => useCases.FindNextAvailabilityAsync(slug, serviceId, from, days, cancellationToken),
             cancellationToken);
+    public Task<HomeFeedDto> GetHomeFeedAsync(DateOnly today, int availabilityDays,
+        CancellationToken cancellationToken = default)
+        => Serialized(() => useCases.GetHomeFeedAsync(today, availabilityDays, cancellationToken),
+            cancellationToken);
     public Task<AppointmentCreatedDto> CreateAppointmentAsync(string slug, CreateAppointmentRequest request,
         CancellationToken cancellationToken = default) => useCases.CreateAppointmentAsync(slug, request, cancellationToken);
     public Task<AppointmentTrackingDto?> GetAppointmentTrackingAsync(string code, CancellationToken cancellationToken = default)

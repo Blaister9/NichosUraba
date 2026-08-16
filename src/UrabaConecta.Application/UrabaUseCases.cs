@@ -63,34 +63,151 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
     }
 
     /// <summary>
+    /// Cuántas jornadas de recogida mira la Home para decir a qué hora se recoge. Es el mismo rango
+    /// que ofrece la pantalla de pedidos cuando no se le pide una fecha concreta.
+    /// </summary>
+    private const int PickupHorizonDays = 7;
+
+    /// <summary>
+    /// El feed de la Home. La disponibilidad y las franjas de recogida se calculan aquí con los
+    /// mismos métodos que usan la pantalla de citas y la de pedidos: lo que cambia es de dónde sale
+    /// el material —una lectura para todos los negocios en lugar de una tanda por negocio—, no las
+    /// reglas que deciden qué se enseña.
+    /// </summary>
+    public async Task<HomeFeedDto> GetHomeFeedAsync(DateOnly today, int availabilityDays,
+        CancellationToken cancellationToken = default)
+    {
+        if (availabilityDays is < 1 or > 14)
+            throw new ApiException("INVALID_RANGE", "El rango admite entre 1 y 14 días.");
+        var source = await store.GetHomeFeedSourceAsync(today, availabilityDays, PickupHorizonDays,
+            cancellationToken);
+        var now = timeProvider.GetUtcNow();
+        var businesses = new List<HomeFeedBusinessDto>(source.Businesses.Count);
+        foreach (var business in source.Businesses)
+        {
+            businesses.Add(new HomeFeedBusinessDto(business.Slug, business.Name, business.Category,
+                business.Municipality, business.HasVirtualQueue, business.HasPickupOrdering,
+                business.HasScheduling, business.CoverUrl, business.CoverAltText, business.PriceFrom,
+                OpenStatus(business.TimeZoneId, business.Hours), business.Queue,
+                // Igual que la ficha pública: sin el módulo de citas, los servicios no se enseñan.
+                // Un negocio puede conservar filas de servicio de antes de apagarlo.
+                business.HasScheduling ? business.Services : [],
+                Availability(business, source, today, availabilityDays),
+                business.HasPickupOrdering ? business.Product : null,
+                NextPickup(business, source, now)));
+        }
+        var promotions = await push.GetPublicPromotionsAsync(cancellationToken);
+        return new(businesses, promotions);
+    }
+
+    /// <summary>El día más cercano con horarios para el primer servicio, dentro del rango pedido.</summary>
+    private HomeAvailabilityDto? Availability(HomeFeedBusinessSource business, HomeFeedSource source,
+        DateOnly from, int days)
+    {
+        if (!business.HasScheduling || business.Services.Count == 0) return null;
+        if (!source.EligibleStaff.TryGetValue(business.Id, out var staff) || staff.Count == 0) return null;
+        var occupied = source.Occupied.Where(x => x.BusinessId == business.Id)
+            .Select(x => (x.Start, x.End, x.StaffId)).ToArray();
+        var exceptions = source.Exceptions.Where(x => x.BusinessId == business.Id).ToArray();
+        for (var offset = 0; offset < days; offset++)
+        {
+            var date = from.AddDays(offset);
+            var slots = BuildSlots(business.TimeZoneId, business.Services[0].DurationMinutes,
+                business.Hours.Select(x => (x.Day, TimeOnly.Parse(x.OpensAt), TimeOnly.Parse(x.ClosesAt))),
+                staff, exceptions, occupied, date);
+            if (slots.Count > 0) return new(date, slots.Count);
+        }
+        return null;
+    }
+
+    /// <summary>La primera franja de recogida con cupo, o null si no queda ninguna en el horizonte.</summary>
+    private static DateTimeOffset? NextPickup(HomeFeedBusinessSource business, HomeFeedSource source,
+        DateTimeOffset now)
+    {
+        if (!business.HasPickupOrdering || business.Pickup is not { } settings) return null;
+        TimeZoneInfo zone;
+        try { zone = TimeZoneInfo.FindSystemTimeZoneById(business.TimeZoneId); }
+        catch (TimeZoneNotFoundException) { return null; }
+        var first = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, zone).Date);
+        var candidates = PickupSlotCalculator.Candidates(
+            Enumerable.Range(0, PickupHorizonDays).Select(first.AddDays),
+            business.Hours.Select(x => (x.Day, TimeOnly.Parse(x.OpensAt), TimeOnly.Parse(x.ClosesAt))),
+            settings.ReceivesFrom, settings.ReceivesUntil, settings.SlotIntervalMinutes, zone,
+            now.AddMinutes(settings.MinimumPreparationMinutes));
+        foreach (var start in candidates.OrderBy(x => x))
+        {
+            var taken = source.PickupOccupancy.TryGetValue((business.Id, start), out var count) ? count : 0;
+            if (taken < settings.MaximumActivePerSlot) return start;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Si el negocio está atendiendo ahora. Es la misma frase que el directorio pone en la tarjeta;
+    /// se recalcula aquí porque depende de la hora de quien mira, no de cuándo se leyó el horario.
+    /// </summary>
+    private static string? OpenStatus(string timeZoneId, IReadOnlyList<BusinessHourDto> hours)
+    {
+        if (hours.Count == 0) return null;
+        TimeZoneInfo zone;
+        try { zone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId); }
+        catch (TimeZoneNotFoundException) { return null; }
+        var local = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, zone);
+        var today = hours.Where(x => x.Day == local.DayOfWeek)
+            .Select(x => new ScheduleInterval(TimeOnly.Parse(x.OpensAt), TimeOnly.Parse(x.ClosesAt)))
+            .OrderBy(x => x.OpensAt).ToList();
+        if (today.Count == 0) return "Cerrado";
+        var moment = TimeOnly.FromDateTime(local.DateTime);
+        if (BusinessSchedule.IntervalAt(today, moment) is not null) return "Abierto";
+        var next = BusinessSchedule.NextInterval(today, moment);
+        return next is null ? "Cerrado"
+            : $"Cerrado temporalmente · abre a las {next.Value.OpensAt.ToString("h:mm tt", new CultureInfo("es-CO"))}";
+    }
+
+    /// <summary>
     /// Las horas libres de un día concreto dentro de un contexto ya leído. Es el único sitio donde
     /// viven las reglas de disponibilidad, así que la consulta de un día y la búsqueda del próximo
     /// día con hueco no pueden responder cosas distintas.
     /// </summary>
     private IReadOnlyList<SlotDto> BuildSlots(SchedulingContext context, DateOnly date)
+        => BuildSlots(context.Business.TimeZoneId, context.Service.DurationMinutes,
+            context.Hours.Select(x => (x.Day, x.OpensAt, x.ClosesAt)),
+            context.EligibleStaff.Select(x => x.Id).ToArray(), context.Exceptions, context.Occupied, date);
+
+    /// <summary>
+    /// La misma jornada resuelta a partir de sus piezas sueltas, sin exigir un
+    /// <see cref="SchedulingContext"/>. El feed de la Home lee el material de todos los negocios de
+    /// una vez y no tiene un contexto por negocio que pasar; lo que no puede es calcular la
+    /// disponibilidad por su cuenta, porque entonces la Home y la pantalla de citas podrían decir
+    /// cosas distintas sobre el mismo día.
+    /// </summary>
+    private IReadOnlyList<SlotDto> BuildSlots(string timeZoneId, int durationMinutes,
+        IEnumerable<(DayOfWeek Day, TimeOnly OpensAt, TimeOnly ClosesAt)> hours, IReadOnlyList<Guid> staffIds,
+        IReadOnlyList<AvailabilityException> exceptions,
+        IReadOnlyList<(DateTimeOffset Start, DateTimeOffset End, Guid StaffId)> occupied, DateOnly date)
     {
         // Un día puede tener varios tramos: sin filas está cerrado, con varias es jornada partida.
-        var dayIntervals = context.Hours.Where(x => x.Day == date.DayOfWeek)
+        var dayIntervals = hours.Where(x => x.Day == date.DayOfWeek)
             .Select(x => new ScheduleInterval(x.OpensAt, x.ClosesAt)).ToList();
-        if (dayIntervals.Count == 0 || context.EligibleStaff.Count == 0) return [];
+        if (dayIntervals.Count == 0 || staffIds.Count == 0) return [];
 
-        var zone = TimeZoneInfo.FindSystemTimeZoneById(context.Business.TimeZoneId);
+        var zone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
         // El contexto puede abarcar varios días: se acotan las citas ocupadas a la jornada que se
         // está resolviendo, para que el resultado no dependa de cuántos días se hayan leído.
         var dayStart = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(date.ToDateTime(TimeOnly.MinValue), zone), TimeSpan.Zero);
         var dayEnd = dayStart.AddDays(1);
-        return context.EligibleStaff
-            .SelectMany(staff =>
+        return staffIds
+            .SelectMany(staffId =>
             {
-                var exception = context.Exceptions.FirstOrDefault(x => x.StaffMemberId == staff.Id && x.Date == date);
+                var exception = exceptions.FirstOrDefault(x => x.StaffMemberId == staffId && x.Date == date);
                 if (exception?.Type == AvailabilityExceptionType.ClosedAllDay) return [];
                 // Una apertura extraordinaria reemplaza la jornada de esa fecha por su propio tramo.
                 var extraordinary = exception?.Type == AvailabilityExceptionType.ExtraordinaryOpening;
                 var intervals = extraordinary
                     ? [new ScheduleInterval(exception!.OpensAt!.Value, exception.ClosesAt!.Value)]
                     : dayIntervals;
-                var occupied = context.Occupied
-                    .Where(x => x.StaffId == staff.Id && x.Start < dayEnd && x.End > dayStart)
+                var busy = occupied
+                    .Where(x => x.StaffId == staffId && x.Start < dayEnd && x.End > dayStart)
                     .Select(x => (x.Start, x.End)).ToList();
                 if (exception?.Type == AvailabilityExceptionType.ClosedInterval)
                 {
@@ -98,11 +215,10 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
                         date.ToDateTime(exception.OpensAt!.Value), zone), TimeSpan.Zero);
                     var endUtc = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(
                         date.ToDateTime(exception.ClosesAt!.Value), zone), TimeSpan.Zero);
-                    occupied.Add((startUtc, endUtc));
+                    busy.Add((startUtc, endUtc));
                 }
                 return AppointmentSlotCalculator.Calculate(date, intervals,
-                    context.Service.DurationMinutes, zone, timeProvider.GetUtcNow(),
-                    occupied)
+                    durationMinutes, zone, timeProvider.GetUtcNow(), busy)
                     .Select(x => new SlotDto(x.Start, x.End));
             })
             .GroupBy(x => x.Start).Select(x => x.First()).OrderBy(x => x.Start).ToArray();

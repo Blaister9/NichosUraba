@@ -32,6 +32,10 @@ public sealed class HttpUrabaConectaApi(HttpClient http) : IUrabaConectaApi
         if (response.StatusCode is HttpStatusCode.NoContent or HttpStatusCode.NotFound) return null;
         return await Read<SlotListDto>(response, cancellationToken);
     }
+    public Task<HomeFeedDto> GetHomeFeedAsync(DateOnly today, int availabilityDays,
+        CancellationToken cancellationToken = default)
+        => Get<HomeFeedDto>($"api/v1/public/home-feed?today={today:yyyy-MM-dd}&days={availabilityDays}",
+            cancellationToken);
     public async Task<AppointmentCreatedDto> CreateAppointmentAsync(string slug, CreateAppointmentRequest request,
         CancellationToken cancellationToken = default)
         => await Read<AppointmentCreatedDto>(await http.PostAsJsonAsync($"api/v1/public/businesses/{Uri.EscapeDataString(slug)}/appointments",

@@ -204,21 +204,17 @@
 
     protected override async Task OnInitializedAsync()
     {
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Colombia).DateTime);
         try
         {
-            var businesses = await Api.GetBusinessesAsync();
-            var promotions = await Api.GetPublicPromotionsAsync();
-            // La ficha completa sólo se pide donde de verdad se leen sus servicios. Una tienda no
-            // aporta ninguna pieza a partir de su lista de servicios —sus piezas salen de la carta—
-            // así que traerse su ficha era una lectura entera para no mirarla.
-            var profiles = new Dictionary<string, BusinessProfileDto>(StringComparer.OrdinalIgnoreCase);
-            foreach (var business in businesses.Where(x => !x.HasPickupOrdering))
-                if (await Api.GetBusinessAsync(business.Slug) is { } profile) profiles[business.Slug] = profile;
-
-            await BuildPrimaryPieces(businesses, profiles);
-            BuildEditorialPieces(businesses, profiles);
-            BuildPromotionPieces(promotions);
-            InsertCaptureAndSponsored(businesses);
+            // Una lectura para toda la pantalla. Antes eran el directorio, la ficha de cada negocio
+            // y después su fila, sus horarios, su carta y sus franjas, una llamada por dato y por
+            // negocio: dieciocho idas y vueltas con tres negocios, y una más por cada negocio nuevo.
+            var feed = await Api.GetHomeFeedAsync(today, AvailabilityDays);
+            BuildPrimaryPieces(feed.Businesses, today);
+            BuildEditorialPieces(feed.Businesses);
+            BuildPromotionPieces(feed.Promotions);
+            InsertCaptureAndSponsored(feed.Businesses);
         }
         catch (ApiException ex) { error = ex.Message; }
         catch (Exception) { error = "No pudimos cargar lo que está pasando en Urabá. Intenta nuevamente."; }
@@ -248,17 +244,14 @@
         }
     }
 
-    private async Task BuildPrimaryPieces(IReadOnlyList<BusinessCardDto> businesses,
-        IReadOnlyDictionary<string, BusinessProfileDto> profiles)
+    private void BuildPrimaryPieces(IReadOnlyList<HomeFeedBusinessDto> businesses, DateOnly today)
     {
         var primaryPieces = new List<FeedPiece>();
         foreach (var business in businesses.Where(x => x.HasVirtualQueue).OrderBy(ShowcasePriority))
         {
-            QueuePublicStatusDto? queue = null;
-            try { queue = await Api.GetPublicQueueAsync(business.Slug); } catch (ApiException) { }
-            var live = queue?.SessionStatus == "Open";
-            var waiting = queue?.WaitingCount ?? 0;
-            var wait = queue?.ApproximateWaitMinutes ?? 0;
+            var live = business.Queue?.IsOpen == true;
+            var waiting = business.Queue?.WaitingCount ?? 0;
+            var wait = business.Queue?.ApproximateWaitMinutes ?? 0;
             primaryPieces.Add(new FeedPiece(FeedKind.Business, "barberia", business.Municipality.Slug,
                 business.CoverUrl, business.CoverAltText ?? $"Interior de {business.Name}", "tijeras",
                 "¿Necesitas un corte hoy?", live ? $"{CleanName(business.Name)} tiene la fila abierta" :
@@ -271,9 +264,9 @@
         foreach (var business in businesses.Where(x => x.HasScheduling && !x.HasVirtualQueue)
                      .OrderBy(ShowcasePriority))
         {
-            if (!profiles.TryGetValue(business.Slug, out var profile) || profile.Services.Count == 0) continue;
-            var service = profile.Services.OrderBy(x => x.DisplayOrder).First();
-            var availability = await FindAvailability(business.Slug, service.Id);
+            if (business.Services.Count == 0) continue;
+            var service = business.Services[0];
+            var availability = Availability(business, today);
             primaryPieces.Add(new FeedPiece(FeedKind.Business, "belleza", business.Municipality.Slug,
                 service.ImageUrl ?? business.CoverUrl, service.ImageAltText ?? business.CoverAltText ?? service.Name,
                 "rostro", "¿Te quieres consentir?", availability.Count > 0
@@ -286,27 +279,20 @@
 
         foreach (var business in businesses.Where(x => x.HasPickupOrdering).OrderBy(ShowcasePriority))
         {
-            PickupMenuDto? menu = null; PickupSlotListDto? slots = null;
-            try { menu = await Api.GetPickupMenuAsync(business.Slug); slots = await Api.GetPickupSlotsAsync(business.Slug); }
-            catch (ApiException) { }
-            var product = menu?.Products.FirstOrDefault(x => x.IsAvailable) ?? menu?.Products.FirstOrDefault();
-            if (product is null) continue;
-            var pickup = PickupText(slots?.Slots.FirstOrDefault()?.Start);
-            primaryPieces.Add(ProductPiece(business, product, pickup, primary: false));
+            if (business.Product is not { } product) continue;
+            primaryPieces.Add(ProductPiece(business, product, PickupText(business.NextPickupStart), primary: false));
         }
         pieces.AddRange(primaryPieces.OrderBy(PrimaryPiecePriority));
     }
 
-    private void BuildEditorialPieces(IReadOnlyList<BusinessCardDto> businesses,
-        IReadOnlyDictionary<string, BusinessProfileDto> profiles)
+    private void BuildEditorialPieces(IReadOnlyList<HomeFeedBusinessDto> businesses)
     {
         foreach (var business in businesses.OrderBy(ShowcasePriority))
         {
-            if (!profiles.TryGetValue(business.Slug, out var profile)) continue;
             var vertical = business.HasPickupOrdering ? "tienda" : business.HasVirtualQueue ? "barberia" : "belleza";
             if (!business.HasPickupOrdering)
             {
-                foreach (var service in profile.Services.OrderBy(x => x.DisplayOrder).Take(3))
+                foreach (var service in business.Services)
                     pieces.Add(new FeedPiece(FeedKind.Business, vertical, business.Municipality.Slug,
                         service.ImageUrl ?? business.CoverUrl, service.ImageAltText ?? business.CoverAltText ?? service.Name,
                         CategoryLook.Icon(business.Category.Slug), $"¿Qué te provoca hacerte?", service.Name,
@@ -335,7 +321,7 @@
         }
     }
 
-    private void InsertCaptureAndSponsored(IReadOnlyList<BusinessCardDto> businesses)
+    private void InsertCaptureAndSponsored(IReadOnlyList<HomeFeedBusinessDto> businesses)
     {
         pieces.Insert(Math.Min(3, pieces.Count), FeedPiece.Capture());
         var sponsoredBusiness = businesses.Where(x => x.HasPickupOrdering &&
@@ -355,7 +341,7 @@
         pieces.Insert(Math.Min(6, pieces.Count), sponsored);
     }
 
-    private FeedPiece ProductPiece(BusinessCardDto business, ProductDto product, string pickup, bool primary)
+    private FeedPiece ProductPiece(HomeFeedBusinessDto business, HomeProductDto product, string pickup, bool primary)
         => new(FeedKind.Business, "tienda", business.Municipality.Slug, product.ImageUrl ?? business.CoverUrl,
             product.ImageAltText ?? business.CoverAltText ?? product.Name, "bolsa", "¿Buscas algo para hoy?",
             product.Name, product.IsAvailable ? $"{Money(product.ReferencePrice)} · {pickup}" :
@@ -365,25 +351,15 @@
             $"/negocios/{business.Slug}/pedidos#producto-{product.Id}", false, false, false, primary);
 
     /// <summary>
-    /// El día más cercano con horarios, dentro de los próximos cuatro. Antes se preguntaba jornada
-    /// por jornada hasta encontrar una con hueco: cuatro esperas encadenadas, y cada una repetía
-    /// las mismas cinco lecturas de negocio, servicio, personal y horario. Ahora es una pregunta.
-    /// El resultado es el mismo, incluida la fecha elegida y el número de horarios.
+    /// Cómo se nombra el día más cercano con horarios. El servidor ya resolvió cuál es y cuántos
+    /// hay; aquí sólo se decide si se dice "hoy", "mañana" o el nombre del día.
     /// </summary>
-    private async Task<AvailabilitySignal> FindAvailability(string slug, Guid serviceId)
+    private static AvailabilitySignal Availability(HomeFeedBusinessDto business, DateOnly today)
     {
-        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Colombia).DateTime);
-        try
-        {
-            if (await Api.FindNextAvailabilityAsync(slug, serviceId, today, AvailabilityDays) is { } found)
-            {
-                var offset = found.Date.DayNumber - today.DayNumber;
-                return new(found.Slots.Count, offset == 0 ? "hoy" : offset == 1 ? "mañana" :
-                    $"el {found.Date.ToString("dddd", Colombiano)}");
-            }
-        }
-        catch (ApiException) { }
-        return new(0, "próximamente");
+        if (business.Availability is not { } found) return new(0, "próximamente");
+        var offset = found.Date.DayNumber - today.DayNumber;
+        return new(found.SlotCount, offset == 0 ? "hoy" : offset == 1 ? "mañana" :
+            $"el {found.Date.ToString("dddd", Colombiano)}");
     }
 
     private async Task SelectFilter(string key)
@@ -441,10 +417,10 @@
         : TimeZoneInfo.ConvertTime(start.Value, Colombia).Date == TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Colombia).Date
             ? $"recoges hoy {TimeZoneInfo.ConvertTime(start.Value, Colombia):h:mm tt}"
             : $"recoges {TimeZoneInfo.ConvertTime(start.Value, Colombia):ddd h:mm tt}";
-    private static string CalmState(BusinessCardDto business) => business.OpenStatus is { Length: > 0 } state
+    private static string CalmState(HomeFeedBusinessDto business) => business.OpenStatus is { Length: > 0 } state
         ? state : "Consulta el horario de hoy";
     private static string CleanName(string name) => name.Replace(" · DEMO", "", StringComparison.OrdinalIgnoreCase);
-    private static int ShowcasePriority(BusinessCardDto business)
+    private static int ShowcasePriority(HomeFeedBusinessDto business)
     {
         if (business.Slug.Equals("brio-nativo-barberia-demo", StringComparison.OrdinalIgnoreCase)) return 0;
         if (business.Name.Contains("Studio Laura", StringComparison.OrdinalIgnoreCase)) return 1;
@@ -461,6 +437,7 @@
 
     public async ValueTask DisposeAsync()
     {
+
         if (module is null) return;
         try { await module.DisposeAsync(); } catch (JSException) { } catch (JSDisconnectedException) { }
     }

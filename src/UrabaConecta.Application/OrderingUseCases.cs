@@ -39,27 +39,9 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
         var firstDate = date ?? DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, zone).Date);
         var dates = date.HasValue ? [firstDate] : Enumerable.Range(0, 7).Select(firstDate.AddDays).ToArray();
 
-        var candidates = new List<DateTimeOffset>();
-        foreach (var day in dates)
-        {
-            // Un día puede tener varios tramos. Se recorre cada uno por separado, así que entre
-            // 14:00 y 17:00 —la pausa— no se genera ninguna franja.
-            var intervals = BusinessSchedule.Normalize(hours.Where(x => x.Day == day.DayOfWeek)
-                .Select(x => new ScheduleInterval(x.OpensAt, x.ClosesAt)));
-            foreach (var interval in intervals)
-            {
-                var from = interval.OpensAt > settings.ReceivesFrom ? interval.OpensAt : settings.ReceivesFrom;
-                var until = interval.ClosesAt < settings.ReceivesUntil ? interval.ClosesAt : settings.ReceivesUntil;
-                if (until <= from) continue;
-                for (var local = day.ToDateTime(from); local.AddMinutes(settings.SlotIntervalMinutes) <= day.ToDateTime(until);
-                     local = local.AddMinutes(settings.SlotIntervalMinutes))
-                {
-                    var start = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(local, DateTimeKind.Unspecified), zone));
-                    if (start < earliest) continue;
-                    candidates.Add(start);
-                }
-            }
-        }
+        var candidates = PickupSlotCalculator.Candidates(dates,
+            hours.Select(x => (x.Day, x.OpensAt, x.ClosesAt)), settings.ReceivesFrom, settings.ReceivesUntil,
+            settings.SlotIntervalMinutes, zone, earliest);
         if (candidates.Count == 0) return new(business.TimeZoneId, []);
 
         // Una sola lectura para todo el rango, sea un día o los siete. Las franjas sin pedidos no

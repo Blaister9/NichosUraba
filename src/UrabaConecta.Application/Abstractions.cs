@@ -42,6 +42,35 @@ public sealed record SchedulingContext(Business Business, Service Service, IRead
     IReadOnlyList<StaffMember> EligibleStaff, IReadOnlyList<AvailabilityException> Exceptions,
     IReadOnlyList<(DateTimeOffset Start, DateTimeOffset End, Guid StaffId)> Occupied);
 
+// --- Material crudo del feed de la Home -------------------------------------------------------
+// La Home necesita saber, de todos los negocios a la vez, qué fila está abierta, qué horarios hay
+// cerca, qué producto enseñar y a qué hora se recoge. Pedirlo negocio por negocio costaba una ida y
+// vuelta por dato y por negocio. Estos tipos son lo que la base devuelve en un puñado de lecturas
+// de tamaño fijo; el cálculo de horas libres y de franjas sigue viviendo donde ya vivía.
+
+public sealed record HomeFeedBusinessSource(Guid Id, string Slug, string Name, string TimeZoneId,
+    OptionDto Category, OptionDto Municipality, bool HasVirtualQueue, bool HasPickupOrdering,
+    bool HasScheduling, string? CoverUrl, string? CoverAltText, decimal? PriceFrom,
+    IReadOnlyList<BusinessHourDto> Hours, HomeQueueDto? Queue, IReadOnlyList<HomeServiceDto> Services,
+    HomeProductDto? Product, HomePickupSettingsSource? Pickup);
+
+public sealed record HomePickupSettingsSource(int MinimumPreparationMinutes, int SlotIntervalMinutes,
+    int MaximumActivePerSlot, TimeOnly ReceivesFrom, TimeOnly ReceivesUntil);
+
+/// <param name="EligibleStaff">
+/// Por negocio, el personal que atiende su primer servicio: es el único para el que la Home
+/// resuelve disponibilidad, porque es el único que enseña.
+/// </param>
+/// <param name="PickupOccupancy">
+/// Cuántos pedidos activos tiene cada franja, por negocio. Las franjas sin pedidos no aparecen y
+/// valen cero.
+/// </param>
+public sealed record HomeFeedSource(IReadOnlyList<HomeFeedBusinessSource> Businesses,
+    IReadOnlyDictionary<Guid, IReadOnlyList<Guid>> EligibleStaff,
+    IReadOnlyList<AvailabilityException> Exceptions,
+    IReadOnlyList<(Guid BusinessId, DateTimeOffset Start, DateTimeOffset End, Guid StaffId)> Occupied,
+    IReadOnlyDictionary<(Guid BusinessId, DateTimeOffset Start), int> PickupOccupancy);
+
 /// <summary>
 /// <paramref name="DepositVerifiedByName"/> se resuelve en la consulta para no pedir el nombre de
 /// la persona verificadora una vez por fila.
@@ -270,6 +299,12 @@ public interface IUrabaStore
         CancellationToken cancellationToken);
     Task<SchedulingContext?> GetSchedulingContextAsync(string slug, Guid serviceId, DateOnly date,
         CancellationToken cancellationToken);
+    /// <summary>
+    /// Todo lo que el feed de la Home necesita de todos los negocios publicados, en un número de
+    /// sentencias que no depende de cuántos haya.
+    /// </summary>
+    Task<HomeFeedSource> GetHomeFeedSourceAsync(DateOnly from, int days, int pickupDays,
+        CancellationToken cancellationToken);
     Task<bool> AddAppointmentAsync(Appointment appointment, ConsentReceipt consent, CancellationToken cancellationToken);
     Task<AppointmentRecord?> FindAppointmentByCodeHashAsync(string codeHash, CancellationToken cancellationToken);
     Task<bool> IsMemberAsync(Guid userId, Guid businessId, CancellationToken cancellationToken);
@@ -384,6 +419,12 @@ public interface IUrabaUseCases
     Task<SlotListDto> GetSlotsAsync(string slug, Guid serviceId, DateOnly date, CancellationToken cancellationToken = default);
     /// <summary>El primer día con horarios a partir de una fecha, o null si no hay ninguno.</summary>
     Task<SlotListDto?> FindNextAvailabilityAsync(string slug, Guid serviceId, DateOnly from, int days,
+        CancellationToken cancellationToken = default);
+    /// <summary>
+    /// El feed de la Home ya compuesto: negocios con su estado operativo y las promociones vigentes.
+    /// Existe para que la Home no reconstruya esa información llamando una vez por negocio.
+    /// </summary>
+    Task<HomeFeedDto> GetHomeFeedAsync(DateOnly today, int availabilityDays,
         CancellationToken cancellationToken = default);
     Task<AppointmentCreatedDto> CreateAppointmentAsync(string slug, CreateAppointmentRequest request,
         CancellationToken cancellationToken = default);

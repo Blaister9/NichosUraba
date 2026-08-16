@@ -239,6 +239,161 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
     private static string Display(TimeOnly value)
         => value.ToString("h:mm tt", System.Globalization.CultureInfo.GetCultureInfo("es-CO"));
 
+    /// <summary>
+    /// El material del feed de la Home en cinco sentencias, sea cual sea el número de negocios.
+    /// Antes la Home lo armaba a golpe de llamada por negocio —ficha, fila, disponibilidad, carta y
+    /// franjas—, dieciocho idas y vueltas con tres negocios y creciendo con cada uno nuevo. La base
+    /// vive en otra región, así que lo que se paga es el número de viajes: aquí el escaparate de
+    /// cada negocio viaja dentro de la primera consulta como subconsulta correlacionada, y las
+    /// cuatro restantes resuelven de una vez el personal, las excepciones, las citas ocupadas y la
+    /// ocupación de las franjas de recogida de todos los negocios juntos.
+    /// </summary>
+    public async Task<HomeFeedSource> GetHomeFeedSourceAsync(DateOnly from, int days, int pickupDays,
+        CancellationToken cancellationToken)
+    {
+        var rows = await (from b in db.Businesses.AsNoTracking()
+                          join m in db.Municipalities on b.MunicipalityId equals m.Id
+                          join c in db.Categories on b.CategoryId equals c.Id
+                          where b.Status == BusinessStatus.Active && b.IsPublished && m.IsActive && c.IsActive
+                          orderby b.Name
+                          select new
+                          {
+                              b.Id, b.Slug, b.Name, b.TimeZoneId,
+                              CategorySlug = c.Slug, CategoryName = c.Name,
+                              MunicipalitySlug = m.Slug, MunicipalityName = m.Name,
+                              HasQueue = db.BusinessModules.Any(x => x.BusinessId == b.Id &&
+                                  x.Module == BusinessModuleKind.VirtualQueues && x.IsEnabled),
+                              HasOrders = db.BusinessModules.Any(x => x.BusinessId == b.Id &&
+                                  x.Module == BusinessModuleKind.PickupOrders && x.IsEnabled),
+                              HasAppointments = db.BusinessModules.Any(x => x.BusinessId == b.Id &&
+                                  x.Module == BusinessModuleKind.Appointments && x.IsEnabled),
+                              Cover = db.BusinessImages
+                                  .Where(i => i.BusinessId == b.Id && !i.IsDeleted && i.Kind == BusinessImageKind.Cover)
+                                  .Select(i => new { i.StorageKey, i.AltText }).FirstOrDefault(),
+                              PriceFrom = db.Services.Where(s => s.BusinessId == b.Id && s.IsActive)
+                                  .Select(s => (decimal?)s.ReferencePrice).Min(),
+                              Hours = db.BusinessHours.Where(h => h.BusinessId == b.Id)
+                                  .Select(h => new { h.Day, h.OpensAt, h.ClosesAt }).ToList(),
+                              // El mismo cálculo que la ficha pública de la fila: los turnos en
+                              // espera de la sesión vigente y el promedio configurado. Va como
+                              // subconsulta y no como lectura aparte para no pagar un viaje por
+                              // negocio con fila.
+                              Queue = db.QueueDefinitions
+                                  .Where(q => q.BusinessId == b.Id && q.IsActive && q.IsEnabled)
+                                  .Select(q => new
+                                  {
+                                      q.AverageDurationMinutes,
+                                      IsOpen = db.QueueSessions.Any(s => s.BusinessId == b.Id &&
+                                          s.Status == QueueSessionStatus.Open),
+                                      Waiting = db.QueueTickets.Count(t => t.BusinessId == b.Id &&
+                                          t.Status == QueueTicketStatus.Waiting &&
+                                          db.QueueSessions.Any(s => s.Id == t.QueueSessionId &&
+                                              (s.Status == QueueSessionStatus.Open ||
+                                               s.Status == QueueSessionStatus.Paused)))
+                                  }).FirstOrDefault(),
+                              // Tres es lo máximo que el feed llega a pintar de un negocio: la pieza
+                              // principal usa el primero y las editoriales los tres.
+                              Services = db.Services.Where(s => s.BusinessId == b.Id && s.IsActive)
+                                  .OrderBy(s => s.DisplayOrder).ThenBy(s => s.Name).Take(3)
+                                  .Select(s => new
+                                  {
+                                      s.Id, s.Name, s.ReferencePrice, s.DurationMinutes,
+                                      Photo = db.BusinessImages.Where(i => i.ServiceId == s.Id && !i.IsDeleted &&
+                                              i.Kind == BusinessImageKind.Service)
+                                          .Select(i => new { i.StorageKey, i.AltText }).FirstOrDefault()
+                                  }).ToList(),
+                              // El disponible más adelantado, y si ninguno lo está, el primero: es
+                              // lo que hacía la Home recorriendo la carta entera.
+                              Product = db.Products.Where(p => p.BusinessId == b.Id && p.IsActive)
+                                  .OrderByDescending(p => p.IsAvailable).ThenBy(p => p.DisplayOrder).ThenBy(p => p.Name)
+                                  .Select(p => new
+                                  {
+                                      p.Id, p.Name, p.ReferencePrice, p.IsAvailable,
+                                      Photo = db.BusinessImages.Where(i => i.ProductId == p.Id && !i.IsDeleted)
+                                          .Select(i => new { i.StorageKey, i.AltText }).FirstOrDefault()
+                                  }).FirstOrDefault(),
+                              Pickup = db.PickupOrderSettings.Where(s => s.BusinessId == b.Id && s.IsEnabled)
+                                  .Select(s => new
+                                  {
+                                      s.MinimumPreparationMinutes, s.SlotIntervalMinutes,
+                                      s.MaximumActivePerSlot, s.ReceivesFrom, s.ReceivesUntil
+                                  }).FirstOrDefault()
+                          }).ToListAsync(cancellationToken);
+
+        var businesses = rows.Select(x =>
+        {
+            var hours = x.Hours.OrderBy(h => h.Day).ThenBy(h => h.OpensAt)
+                .Select(h => new BusinessHourDto(h.Day, h.OpensAt.ToString("HH:mm"), h.ClosesAt.ToString("HH:mm")))
+                .ToList();
+            return new HomeFeedBusinessSource(x.Id, x.Slug, x.Name, x.TimeZoneId,
+                new(x.CategorySlug, x.CategoryName), new(x.MunicipalitySlug, x.MunicipalityName),
+                x.HasQueue, x.HasOrders, x.HasAppointments,
+                x.Cover is null ? null : storage.PublicUrl(x.Cover.StorageKey), x.Cover?.AltText,
+                x.HasAppointments ? x.PriceFrom : null, hours,
+                x.Queue is null ? null : new HomeQueueDto(x.Queue.IsOpen, x.Queue.Waiting,
+                    x.Queue.Waiting * x.Queue.AverageDurationMinutes),
+                x.Services.Select(s => new HomeServiceDto(s.Id, s.Name, s.ReferencePrice, s.DurationMinutes,
+                    s.Photo is null ? null : storage.PublicUrl(s.Photo.StorageKey), s.Photo?.AltText)).ToList(),
+                x.Product is null ? null : new HomeProductDto(x.Product.Id, x.Product.Name,
+                    x.Product.ReferencePrice, x.Product.IsAvailable,
+                    x.Product.Photo is null ? null : storage.PublicUrl(x.Product.Photo.StorageKey),
+                    x.Product.Photo?.AltText),
+                x.Pickup is null ? null : new HomePickupSettingsSource(x.Pickup.MinimumPreparationMinutes,
+                    x.Pickup.SlotIntervalMinutes, x.Pickup.MaximumActivePerSlot,
+                    x.Pickup.ReceivesFrom, x.Pickup.ReceivesUntil));
+        }).ToList();
+
+        // Sólo el primer servicio de cada negocio con agenda: es el único cuya disponibilidad se
+        // enseña, y traer el personal de todos los servicios sería material que nadie mira.
+        var firstServices = businesses.Where(x => x.HasScheduling && x.Services.Count > 0)
+            .ToDictionary(x => x.Id, x => x.Services[0].Id);
+        var serviceIds = firstServices.Values.ToArray();
+        var staffRows = serviceIds.Length == 0
+            ? []
+            : await (from s in db.StaffMembers.AsNoTracking()
+                     join ss in db.StaffServices.AsNoTracking()
+                         on new { s.BusinessId, StaffMemberId = s.Id } equals new { ss.BusinessId, ss.StaffMemberId }
+                     where s.IsActive && s.ParticipatesInAvailability && serviceIds.Contains(ss.ServiceId)
+                     select new { s.Id, s.BusinessId }).Distinct().ToListAsync(cancellationToken);
+        var eligibleStaff = staffRows.GroupBy(x => x.BusinessId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<Guid>)g.Select(x => x.Id).ToArray());
+
+        var staffIds = staffRows.Select(x => x.Id).ToArray();
+        var to = from.AddDays(days - 1);
+        // El rango se calcula sobre la unión de husos: acotar de más dejaría fuera citas que sí
+        // ocupan, y acotar de menos sólo trae filas que el cálculo por día descarta igualmente.
+        var rangeStart = new DateTimeOffset(from.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero).AddDays(-1);
+        var rangeEnd = new DateTimeOffset(to.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero).AddDays(1);
+        var occupied = staffIds.Length == 0
+            ? []
+            : await db.Appointments.AsNoTracking()
+                .Where(x => staffIds.Contains(x.StaffMemberId) && x.StartAtUtc < rangeEnd && x.EndAtUtc > rangeStart &&
+                    (x.Status == AppointmentStatus.Pending || x.Status == AppointmentStatus.Confirmed))
+                .Select(x => new ValueTuple<Guid, DateTimeOffset, DateTimeOffset, Guid>(
+                    x.BusinessId, x.StartAtUtc, x.EndAtUtc, x.StaffMemberId))
+                .ToListAsync(cancellationToken);
+        var exceptions = staffIds.Length == 0
+            ? []
+            : await db.AvailabilityExceptions.AsNoTracking()
+                .Where(x => staffIds.Contains(x.StaffMemberId) && x.Date >= from && x.Date <= to)
+                .ToListAsync(cancellationToken);
+
+        var pickupIds = businesses.Where(x => x.Pickup is not null).Select(x => x.Id).ToArray();
+        var pickupEnd = new DateTimeOffset(from.AddDays(pickupDays + 1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        var pickupOccupancy = pickupIds.Length == 0
+            ? []
+            : await db.PickupOrders.AsNoTracking()
+                .Where(x => pickupIds.Contains(x.BusinessId) &&
+                    x.PickupStartUtc >= rangeStart && x.PickupStartUtc <= pickupEnd &&
+                    x.Status != PickupOrderStatus.Rejected && x.Status != PickupOrderStatus.Cancelled &&
+                    x.Status != PickupOrderStatus.Delivered)
+                .GroupBy(x => new { x.BusinessId, x.PickupStartUtc })
+                .Select(g => new { g.Key.BusinessId, g.Key.PickupStartUtc, Count = g.Count() })
+                .ToDictionaryAsync(x => (x.BusinessId, x.PickupStartUtc), x => x.Count, cancellationToken);
+
+        return new(businesses, eligibleStaff, exceptions, occupied, pickupOccupancy);
+    }
+
     public Task<SchedulingContext?> GetSchedulingContextAsync(string slug, Guid serviceId, DateOnly date,
         CancellationToken cancellationToken)
         => GetSchedulingContextAsync(slug, serviceId, date, date, cancellationToken);
