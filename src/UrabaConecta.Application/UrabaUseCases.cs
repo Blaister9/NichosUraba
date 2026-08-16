@@ -88,7 +88,10 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
             businesses.Add(new HomeFeedBusinessDto(business.Slug, business.Name, business.Category,
                 business.Municipality, business.HasVirtualQueue, business.HasPickupOrdering,
                 business.HasScheduling, business.CoverUrl, business.CoverAltText, business.PriceFrom,
-                OpenStatus(business.TimeZoneId, business.Hours), business.Queue,
+                OpenStatus(business.TimeZoneId, business.Hours),
+                // Un negocio puede conservar la definición de su fila con el módulo ya apagado.
+                // La ficha pública tampoco la enseñaría en ese caso.
+                business.HasVirtualQueue ? business.Queue : null,
                 // Igual que la ficha pública: sin el módulo de citas, los servicios no se enseñan.
                 // Un negocio puede conservar filas de servicio de antes de apagarlo.
                 business.HasScheduling ? business.Services : [],
