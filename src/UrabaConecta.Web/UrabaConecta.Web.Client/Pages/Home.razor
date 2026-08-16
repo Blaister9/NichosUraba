@@ -3,6 +3,7 @@
 @implements IAsyncDisposable
 @inject IUrabaConectaApi Api
 @inject IJSRuntime JS
+@inject PersistentComponentState FeedState
 
 <PageTitle>Ahora en Urabá | UrabáConecta</PageTitle>
 
@@ -179,6 +180,7 @@
     ];
 
     private readonly List<FeedPiece> pieces = [];
+    private HomeFeedDto? feed;
     private IJSObjectReference? module;
     private string activeMunicipality = "";
     private string activeMunicipalityName = "Todo Urabá";
@@ -202,23 +204,57 @@
     private int LiveCount => FilteredPieces.Count(x => x.IsLive);
     private int ActionableCount => FilteredPieces.Count(x => x.Kind == FeedKind.Business);
 
+    /// <summary>
+    /// El feed que compuso el prerender, para que la hidratación no lo vuelva a pedir. Sólo viaja
+    /// lo que ya está pintado en el HTML que el visitante tiene delante: negocios publicados,
+    /// estado de sus filas y promociones vigentes. Nada personal ni dependiente de la sesión.
+    /// </summary>
+    private const string FeedStateKey = "home.feed-ahora";
+    private PersistingComponentStateSubscription persistence;
+
     protected override async Task OnInitializedAsync()
     {
+        // Se registra antes de cargar: el guardado ocurre al terminar el prerender, así que la
+        // suscripción tiene que existir aunque la carga falle.
+        persistence = FeedState.RegisterOnPersisting(PersistFeed);
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Colombia).DateTime);
         try
         {
+            // InteractiveServer inicializa el componente dos veces: una al prerenderizar el HTML y
+            // otra al abrir el circuito. Sin esto la pantalla resolvía el feed entero las dos veces
+            // —doce sentencias por visita en lugar de seis— y la segunda ocurría cuando el
+            // visitante ya estaba mirando la página, así que lo único que retrasaba era el momento
+            // en que los filtros empiezan a responder.
+            if (FeedState.TryTakeFromJson<HomeFeedDto>(FeedStateKey, out var prerenderizado)
+                && prerenderizado is not null)
+            {
+                Compose(prerenderizado, today);
+                return;
+            }
             // Una lectura para toda la pantalla. Antes eran el directorio, la ficha de cada negocio
             // y después su fila, sus horarios, su carta y sus franjas, una llamada por dato y por
             // negocio: dieciocho idas y vueltas con tres negocios, y una más por cada negocio nuevo.
-            var feed = await Api.GetHomeFeedAsync(today, AvailabilityDays);
-            BuildPrimaryPieces(feed.Businesses, today);
-            BuildEditorialPieces(feed.Businesses);
-            BuildPromotionPieces(feed.Promotions);
-            InsertCaptureAndSponsored(feed.Businesses);
+            feed = await Api.GetHomeFeedAsync(today, AvailabilityDays);
+            Compose(feed, today);
         }
         catch (ApiException ex) { error = ex.Message; }
         catch (Exception) { error = "No pudimos cargar lo que está pasando en Urabá. Intenta nuevamente."; }
         finally { loading = false; }
+    }
+
+    private void Compose(HomeFeedDto source, DateOnly today)
+    {
+        BuildPrimaryPieces(source.Businesses, today);
+        BuildEditorialPieces(source.Businesses);
+        BuildPromotionPieces(source.Promotions);
+        InsertCaptureAndSponsored(source.Businesses);
+    }
+
+    /// <summary>Sin feed no se guarda nada, y la hidratación vuelve a pedirlo: eso es el reintento.</summary>
+    private Task PersistFeed()
+    {
+        if (feed is not null) FeedState.PersistAsJson(FeedStateKey, feed);
+        return Task.CompletedTask;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -437,7 +473,7 @@
 
     public async ValueTask DisposeAsync()
     {
-
+        persistence.Dispose();
         if (module is null) return;
         try { await module.DisposeAsync(); } catch (JSException) { } catch (JSDisconnectedException) { }
     }
