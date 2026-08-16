@@ -279,6 +279,12 @@ publicApi.MapGet("/businesses/{slug}", async (string slug, IUrabaUseCases useCas
 publicApi.MapGet("/businesses/{slug}/appointment-slots",
     (string slug, Guid serviceId, DateOnly date, IUrabaUseCases useCases, CancellationToken ct)
         => useCases.GetSlotsAsync(slug, serviceId, date, ct));
+// El primer día con horarios dentro de un rango corto. Existe para que la Home no encadene una
+// consulta por día cuando lo único que necesita saber es si hay hueco cerca.
+publicApi.MapGet("/businesses/{slug}/next-availability",
+    async (string slug, Guid serviceId, DateOnly from, int days, IUrabaUseCases useCases, CancellationToken ct)
+        => await useCases.FindNextAvailabilityAsync(slug, serviceId, from, days, ct) is { } found
+            ? Results.Ok(found) : Results.NoContent());
 publicApi.MapPost("/businesses/{slug}/appointments",
     async (string slug, CreateAppointmentRequest request, IUrabaUseCases useCases, CancellationToken ct) =>
         Results.Created("", await useCases.CreateAppointmentAsync(slug, request, ct))).RequireRateLimiting("public-write");

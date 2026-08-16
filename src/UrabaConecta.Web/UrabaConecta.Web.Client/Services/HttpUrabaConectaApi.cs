@@ -22,6 +22,16 @@ public sealed class HttpUrabaConectaApi(HttpClient http) : IUrabaConectaApi
     }
     public Task<SlotListDto> GetSlotsAsync(string slug, Guid serviceId, DateOnly date, CancellationToken cancellationToken = default)
         => Get<SlotListDto>($"api/v1/public/businesses/{Uri.EscapeDataString(slug)}/appointment-slots?serviceId={serviceId}&date={date:yyyy-MM-dd}", cancellationToken);
+    public async Task<SlotListDto?> FindNextAvailabilityAsync(string slug, Guid serviceId, DateOnly from, int days,
+        CancellationToken cancellationToken = default)
+    {
+        // 204 cuando ninguna de las jornadas del rango tiene hueco: no es un error, es la respuesta.
+        var response = await http.GetAsync(
+            $"api/v1/public/businesses/{Uri.EscapeDataString(slug)}/next-availability?serviceId={serviceId}&from={from:yyyy-MM-dd}&days={days}",
+            cancellationToken);
+        if (response.StatusCode is HttpStatusCode.NoContent or HttpStatusCode.NotFound) return null;
+        return await Read<SlotListDto>(response, cancellationToken);
+    }
     public async Task<AppointmentCreatedDto> CreateAppointmentAsync(string slug, CreateAppointmentRequest request,
         CancellationToken cancellationToken = default)
         => await Read<AppointmentCreatedDto>(await http.PostAsJsonAsync($"api/v1/public/businesses/{Uri.EscapeDataString(slug)}/appointments",

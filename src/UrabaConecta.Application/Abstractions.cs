@@ -261,6 +261,13 @@ public interface IUrabaStore
     /// <summary>Ficha pública. Con <paramref name="requirePublished"/> en false sirve la vista previa administrativa.</summary>
     Task<BusinessProfileDto?> GetBusinessProfileAsync(string slug, bool requirePublished,
         CancellationToken cancellationToken);
+    /// <summary>
+    /// El contexto de agenda para un rango de fechas, en una sola tanda de lecturas. Lo usa la
+    /// búsqueda de "el próximo día con horarios": preguntar día por día repetía cinco lecturas que
+    /// no dependen de la fecha.
+    /// </summary>
+    Task<SchedulingContext?> GetSchedulingContextAsync(string slug, Guid serviceId, DateOnly from, DateOnly to,
+        CancellationToken cancellationToken);
     Task<SchedulingContext?> GetSchedulingContextAsync(string slug, Guid serviceId, DateOnly date,
         CancellationToken cancellationToken);
     Task<bool> AddAppointmentAsync(Appointment appointment, ConsentReceipt consent, CancellationToken cancellationToken);
@@ -375,6 +382,9 @@ public interface IUrabaUseCases
         CancellationToken cancellationToken = default);
     Task<BusinessProfileDto?> GetBusinessAsync(string slug, CancellationToken cancellationToken = default);
     Task<SlotListDto> GetSlotsAsync(string slug, Guid serviceId, DateOnly date, CancellationToken cancellationToken = default);
+    /// <summary>El primer día con horarios a partir de una fecha, o null si no hay ninguno.</summary>
+    Task<SlotListDto?> FindNextAvailabilityAsync(string slug, Guid serviceId, DateOnly from, int days,
+        CancellationToken cancellationToken = default);
     Task<AppointmentCreatedDto> CreateAppointmentAsync(string slug, CreateAppointmentRequest request,
         CancellationToken cancellationToken = default);
     Task<AppointmentTrackingDto?> GetTrackingAsync(string code, CancellationToken cancellationToken = default);

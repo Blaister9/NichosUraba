@@ -239,8 +239,18 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
     private static string Display(TimeOnly value)
         => value.ToString("h:mm tt", System.Globalization.CultureInfo.GetCultureInfo("es-CO"));
 
-    public async Task<SchedulingContext?> GetSchedulingContextAsync(string slug, Guid serviceId, DateOnly date,
+    public Task<SchedulingContext?> GetSchedulingContextAsync(string slug, Guid serviceId, DateOnly date,
         CancellationToken cancellationToken)
+        => GetSchedulingContextAsync(slug, serviceId, date, date, cancellationToken);
+
+    /// <summary>
+    /// El contexto de agenda para un rango de fechas. De las siete lecturas que hacen falta, cinco
+    /// —negocio, módulo, servicio, personal y horario— no dependen de la fecha: pedir cuatro días
+    /// uno a uno las repetía cuatro veces. Sólo las excepciones y las citas ocupadas se acotan al
+    /// rango, y quien construye un día concreto filtra por su fecha.
+    /// </summary>
+    public async Task<SchedulingContext?> GetSchedulingContextAsync(string slug, Guid serviceId,
+        DateOnly from, DateOnly to, CancellationToken cancellationToken)
     {
         var business = await db.Businesses.AsNoTracking().SingleOrDefaultAsync(x => x.Slug == slug &&
             x.Status == BusinessStatus.Active && x.IsPublished, cancellationToken);
@@ -258,16 +268,17 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
                            select s).ToListAsync(cancellationToken);
         var staffIds = staff.Select(x => x.Id).ToArray();
         var zone = TimeZoneInfo.FindSystemTimeZoneById(business.TimeZoneId);
-        var dayStart = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(date.ToDateTime(TimeOnly.MinValue), zone), TimeSpan.Zero);
-        var dayEnd = dayStart.AddDays(1);
+        var rangeStart = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(from.ToDateTime(TimeOnly.MinValue), zone), TimeSpan.Zero);
+        var rangeEnd = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(to.AddDays(1).ToDateTime(TimeOnly.MinValue), zone), TimeSpan.Zero);
         var occupied = await db.Appointments.AsNoTracking().Where(x => x.BusinessId == business.Id &&
-                staffIds.Contains(x.StaffMemberId) && x.StartAtUtc < dayEnd && x.EndAtUtc > dayStart &&
+                staffIds.Contains(x.StaffMemberId) && x.StartAtUtc < rangeEnd && x.EndAtUtc > rangeStart &&
                 (x.Status == AppointmentStatus.Pending || x.Status == AppointmentStatus.Confirmed))
             .Select(x => new ValueTuple<DateTimeOffset, DateTimeOffset, Guid>(x.StartAtUtc, x.EndAtUtc, x.StaffMemberId))
             .ToListAsync(cancellationToken);
         var hours = await db.BusinessHours.AsNoTracking().Where(x => x.BusinessId == business.Id).ToListAsync(cancellationToken);
         var exceptions = await db.AvailabilityExceptions.AsNoTracking().Where(x =>
-            x.BusinessId == business.Id && staffIds.Contains(x.StaffMemberId) && x.Date == date).ToListAsync(cancellationToken);
+            x.BusinessId == business.Id && staffIds.Contains(x.StaffMemberId) &&
+            x.Date >= from && x.Date <= to).ToListAsync(cancellationToken);
         return new(business, service, hours, staff, exceptions, occupied);
     }
 

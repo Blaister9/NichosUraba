@@ -162,6 +162,8 @@
 
 @code {
     private const int InitialCount = 8;
+    /// <summary>Jornadas que se miran buscando el próximo horario libre. Eran cuatro y siguen siendo cuatro.</summary>
+    private const int AvailabilityDays = 4;
     private static readonly TimeZoneInfo Colombia = TimeZoneInfo.FindSystemTimeZoneById("America/Bogota");
     private static readonly FilterOption[] Filters =
     [
@@ -206,14 +208,17 @@
         {
             var businesses = await Api.GetBusinessesAsync();
             var promotions = await Api.GetPublicPromotionsAsync();
+            // La ficha completa sólo se pide donde de verdad se leen sus servicios. Una tienda no
+            // aporta ninguna pieza a partir de su lista de servicios —sus piezas salen de la carta—
+            // así que traerse su ficha era una lectura entera para no mirarla.
             var profiles = new Dictionary<string, BusinessProfileDto>(StringComparer.OrdinalIgnoreCase);
-            foreach (var business in businesses)
+            foreach (var business in businesses.Where(x => !x.HasPickupOrdering))
                 if (await Api.GetBusinessAsync(business.Slug) is { } profile) profiles[business.Slug] = profile;
 
             await BuildPrimaryPieces(businesses, profiles);
             BuildEditorialPieces(businesses, profiles);
             BuildPromotionPieces(promotions);
-            InsertCaptureAndSponsored(businesses, profiles);
+            InsertCaptureAndSponsored(businesses);
         }
         catch (ApiException ex) { error = ex.Message; }
         catch (Exception) { error = "No pudimos cargar lo que está pasando en Urabá. Intenta nuevamente."; }
@@ -330,8 +335,7 @@
         }
     }
 
-    private void InsertCaptureAndSponsored(IReadOnlyList<BusinessCardDto> businesses,
-        IReadOnlyDictionary<string, BusinessProfileDto> profiles)
+    private void InsertCaptureAndSponsored(IReadOnlyList<BusinessCardDto> businesses)
     {
         pieces.Insert(Math.Min(3, pieces.Count), FeedPiece.Capture());
         var sponsoredBusiness = businesses.Where(x => x.HasPickupOrdering &&
@@ -360,20 +364,25 @@
             product.IsAvailable ? "Pedir" : "Avísame cuando vuelva",
             $"/negocios/{business.Slug}/pedidos#producto-{product.Id}", false, false, false, primary);
 
+    /// <summary>
+    /// El día más cercano con horarios, dentro de los próximos cuatro. Antes se preguntaba jornada
+    /// por jornada hasta encontrar una con hueco: cuatro esperas encadenadas, y cada una repetía
+    /// las mismas cinco lecturas de negocio, servicio, personal y horario. Ahora es una pregunta.
+    /// El resultado es el mismo, incluida la fecha elegida y el número de horarios.
+    /// </summary>
     private async Task<AvailabilitySignal> FindAvailability(string slug, Guid serviceId)
     {
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Colombia).DateTime);
-        for (var offset = 0; offset < 4; offset++)
+        try
         {
-            try
+            if (await Api.FindNextAvailabilityAsync(slug, serviceId, today, AvailabilityDays) is { } found)
             {
-                var slots = await Api.GetSlotsAsync(slug, serviceId, today.AddDays(offset));
-                if (slots.Slots.Count > 0)
-                    return new(slots.Slots.Count, offset == 0 ? "hoy" : offset == 1 ? "mañana" :
-                        $"el {today.AddDays(offset):dddd}");
+                var offset = found.Date.DayNumber - today.DayNumber;
+                return new(found.Slots.Count, offset == 0 ? "hoy" : offset == 1 ? "mañana" :
+                    $"el {found.Date:dddd}");
             }
-            catch (ApiException) { }
         }
+        catch (ApiException) { }
         return new(0, "próximamente");
     }
 

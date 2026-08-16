@@ -29,6 +29,10 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
         => Serialized(() => useCases.GetBusinessAsync(slug, cancellationToken), cancellationToken);
     public Task<SlotListDto> GetSlotsAsync(string slug, Guid serviceId, DateOnly date, CancellationToken cancellationToken = default)
         => Serialized(() => useCases.GetSlotsAsync(slug, serviceId, date, cancellationToken), cancellationToken);
+    public Task<SlotListDto?> FindNextAvailabilityAsync(string slug, Guid serviceId, DateOnly from, int days,
+        CancellationToken cancellationToken = default)
+        => Serialized(() => useCases.FindNextAvailabilityAsync(slug, serviceId, from, days, cancellationToken),
+            cancellationToken);
     public Task<AppointmentCreatedDto> CreateAppointmentAsync(string slug, CreateAppointmentRequest request,
         CancellationToken cancellationToken = default) => useCases.CreateAppointmentAsync(slug, request, cancellationToken);
     public Task<AppointmentTrackingDto?> GetAppointmentTrackingAsync(string code, CancellationToken cancellationToken = default)

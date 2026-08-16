@@ -29,15 +29,57 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
         EnsureServiceActive(context.Service);
         if (date > DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime).AddDays(60))
             throw new ApiException("DATE_OUT_OF_RANGE", "Solo puede consultar los próximos 60 días.");
+        return new(context.Business.TimeZoneId, date, BuildSlots(context, date));
+    }
 
+    /// <summary>
+    /// El primer día con horarios a partir de <paramref name="from"/>, mirando como mucho
+    /// <paramref name="days"/> jornadas. Devuelve null si ninguna tiene hueco.
+    /// </summary>
+    /// <remarks>
+    /// Existe para la Home, que sólo necesita saber si hay disponibilidad cercana y cuánta. Pedir
+    /// día por día costaba siete lecturas por jornada y repetía cinco que no dependen de la fecha;
+    /// aquí el contexto se lee una vez para todo el rango y los días se resuelven en memoria con
+    /// exactamente las mismas reglas que <see cref="GetSlotsAsync"/>.
+    /// </remarks>
+    public async Task<SlotListDto?> FindNextAvailabilityAsync(string slug, Guid serviceId, DateOnly from,
+        int days, CancellationToken cancellationToken = default)
+    {
+        if (days is < 1 or > 14) throw new ApiException("INVALID_RANGE", "El rango admite entre 1 y 14 días.");
+        var last = from.AddDays(days - 1);
+        // El mismo tope que la consulta de un día: el extremo del rango no puede saltárselo.
+        if (last > DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime).AddDays(60))
+            throw new ApiException("DATE_OUT_OF_RANGE", "Solo puede consultar los próximos 60 días.");
+        var context = await store.GetSchedulingContextAsync(slug, serviceId, from, last, cancellationToken);
+        if (context is null) return null;
+        EnsureServiceActive(context.Service);
+        for (var offset = 0; offset < days; offset++)
+        {
+            var date = from.AddDays(offset);
+            var slots = BuildSlots(context, date);
+            if (slots.Count > 0) return new(context.Business.TimeZoneId, date, slots);
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Las horas libres de un día concreto dentro de un contexto ya leído. Es el único sitio donde
+    /// viven las reglas de disponibilidad, así que la consulta de un día y la búsqueda del próximo
+    /// día con hueco no pueden responder cosas distintas.
+    /// </summary>
+    private IReadOnlyList<SlotDto> BuildSlots(SchedulingContext context, DateOnly date)
+    {
         // Un día puede tener varios tramos: sin filas está cerrado, con varias es jornada partida.
         var dayIntervals = context.Hours.Where(x => x.Day == date.DayOfWeek)
             .Select(x => new ScheduleInterval(x.OpensAt, x.ClosesAt)).ToList();
-        if (dayIntervals.Count == 0 || context.EligibleStaff.Count == 0)
-            return new(context.Business.TimeZoneId, date, []);
+        if (dayIntervals.Count == 0 || context.EligibleStaff.Count == 0) return [];
 
         var zone = TimeZoneInfo.FindSystemTimeZoneById(context.Business.TimeZoneId);
-        var all = context.EligibleStaff
+        // El contexto puede abarcar varios días: se acotan las citas ocupadas a la jornada que se
+        // está resolviendo, para que el resultado no dependa de cuántos días se hayan leído.
+        var dayStart = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(date.ToDateTime(TimeOnly.MinValue), zone), TimeSpan.Zero);
+        var dayEnd = dayStart.AddDays(1);
+        return context.EligibleStaff
             .SelectMany(staff =>
             {
                 var exception = context.Exceptions.FirstOrDefault(x => x.StaffMemberId == staff.Id && x.Date == date);
@@ -47,7 +89,9 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
                 var intervals = extraordinary
                     ? [new ScheduleInterval(exception!.OpensAt!.Value, exception.ClosesAt!.Value)]
                     : dayIntervals;
-                var occupied = context.Occupied.Where(x => x.StaffId == staff.Id).Select(x => (x.Start, x.End)).ToList();
+                var occupied = context.Occupied
+                    .Where(x => x.StaffId == staff.Id && x.Start < dayEnd && x.End > dayStart)
+                    .Select(x => (x.Start, x.End)).ToList();
                 if (exception?.Type == AvailabilityExceptionType.ClosedInterval)
                 {
                     var startUtc = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(
@@ -62,7 +106,6 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
                     .Select(x => new SlotDto(x.Start, x.End));
             })
             .GroupBy(x => x.Start).Select(x => x.First()).OrderBy(x => x.Start).ToArray();
-        return new(context.Business.TimeZoneId, date, all);
     }
 
     public async Task<AppointmentCreatedDto> CreateAppointmentAsync(string slug, CreateAppointmentRequest request,

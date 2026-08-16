@@ -509,6 +509,12 @@ public interface IUrabaConectaApi
         CancellationToken cancellationToken = default);
     Task<BusinessProfileDto?> GetBusinessAsync(string slug, CancellationToken cancellationToken = default);
     Task<SlotListDto> GetSlotsAsync(string slug, Guid serviceId, DateOnly date, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// El primer día con horarios a partir de una fecha. La Home lo usa para no preguntar cuatro
+    /// días uno detrás de otro cuando sólo necesita saber si hay hueco cerca y cuánto.
+    /// </summary>
+    Task<SlotListDto?> FindNextAvailabilityAsync(string slug, Guid serviceId, DateOnly from, int days,
+        CancellationToken cancellationToken = default);
     Task<AppointmentCreatedDto> CreateAppointmentAsync(string slug, CreateAppointmentRequest request,
         CancellationToken cancellationToken = default);
     Task<AppointmentTrackingDto?> GetAppointmentTrackingAsync(string code, CancellationToken cancellationToken = default);
