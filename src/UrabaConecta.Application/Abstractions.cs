@@ -81,6 +81,19 @@ public interface IOrderingStore
     Task<Product?> GetProductAsync(Guid businessId, Guid id, CancellationToken cancellationToken);
     Task<Business?> GetBusinessAsync(Guid businessId, CancellationToken cancellationToken);
     Task<IReadOnlyList<BusinessHour>> GetHoursAsync(Guid businessId, CancellationToken cancellationToken);
+    /// <summary>
+    /// Ocupación de todas las franjas del rango, agrupada por inicio, en una sola lectura. Sólo
+    /// aparecen las franjas que tienen algún pedido activo: las que faltan valen cero.
+    /// </summary>
+    /// <remarks>
+    /// Esto es la disponibilidad que se enseña, no la que autoriza. Construir la lista pedía antes
+    /// un COUNT por franja, y siete días de una tienda abierta son más de cien idas y vueltas
+    /// contra una base que vive en otra región. Para confirmar un pedido bajo bloqueo se sigue
+    /// usando <see cref="CountActiveInSlotAsync"/>, que lee la franja en ese instante: este
+    /// diccionario es una foto y no sirve para decidir si cabe uno más.
+    /// </remarks>
+    Task<IReadOnlyDictionary<DateTimeOffset, int>> GetActiveSlotCountsAsync(Guid businessId,
+        DateTimeOffset rangeStart, DateTimeOffset rangeEnd, CancellationToken cancellationToken);
     Task<int> CountActiveInSlotAsync(Guid businessId, DateTimeOffset start, CancellationToken cancellationToken);
     Task<PickupOrder?> FindByCodeAsync(string hash, CancellationToken cancellationToken);
     Task<PickupOrder?> GetOrderAsync(Guid businessId, Guid orderId, CancellationToken cancellationToken);

@@ -53,6 +53,22 @@ public sealed class OrderingStore(AppDbContext db) : IOrderingStore
         => db.Businesses.SingleOrDefaultAsync(x => x.Id == businessId, ct);
     public async Task<IReadOnlyList<BusinessHour>> GetHoursAsync(Guid businessId, CancellationToken ct)
         => await db.BusinessHours.Where(x => x.BusinessId == businessId).ToListAsync(ct);
+    /// <summary>
+    /// El mismo criterio de "activo" que <see cref="CountActiveInSlotAsync"/>, agrupado por franja
+    /// y resuelto en una sentencia para todo el rango. Los dos filtros tienen que decir lo mismo:
+    /// si un día cambia qué estado ocupa cupo, cambian los dos o la disponibilidad que se enseña
+    /// deja de coincidir con la que se autoriza.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<DateTimeOffset, int>> GetActiveSlotCountsAsync(Guid businessId,
+        DateTimeOffset rangeStart, DateTimeOffset rangeEnd, CancellationToken ct)
+        => await db.PickupOrders.AsNoTracking()
+            .Where(x => x.BusinessId == businessId &&
+                x.PickupStartUtc >= rangeStart && x.PickupStartUtc <= rangeEnd &&
+                x.Status != PickupOrderStatus.Rejected && x.Status != PickupOrderStatus.Cancelled &&
+                x.Status != PickupOrderStatus.Delivered)
+            .GroupBy(x => x.PickupStartUtc)
+            .Select(g => new { Start = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Start, x => x.Count, ct);
     public Task<int> CountActiveInSlotAsync(Guid businessId, DateTimeOffset start, CancellationToken ct)
         => db.PickupOrders.CountAsync(x => x.BusinessId == businessId && x.PickupStartUtc == start &&
             x.Status != PickupOrderStatus.Rejected && x.Status != PickupOrderStatus.Cancelled &&

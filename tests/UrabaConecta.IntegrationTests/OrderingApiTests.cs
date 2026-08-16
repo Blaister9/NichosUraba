@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using UrabaConecta.Contracts;
+using UrabaConecta.Domain;
 using UrabaConecta.Infrastructure.Persistence;
 
 namespace UrabaConecta.IntegrationTests;
@@ -102,6 +103,79 @@ public sealed partial class OrderingApiTests(PostgresWebFactory factory) : IClas
         Assert.Equal(HttpStatusCode.Conflict, (await owner.PostAsJsonAsync(
             $"/api/v1/businesses/{DevelopmentSeeder.SazonBusinessId}/orders/{order.Id}/prepare",
             new PickupOrderCommandRequest { Version = order.Version }, Json)).StatusCode);
+    }
+
+    /// <summary>
+    /// La lectura agrupada que arma la disponibilidad tiene que excluir exactamente los mismos
+    /// estados que excluía el COUNT por franja. Se comprueba contra PostgreSQL y no con una tienda
+    /// falsa porque lo que puede desviarse es el WHERE, y ese WHERE sólo existe en la consulta real.
+    /// </summary>
+    [Theory]
+    [InlineData(PickupOrderStatus.Cancelled)]
+    [InlineData(PickupOrderStatus.Rejected)]
+    [InlineData(PickupOrderStatus.Delivered)]
+    public async Task A_closed_order_stops_taking_up_room_in_its_slot(PickupOrderStatus cerrado)
+    {
+        using var client = Client();
+        var menu = await client.GetFromJsonAsync<PickupMenuDto>(
+            "/api/v1/public/businesses/restaurante-sazon-local/menu", Json);
+        var libre = (await Franjas(client)).Last();
+
+        var created = await CreateAt(client, $"Cierre {cerrado}", menu!.Products[0].Id, libre.Start);
+        var ocupada = (await Franjas(client)).Single(x => x.Start == libre.Start);
+        Assert.Equal(libre.RemainingCapacity - 1, ocupada.RemainingCapacity);
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var order = await db.PickupOrders.SingleAsync(x => x.PublicOrderNumber == created.OrderNumber);
+            // Se escribe el estado final directamente: lo que se está probando es el filtro de la
+            // consulta, no el camino de transiciones, que ya tiene sus propias pruebas.
+            db.Entry(order).Property(nameof(PickupOrder.Status)).CurrentValue = cerrado;
+            await db.SaveChangesAsync();
+        }
+
+        var devuelta = (await Franjas(client)).Single(x => x.Start == libre.Start);
+        Assert.Equal(libre.RemainingCapacity, devuelta.RemainingCapacity);
+    }
+
+    [Fact]
+    public async Task Availability_for_a_whole_week_costs_the_same_as_a_single_day()
+    {
+        using var client = Client();
+        var counter = factory.Services.GetRequiredService<QueryCounter>();
+
+        counter.Reset();
+        var unDia = await client.GetFromJsonAsync<PickupSlotListDto>(
+            $"/api/v1/public/businesses/restaurante-sazon-local/pickup-slots?date={DateOnly.FromDateTime(DateTime.UtcNow.AddDays(2)):yyyy-MM-dd}",
+            Json);
+        var sentenciasUnDia = counter.Count;
+
+        counter.Reset();
+        var laSemana = await client.GetFromJsonAsync<PickupSlotListDto>(
+            "/api/v1/public/businesses/restaurante-sazon-local/pickup-slots", Json);
+        var sentenciasSemana = counter.Count;
+
+        // Siete días devuelven muchas más franjas...
+        Assert.True(laSemana!.Slots.Count > unDia!.Slots.Count * 3,
+            $"La semana devolvió {laSemana.Slots.Count} franjas y el día {unDia.Slots.Count}.");
+        // ...y cuestan lo mismo. Antes cada franja añadía su propio COUNT.
+        Assert.Equal(sentenciasUnDia, sentenciasSemana);
+        Assert.True(sentenciasSemana <= 4,
+            $"La disponibilidad de la semana costó {sentenciasSemana} sentencias para {laSemana.Slots.Count} franjas.");
+    }
+
+    private async Task<IReadOnlyList<PickupSlotDto>> Franjas(HttpClient client)
+        => (await client.GetFromJsonAsync<PickupSlotListDto>(
+            "/api/v1/public/businesses/restaurante-sazon-local/pickup-slots", Json))!.Slots;
+
+    private async Task<PickupOrderCreatedDto> CreateAt(HttpClient client, string alias, Guid productId,
+        DateTimeOffset slot)
+    {
+        var response = await client.PostAsJsonAsync("/api/v1/public/businesses/restaurante-sazon-local/orders",
+            Request(alias, productId, slot), Json);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<PickupOrderCreatedDto>(Json))!;
     }
 
     private async Task<PickupOrderCreatedDto> Create(HttpClient client, string alias, Guid productId)

@@ -19,6 +19,13 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
             categories.Select(CategoryDto).ToList(), products.Select(x => ProductDto(x, photos)).ToList());
     }
 
+    /// <summary>
+    /// Disponibilidad pública de recogida. Se arma en dos tiempos —primero qué franjas existen,
+    /// después cuánto están ocupadas— porque preguntar la ocupación dentro del bucle costaba un
+    /// COUNT por franja: sin fecha se resuelven siete días, y una tienda abierta de nueve a seis
+    /// con franjas de quince minutos pasan de doscientas idas y vueltas. La base vive en otra
+    /// región, así que lo que domina la espera es el número de viajes, no el trabajo de cada uno.
+    /// </summary>
     public async Task<PickupSlotListDto> GetSlotsAsync(string slug, DateOnly? date = null, CancellationToken ct = default)
     {
         var context = await store.GetPublicContextAsync(slug, ct)
@@ -31,7 +38,8 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
         var earliest = now.AddMinutes(settings.MinimumPreparationMinutes);
         var firstDate = date ?? DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, zone).Date);
         var dates = date.HasValue ? [firstDate] : Enumerable.Range(0, 7).Select(firstDate.AddDays).ToArray();
-        var result = new List<PickupSlotDto>();
+
+        var candidates = new List<DateTimeOffset>();
         foreach (var day in dates)
         {
             // Un día puede tener varios tramos. Se recorre cada uno por separado, así que entre
@@ -48,11 +56,24 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
                 {
                     var start = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(local, DateTimeKind.Unspecified), zone));
                     if (start < earliest) continue;
-                    var count = await store.CountActiveInSlotAsync(business.Id, start, ct);
-                    if (count < settings.MaximumActivePerSlot)
-                        result.Add(new(start, start.AddMinutes(settings.SlotIntervalMinutes), settings.MaximumActivePerSlot - count));
+                    candidates.Add(start);
                 }
             }
+        }
+        if (candidates.Count == 0) return new(business.TimeZoneId, []);
+
+        // Una sola lectura para todo el rango, sea un día o los siete. Las franjas sin pedidos no
+        // vuelven en el diccionario y valen cero, que es lo mismo que respondía el COUNT.
+        // Los extremos se calculan y no se toman de la lista: los tramos llegan ordenados en hora
+        // local, y en una zona con cambio de horario esa lista puede no quedar ordenada en UTC.
+        // Un rango corto de menos dejaría franjas ocupadas contadas como libres.
+        var counts = await store.GetActiveSlotCountsAsync(business.Id, candidates.Min(), candidates.Max(), ct);
+        var result = new List<PickupSlotDto>(candidates.Count);
+        foreach (var start in candidates)
+        {
+            var count = counts.TryGetValue(start, out var occupied) ? occupied : 0;
+            if (count < settings.MaximumActivePerSlot)
+                result.Add(new(start, start.AddMinutes(settings.SlotIntervalMinutes), settings.MaximumActivePerSlot - count));
         }
         return new(business.TimeZoneId, result);
     }
