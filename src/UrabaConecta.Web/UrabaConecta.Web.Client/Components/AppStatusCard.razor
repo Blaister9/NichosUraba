@@ -1,0 +1,194 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@* Dónde se responde "¿la tengo instalada?" y "¿me van a avisar?".
+
+   Sin esta ficha las dos respuestas sólo existían dentro de los ajustes del navegador, que es
+   donde nadie las va a buscar. Aquí se leen de un vistazo y, cuando falta algo, la acción está al
+   lado del estado en vez de en otra pantalla.
+
+   No pide nada por su cuenta: sólo lee. El permiso del navegador se pide únicamente si la persona
+   toca "Activar", y el texto de encima ya explica para qué. *@
+<section class="app-status" data-testid="app-status" aria-labelledby="@idTitulo">
+    <h2 id="@idTitulo">@Titulo</h2>
+    <dl class="app-status-filas">
+        <div class="app-status-fila" data-testid="app-status-app">
+            <dt>App</dt>
+            <dd>
+                <span class="estado-pastilla @ClaseApp" data-testid="app-status-app-valor">@EtiquetaApp</span>
+                @if (instalacion is { Mode: "native" })
+                {
+                    <button type="button" class="secondary" data-uraba-instalar="true"
+                            data-testid="app-status-install">Instalar</button>
+                }
+                else if (instalacion is { Mode: "manual" })
+                {
+                    <button type="button" class="secondary" aria-expanded="@pasosVisibles"
+                            aria-controls="@idPasos" @onclick="() => pasosVisibles = !pasosVisibles"
+                            data-testid="app-status-install">@(pasosVisibles ? "Ocultar" : "Cómo instalarla")</button>
+                }
+                <p class="meta">@DescripcionApp</p>
+                @if (pasosVisibles && instalacion is { Steps.Count: > 0 })
+                {
+                    <ol class="install-pasos" id="@idPasos" data-testid="app-status-steps">
+                        @foreach (var paso in instalacion.Steps) { <li>@paso</li> }
+                    </ol>
+                }
+            </dd>
+        </div>
+
+        <div class="app-status-fila" data-testid="app-status-push">
+            <dt>Notificaciones</dt>
+            <dd>
+                <span class="estado-pastilla @ClasePush" data-testid="app-status-push-valor">@EtiquetaPush</span>
+                @if (avisos is { Supported: true, Configured: true, Permission: "default" })
+                {
+                    <button type="button" class="secondary" disabled="@pidiendo" @onclick="PedirPermiso"
+                            data-testid="app-status-push-enable">@(pidiendo ? "Esperando…" : "Activar")</button>
+                }
+                <p class="meta">@DescripcionPush</p>
+            </dd>
+        </div>
+    </dl>
+</section>
+
+@code {
+    [Parameter] public string Titulo { get; set; } = "Esta aplicación en tu teléfono";
+
+    /// <summary>Para quién se escribe el porqué de los avisos: cambia la razón, no el mecanismo.</summary>
+    [Parameter] public bool Operativa { get; set; }
+
+    private readonly string clave = Guid.NewGuid().ToString("N");
+    private string idTitulo => $"estado-app-{clave}";
+    private string idPasos => $"estado-app-pasos-{clave}";
+    private DotNetObjectReference<AppStatusCard>? referencia;
+    private AppInstallState? instalacion;
+    private EstadoAvisos? avisos;
+    private bool pasosVisibles, pidiendo;
+
+    /// <summary>Si se llegó a registrar la escucha. Manda al darse de baja; ver DisposeAsync.</summary>
+    private bool observando;
+
+    private string EtiquetaApp => instalacion switch
+    {
+        { Mode: "installed" } => "Instalada",
+        { Mode: "native" or "manual" } => "Instalar",
+        { Mode: "unavailable" } => "No disponible aquí",
+        _ => "Comprobando…"
+    };
+
+    private string ClaseApp => instalacion switch
+    {
+        { Mode: "installed" } => "es-bien",
+        { Mode: "native" or "manual" } => "es-pendiente",
+        _ => "es-neutro"
+    };
+
+    private string DescripcionApp => instalacion switch
+    {
+        { Mode: "installed" } => "La abres desde el icono, como cualquier otra aplicación.",
+        { Mode: "native" or "manual" } => "Ten tus turnos, citas y pedidos a mano, sin escribir la dirección.",
+        { Mode: "unavailable" } => "Este navegador no instala aplicaciones. Puedes seguir usándola aquí igual.",
+        _ => "Estamos comprobando este dispositivo."
+    };
+
+    private string EtiquetaPush => avisos switch
+    {
+        { Supported: false } or { Configured: false } => "No disponibles aquí",
+        { Permission: "granted" } => "Activas",
+        { Permission: "denied" } => "Bloqueadas",
+        { Permission: "default" } => "Activar",
+        _ => "Comprobando…"
+    };
+
+    private string ClasePush => avisos switch
+    {
+        { Supported: true, Configured: true, Permission: "granted" } => "es-bien",
+        { Supported: true, Configured: true, Permission: "denied" } => "es-bloqueado",
+        { Supported: true, Configured: true, Permission: "default" } => "es-pendiente",
+        _ => "es-neutro"
+    };
+
+    // El "no insistir" del punto once vive aquí: cuando están bloqueadas no hay botón, sólo el
+    // camino para desbloquearlas y la garantía de que no se pierde nada mientras tanto.
+    private string DescripcionPush => avisos switch
+    {
+        { Supported: false } or { Configured: false } =>
+            "Este navegador no admite avisos. Todo lo demás funciona igual.",
+        { Permission: "granted" } when Operativa =>
+            "Recibirás las nuevas citas, turnos y pedidos de tus negocios aunque no la tengas abierta.",
+        { Permission: "granted" } =>
+            "Te avisamos de tus turnos, citas y pedidos aunque no la tengas abierta.",
+        { Permission: "denied" } =>
+            "Puedes permitirlas desde los ajustes del navegador. Nada deja de funcionar sin ellas: "
+            + "tus pantallas de seguimiento se actualizan solas.",
+        { Permission: "default" } when Operativa =>
+            "Te avisamos cuando entre una cita, un turno o un pedido.",
+        { Permission: "default" } =>
+            "Te avisamos cuando falte poco para tu turno y cuando cambie tu pedido.",
+        _ => "Estamos comprobando este dispositivo."
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        referencia = DotNetObjectReference.Create(this);
+        try
+        {
+            instalacion = await JS.InvokeAsync<AppInstallState>("urabaApp.install.watch", clave, referencia);
+            observando = true;
+            // Sin ruta de registro sólo se lee el estado del navegador: no suscribe nada.
+            avisos = await JS.InvokeAsync<EstadoAvisos>("urabaPush.availability", (string?)null);
+            StateHasChanged();
+        }
+        catch (JSException) { }
+    }
+
+    [JSInvokable]
+    public Task EstadoDeInstalacionCambio(AppInstallState nuevo)
+    {
+        // Si el diálogo nativo no llegó a abrirse, se enseñan los pasos sin pedir otro toque.
+        if (instalacion is { Mode: "native" } && nuevo.Mode == "manual") pasosVisibles = true;
+        else if (nuevo.Mode != "manual") pasosVisibles = false;
+        instalacion = nuevo;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private async Task PedirPermiso()
+    {
+        pidiendo = true;
+        try
+        {
+            var resultado = await JS.InvokeAsync<EstadoAvisos>("urabaPush.requestPermission");
+            if (avisos is not null) avisos = avisos with { Permission = resultado.Permission };
+        }
+        catch (JSException) { }
+        finally { pidiendo = false; }
+    }
+
+    /// <summary>
+    /// Igual que en la invitación: en un render estático nadie se inscribió, y pedir JavaScript al
+    /// desechar el componente lanza dentro del Dispose y corta la respuesta ya empezada.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (observando)
+        {
+            try { await JS.InvokeVoidAsync("urabaApp.install.unwatch", clave); }
+            catch (JSException) { }
+            catch (JSDisconnectedException) { }
+            catch (InvalidOperationException) { }
+            catch (OperationCanceledException) { }
+        }
+        referencia?.Dispose();
+    }
+
+    /// <summary>Lo que devuelve urabaPush cuando se le pregunta sin ruta de registro.</summary>
+    private sealed record EstadoAvisos
+    {
+        public bool Supported { get; init; }
+        public bool Configured { get; init; }
+        public string Permission { get; init; } = "default";
+    }
+}

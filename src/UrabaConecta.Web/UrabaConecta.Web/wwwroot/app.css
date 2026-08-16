@@ -2307,6 +2307,56 @@ body:has(.ficha-hero) .back-link { color: rgb(255 253 249 / 78%) }
     .portal-preview-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) }
 }
 
+/* =============================================================================================
+   INSTALACIÓN Y ESTADO DEL DISPOSITIVO
+   La invitación toma prestada la forma del aviso de notificaciones —icono, título, una línea y una
+   acción— a propósito: son la misma clase de oferta y no tienen por qué aprenderse dos veces. La
+   variante destacada es para el panel de quien trabaja aquí, donde instalar no es un extra.
+   ============================================================================================= */
+.install-invite {
+    display: flex; gap: .85rem; align-items: flex-start; margin: 1rem 0; padding: 1rem;
+    border: 1px solid var(--borde); border-radius: var(--radio); background: var(--superficie-2);
+}
+.install-invite.is-destacada {
+    border-color: var(--marca-700); background: var(--uc-green-wash);
+    box-shadow: 0 1px 0 rgb(7 93 82 / 8%);
+}
+.install-invite-icono {
+    display: grid; flex: 0 0 2rem; width: 2rem; height: 2rem; place-items: center;
+    border-radius: 50%; background: var(--marca-700); color: var(--uc-paper);
+}
+.install-invite-copy { min-width: 0 }
+.install-invite-copy p { margin: .25rem 0 .65rem }
+.install-invite-acciones { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center }
+.install-invite-acciones button { min-height: var(--alto-tocable) }
+.install-pasos { margin: .7rem 0 .3rem; padding-left: 1.15rem; color: var(--texto-suave) }
+.install-pasos li { margin: .3rem 0 }
+
+.app-status { margin: 1.5rem 0 0; padding-top: 1rem; border-top: 1px solid var(--borde) }
+.app-status h2 { font-size: var(--t-17) }
+.app-status-filas { display: grid; gap: .85rem; margin: .6rem 0 0 }
+.app-status-fila {
+    display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: .3rem .75rem; align-items: start;
+}
+.app-status-fila dt { font-weight: var(--p-titular) }
+.app-status-fila dd { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin: 0 }
+.app-status-fila dd p { flex: 1 0 100%; margin: 0 }
+.app-status-fila button { min-height: var(--alto-tocable) }
+.app-status-fila .install-pasos { flex: 1 0 100% }
+.estado-pastilla {
+    display: inline-block; padding: .25rem .6rem; border-radius: var(--radio-pill);
+    background: var(--superficie-2); color: var(--texto-suave);
+    font-size: var(--t-13); font-weight: var(--p-titular);
+}
+.estado-pastilla.es-bien { background: var(--exito-100); color: var(--exito-700) }
+.estado-pastilla.es-pendiente { background: var(--aviso-100); color: var(--aviso-700) }
+.estado-pastilla.es-bloqueado { background: var(--peligro-100); color: var(--peligro-700) }
+
+@media (max-width: 520px) {
+    .app-status-fila { grid-template-columns: 1fr }
+    .install-invite-acciones { width: 100% }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .portal-home, .municipality-screen, .category-destination-hero { animation: none }
     .header-search, .portal-municipality, .portal-category, .portal-category-art,

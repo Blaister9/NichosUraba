@@ -37,6 +37,11 @@
 
     @if (!listo) { <p class="notice" role="status">Preparando la consulta…</p> }
     else if (intentado && !CodigoValido) { <p class="error" role="alert">Ese código está incompleto.</p> }
+
+    @* Quien llega aquí ya sabe que vuelve: es el sitio donde tiene sentido decirle que puede
+       dejarse la aplicación puesta y que sepa, sin abrir los ajustes del navegador, si los avisos
+       están activos o bloqueados. *@
+    <AppStatusCard />
 </section>
 
 @code {

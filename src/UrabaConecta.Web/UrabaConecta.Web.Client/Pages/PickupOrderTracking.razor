@@ -20,7 +20,11 @@ else
         <PushPrompt RegistrationPath="@($"/api/v1/public/orders/{Uri.EscapeDataString(Code)}/push-subscriptions")"
                     Title="Te avisamos cuando esté listo"
                     Description="Activa los avisos para no tener que revisar esta pantalla."
-                    ButtonLabel="Avisarme en este dispositivo" />
+                    ButtonLabel="Avisarme en este dispositivo"
+                    DeniedNote="Tu pedido sigue igual y esta pantalla se actualiza sola." />
+
+        @* Tras hacer el pedido: hay algo que seguir y una razón para volver. *@
+        <InstallPrompt />
         @if (order.CanCancel)
         {
             <button class="danger" disabled="@(!interactiveReady || busy)" @onclick="Cancel">

@@ -1,5 +1,13 @@
 @inject IJSRuntime JS
 
+@* Los avisos se piden cuando hay un motivo —un turno tomado, una reserva, un pedido, un negocio
+   seguido— y nunca al cargar la página. El orden importa: primero se dice qué vamos a avisar, y
+   sólo si la persona toca el botón aparece el diálogo del navegador. Un permiso pedido antes de
+   explicar nada se rechaza una vez y queda rechazado para siempre.
+
+   Rechazarlo no rompe nada: la operación siguió su curso antes de llegar aquí y las pantallas de
+   seguimiento se actualizan solas. Por eso el estado bloqueado se cuenta una vez, sin botón que
+   vuelva a insistir. *@
 @if (available)
 {
     <aside class="push-prompt @(Compact ? "is-compact" : null)" data-testid="push-prompt">
@@ -9,7 +17,9 @@
             <p>@(active ? ActiveDescription : Description)</p>
             @if (permission == "denied")
             {
-                <p class="meta">Los avisos están bloqueados en la configuración de este navegador.</p>
+                <p class="meta" data-testid="push-blocked">
+                    Los avisos están bloqueados en este navegador. @DeniedNote
+                </p>
             }
             else
             {
@@ -29,6 +39,14 @@
     [Parameter] public string Description { get; set; } = "Recibe una alerta útil aunque no tengas UrabáConecta abierto.";
     [Parameter] public string ActiveDescription { get; set; } = "Los avisos están activos en este dispositivo.";
     [Parameter] public string ButtonLabel { get; set; } = "Activar avisos en este dispositivo";
+
+    /// <summary>
+    /// Qué sigue funcionando sin avisos. Se dice en el propio contexto porque la respuesta cambia:
+    /// un turno se sigue viendo en pantalla, un pedido se sigue recogiendo igual.
+    /// </summary>
+    [Parameter] public string DeniedNote { get; set; } =
+        "Puedes permitirlos desde los ajustes del navegador; mientras tanto nada deja de funcionar.";
+
     [Parameter] public bool Compact { get; set; }
     private bool available, active, busy;
     private string permission = "default";

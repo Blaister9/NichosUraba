@@ -85,6 +85,56 @@ public sealed class PushNotificationApiTests(PushWebFactory factory) : IClassFix
         Assert.Contains("addEventListener('notificationclick'", worker);
     }
 
+    /// <summary>
+    /// El guion de instalación tiene que llegar entero al navegador. Sin la captura de
+    /// beforeinstallprompt no hay diálogo nativo que abrir desde nuestra invitación, y sin el
+    /// camino manual la única salida vuelve a ser el menú del navegador, que es de donde venimos.
+    /// </summary>
+    [Fact]
+    public async Task Install_script_captures_the_browser_offer_and_keeps_a_manual_route()
+    {
+        using var client = factory.CreateClient();
+        var guion = await client.GetStringAsync("/pwa.js");
+
+        Assert.Contains("addEventListener('beforeinstallprompt'", guion);
+        Assert.Contains("addEventListener('appinstalled'", guion);
+        Assert.Contains("display-mode: ", guion);
+        // El clic se atiende en el DOM: Chrome exige que prompt() ocurra dentro del gesto.
+        Assert.Contains("data-uraba-instalar", guion);
+        Assert.Contains("urabaApp", guion);
+        // Instrucciones literales de cada familia de navegador, no una frase genérica.
+        Assert.Contains("Añadir a pantalla de inicio", guion);
+        Assert.Contains("Instalar aplicación", guion);
+        Assert.Contains("Añadir página a", guion);
+
+        var avisos = await client.GetStringAsync("/push-notifications.js");
+        // Pedir el permiso sin suscribir: es lo que usa la ficha de estado de la cuenta.
+        Assert.Contains("requestPermission:", avisos);
+    }
+
+    /// <summary>
+    /// La página con la ficha de estado tiene que llegar ENTERA a un render estático: se lee el
+    /// cuerpo completo, no sólo el código de estado.
+    ///
+    /// Nace de un fallo real: los componentes de instalación escuchan a JavaScript y al desecharse
+    /// pedían la baja sin mirar si alguna vez se habían inscrito. En un render estático esa llamada
+    /// lanza, la excepción escapaba dentro del Dispose y el cuerpo se cortaba a medio escribir —con
+    /// el 200 ya enviado—. Conviene decir qué NO cubre esta prueba: aquella caída sólo aparecía con
+    /// los tres ensamblados corriendo a la vez, porque depende de si el árbol prerenderizado se
+    /// desecha antes de que termine la respuesta. Aquí queda el humo; la carrera la sigue
+    /// destapando la suite completa.
+    /// </summary>
+    [Fact]
+    public async Task The_activity_page_renders_whole_without_asking_javascript_while_prerendering()
+    {
+        using var client = factory.CreateClient();
+        var html = await client.GetStringAsync("/seguimiento");
+
+        Assert.Contains("data-testid=\"app-status\"", html);
+        Assert.Contains("Notificaciones", html);
+        Assert.Contains("</html>", html);
+    }
+
     [Fact]
     public async Task Owner_subscription_is_tenant_scoped_and_another_owner_is_forbidden()
     {

@@ -21,6 +21,13 @@
     }
 </div>
 
+@* Aquí la instalación no es un adorno: quien atiende el negocio necesita que la aplicación esté en
+   la pantalla de inicio y que los avisos entren solos, o se entera de la cita cuando ya pasó. Por
+   eso va arriba, destacada y sin "ahora no" que la esconda durante quince días. *@
+<InstallPrompt Destacada="true" Descartable="false"
+               Titulo="Instalar UrabáConecta"
+               Descripcion="Ábrela desde el icono y recibe las citas, turnos y pedidos al instante, aunque no la tengas abierta." />
+
 @if (loading)
 {
     <p class="notice" role="status" data-testid="panel-cargando">Cargando tus negocios…</p>
@@ -153,6 +160,8 @@ else
         </div>
     }
 }
+
+<AppStatusCard Operativa="true" Titulo="Esta aplicación en tu dispositivo" />
 
 @code {
     private IReadOnlyList<MyBusinessDto>? memberships;

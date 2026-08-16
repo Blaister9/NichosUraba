@@ -1,0 +1,139 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@* Invitación propia a instalar. No es una ventana emergente y no aparece al segundo de entrar:
+   se coloca donde la instalación ya tiene sentido —después de tomar un turno, de reservar, de
+   pedir, o en el panel de quien trabaja con esto todos los días— y se puede posponer.
+
+   Cuando el navegador nos cedió su diálogo, el botón lo abre. Cuando no lo cedió, no se calla:
+   se enseñan los pasos exactos de ESE navegador, que es lo que separa "es instalable" de "una
+   persona normal puede instalarla".
+
+   El botón nativo no lleva un manejador de Blazor: quien atiende ese clic es pwa.js, dentro del evento
+   del DOM, porque Chrome exige que el diálogo se pida dentro del gesto de la persona y un viaje
+   al circuito de Blazor puede llegar tarde. *@
+@if (Visible)
+{
+    <aside class="install-invite @(Destacada ? "is-destacada" : null)" data-testid="install-invite"
+           data-modo="@estado!.Mode">
+        <span class="install-invite-icono" aria-hidden="true"><Icon Name="instalar" Size="22" /></span>
+        <div class="install-invite-copy">
+            <strong>@Titulo</strong>
+            <p>@Descripcion</p>
+
+            <div class="install-invite-acciones">
+                @if (estado.Mode == "native")
+                {
+                    <button type="button" class="primary" data-uraba-instalar="true"
+                            data-testid="install-native">Instalar la aplicación</button>
+                }
+                else
+                {
+                    <button type="button" class="@(Destacada ? "primary" : "secondary")"
+                            aria-expanded="@pasosVisibles" aria-controls="@idPasos"
+                            @onclick="() => pasosVisibles = !pasosVisibles" data-testid="install-manual">
+                        @(pasosVisibles ? "Ocultar los pasos" : "Cómo instalarla")
+                    </button>
+                }
+                @if (Descartable)
+                {
+                    <button type="button" class="inline-button" @onclick="Descartar"
+                            data-testid="install-dismiss">Ahora no</button>
+                }
+            </div>
+
+            @if (pasosVisibles && estado.Steps.Count > 0)
+            {
+                <ol class="install-pasos" id="@idPasos" data-testid="install-steps">
+                    @foreach (var paso in estado.Steps) { <li>@paso</li> }
+                </ol>
+                <p class="meta">Después la abres desde el icono, sin escribir la dirección.</p>
+            }
+        </div>
+    </aside>
+}
+
+@code {
+    [Parameter] public string Titulo { get; set; } = "Instalar UrabáConecta";
+
+    [Parameter] public string Descripcion { get; set; } = "Ten tus turnos, citas y pedidos a mano.";
+
+    /// <summary>Presencia de propietario: la instalación es su herramienta de trabajo, no un extra.</summary>
+    [Parameter] public bool Destacada { get; set; }
+
+    /// <summary>Para el cliente sí; para quien opera un negocio la invitación se queda.</summary>
+    [Parameter] public bool Descartable { get; set; } = true;
+
+    private readonly string clave = Guid.NewGuid().ToString("N");
+    private string idPasos => $"pasos-instalar-{clave}";
+    private DotNetObjectReference<InstallPrompt>? referencia;
+    private AppInstallState? estado;
+    private bool pasosVisibles;
+
+    /// <summary>Si se llegó a registrar la escucha. Manda al darse de baja; ver DisposeAsync.</summary>
+    private bool observando;
+
+    /// <summary>
+    /// Nunca durante el prerender —ahí no se sabe nada del navegador— ni cuando ya está instalada,
+    /// ni cuando este navegador no puede instalar: una invitación que no lleva a ninguna parte es
+    /// peor que no invitar.
+    /// </summary>
+    private bool Visible => estado is { CanOffer: true } && !(Descartable && estado.Dismissed);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        referencia = DotNetObjectReference.Create(this);
+        try
+        {
+            estado = await JS.InvokeAsync<AppInstallState>("urabaApp.install.watch", clave, referencia);
+            observando = true;
+            StateHasChanged();
+        }
+        catch (JSException) { }
+    }
+
+    /// <summary>
+    /// El navegador puede ceder su diálogo mucho después de que esta pantalla se pintara, y también
+    /// puede instalarse desde el menú sin tocar nuestro botón. Las dos cosas llegan por aquí.
+    /// </summary>
+    [JSInvokable]
+    public Task EstadoDeInstalacionCambio(AppInstallState nuevo)
+    {
+        // Caer de "nativo" a "manual" significa que el diálogo del navegador no se abrió. La
+        // persona ya tocó Instalar: dejarle otro botón sin explicación sería un callejón, así que
+        // el camino manual se despliega solo.
+        if (estado is { Mode: "native" } && nuevo.Mode == "manual") pasosVisibles = true;
+        else if (!nuevo.CanOffer) pasosVisibles = false;
+        estado = nuevo;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private async Task Descartar()
+    {
+        pasosVisibles = false;
+        estado = estado is null ? null : estado with { Dismissed = true };
+        try { await JS.InvokeVoidAsync("urabaApp.install.dismiss"); }
+        catch (JSException) { }
+    }
+
+    /// <summary>
+    /// Sólo se da de baja quien llegó a inscribirse. En un render estático —el prerender de la
+    /// página, o esta misma pantalla pedida sin circuito— OnAfterRenderAsync no corre, pero el
+    /// componente sí se desecha: pedir JavaScript ahí lanza dentro del propio Dispose y rompe la
+    /// respuesta HTTP a medio escribir, con la página ya empezada a enviar.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (observando)
+        {
+            try { await JS.InvokeVoidAsync("urabaApp.install.unwatch", clave); }
+            catch (JSException) { }
+            catch (JSDisconnectedException) { }
+            catch (InvalidOperationException) { }
+            catch (OperationCanceledException) { }
+        }
+        referencia?.Dispose();
+    }
+}

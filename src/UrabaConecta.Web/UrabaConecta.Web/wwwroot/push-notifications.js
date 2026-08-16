@@ -35,6 +35,14 @@
 
   window.urabaPush = {
     availability: configuration,
+    /* Pedir el permiso sin suscribir a nada. Lo usa la ficha de estado de la cuenta, donde la
+       persona ya decidió que quiere avisos pero todavía no hay una operación concreta a la que
+       engancharlos: el permiso queda dado y la suscripción se crea después, en su contexto. */
+    requestPermission: async () => {
+      if (!('Notification' in window)) return { permission: 'unsupported' };
+      if (Notification.permission !== 'default') return { permission: Notification.permission };
+      return { permission: await Notification.requestPermission() };
+    },
     subscribe: async registrationPath => {
       const config = await configuration();
       if (!config.supported || !config.configured) throw new Error('Los avisos no están disponibles.');

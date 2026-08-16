@@ -52,6 +52,12 @@ public sealed class BrowserFixture : IAsyncLifetime
         ConnectionString = Externa ?? _postgres.GetConnectionString();
         start.Environment["ConnectionStrings__DefaultConnection"] = ConnectionString;
         start.Environment["URABACONECTA_TRACKING_HMAC_KEY"] = "e2e-test-hmac-key-with-at-least-32-bytes";
+        // Demo y Production sí tienen Web Push configurado, así que sin estas claves el navegador
+        // recibía "avisos no disponibles" y la mitad de la pantalla de seguimiento no existía en
+        // las pruebas. No se envía nada: ninguna prueba llega a suscribirse a un servicio real.
+        start.Environment["WebPush__Subject"] = "mailto:e2e@urabaconecta.test";
+        start.Environment["WebPush__PublicKey"] = "BJ0dHVpsUbYyO0BdEwoBNtZUCVOr0YrPPqLNTOhOBc9SPXBRcYE0BSzZpsYFDqSjnbfWLxpjLzMFhcbXHWpUmSA";
+        start.Environment["WebPush__PrivateKey"] = "Mm9CQ1RhWVVpOFVFbUJnQzlLc2NnV3RkUjFNSXlKV1E";
         start.Environment["RateLimits__PublicWritesPerMinute"] = "200";
         _app = Process.Start(start) ?? throw new InvalidOperationException("No fue posible iniciar la aplicación.");
         _app.OutputDataReceived += (_, e) => Capture(e.Data);

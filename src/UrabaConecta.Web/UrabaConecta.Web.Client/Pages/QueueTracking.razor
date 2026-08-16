@@ -42,7 +42,12 @@ else if (ticket is not null)
         <PushPrompt RegistrationPath="@($"/api/v1/public/queue/tickets/{Uri.EscapeDataString(Code)}/push-subscriptions")"
                     Title="No esperes mirando la pantalla"
                     Description="Te avisamos cuando tu turno esté cerca y cuando te llamen."
-                    ButtonLabel="Avisarme cuando falte poco" />
+                    ButtonLabel="Avisarme cuando falte poco"
+                    DeniedNote="Tu turno avanza igual y esta pantalla se actualiza sola." />
+
+        @* La invitación llega después de tomar el turno, no al entrar: aquí ya hay algo que
+           conservar, y la persona vuelve a esta pantalla varias veces mientras espera. *@
+        <InstallPrompt />
 
         @if (ticket.CanCancel)
         {
