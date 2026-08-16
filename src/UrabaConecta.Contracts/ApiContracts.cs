@@ -98,13 +98,24 @@ public sealed record SlotListDto(string BusinessTimeZone, DateOnly Date, IReadOn
 
 public sealed class CreateAppointmentRequest
 {
+    // Mismo criterio que en el pedido: el formulario de cita mostraba "The CustomerAlias field is
+    // required" en cuanto alguien lo enviaba incompleto, que es justo lo que hace quien va rápido.
     [Required] public Guid ServiceId { get; set; }
     [Required] public DateTimeOffset Start { get; set; }
-    [Required, StringLength(100, MinimumLength = 2)] public string CustomerAlias { get; set; } = "";
-    [Required, RegularExpression(@"^\+?[0-9]{7,15}$")] public string Phone { get; set; } = "";
-    [StringLength(300)] public string? Notes { get; set; }
+    [Required(ErrorMessage = "Escribe tu nombre o alias."),
+     StringLength(100, MinimumLength = 2,
+         ErrorMessage = "Tu nombre o alias debe tener entre 2 y 100 caracteres.")]
+    public string CustomerAlias { get; set; } = "";
+    [Required(ErrorMessage = "Escribe tu número de teléfono."),
+     RegularExpression(@"^\+?[0-9]{7,15}$",
+         ErrorMessage = "Escribe un teléfono válido: sólo números, entre 7 y 15 dígitos.")]
+    public string Phone { get; set; } = "";
+    [StringLength(300, ErrorMessage = "La observación admite máximo 300 caracteres.")]
+    public string? Notes { get; set; }
     [Required] public string ConsentNoticeVersion { get; set; } = "pilot-1";
-    [Range(typeof(bool), "true", "true", ErrorMessage = "Debe aceptar el aviso.")] public bool ConsentAccepted { get; set; }
+    [Range(typeof(bool), "true", "true",
+        ErrorMessage = "Debes aceptar el tratamiento de datos para continuar.")]
+    public bool ConsentAccepted { get; set; }
 }
 
 public sealed record AppointmentCreatedDto(string TrackingCode, string Status, string ServiceName, DateTimeOffset Start,
@@ -415,13 +426,25 @@ public sealed class CreatePickupOrderLineRequest
 }
 public sealed class CreatePickupOrderRequest
 {
+    // Los mensajes se escriben aquí porque son lo que lee quien está pidiendo. Sin ellos salía el
+    // texto que ASP.NET arma con el nombre de la propiedad —"The CustomerAlias field is required"—
+    // y, en el caso del consentimiento, la frase sin sentido "must be between True and True".
     [Required] public DateTimeOffset PickupStart { get; set; }
-    [Required, StringLength(100, MinimumLength = 2)] public string CustomerAlias { get; set; } = "";
-    [Required, RegularExpression(@"^\+?[0-9]{7,15}$")] public string Phone { get; set; } = "";
-    [StringLength(300)] public string? Notes { get; set; }
+    [Required(ErrorMessage = "Escribe tu nombre o alias."),
+     StringLength(100, MinimumLength = 2,
+         ErrorMessage = "Tu nombre o alias debe tener entre 2 y 100 caracteres.")]
+    public string CustomerAlias { get; set; } = "";
+    [Required(ErrorMessage = "Escribe tu número de celular."),
+     RegularExpression(@"^\+?[0-9]{7,15}$",
+         ErrorMessage = "Escribe un celular válido: sólo números, entre 7 y 15 dígitos.")]
+    public string Phone { get; set; } = "";
+    [StringLength(300, ErrorMessage = "La nota admite máximo 300 caracteres.")]
+    public string? Notes { get; set; }
     public List<CreatePickupOrderLineRequest> Lines { get; set; } = [];
     [Required] public string ConsentNoticeVersion { get; set; } = "pilot-1";
-    [Range(typeof(bool), "true", "true")] public bool ConsentAccepted { get; set; }
+    [Range(typeof(bool), "true", "true",
+        ErrorMessage = "Debes aceptar el tratamiento de datos para continuar.")]
+    public bool ConsentAccepted { get; set; }
 }
 public sealed record PickupOrderLineDto(Guid? ProductId, string ProductName, decimal UnitPrice,
     int Quantity, decimal LineTotal, string? Notes);

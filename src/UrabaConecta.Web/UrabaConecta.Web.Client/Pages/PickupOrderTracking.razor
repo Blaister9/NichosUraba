@@ -58,5 +58,6 @@ else
         finally { busy = false; }
     }
     private static string Local(DateTimeOffset value) =>
-        TimeZoneInfo.ConvertTime(value, TimeZoneInfo.FindSystemTimeZoneById("America/Bogota")).ToString("f");
+        TimeZoneInfo.ConvertTime(value, TimeZoneInfo.FindSystemTimeZoneById("America/Bogota"))
+            .ToString("dddd d 'de' MMMM, h:mm tt", Colombia);
 }

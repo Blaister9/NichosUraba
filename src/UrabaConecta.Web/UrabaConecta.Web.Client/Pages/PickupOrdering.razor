@@ -226,5 +226,6 @@ else if (created is not null)
         finally { busy = false; }
     }
     private static string Local(DateTimeOffset value) =>
-        TimeZoneInfo.ConvertTime(value, TimeZoneInfo.FindSystemTimeZoneById("America/Bogota")).ToString("ddd d MMM, h:mm tt");
+        TimeZoneInfo.ConvertTime(value, TimeZoneInfo.FindSystemTimeZoneById("America/Bogota"))
+            .ToString("ddd d MMM, h:mm tt", Colombia);
 }

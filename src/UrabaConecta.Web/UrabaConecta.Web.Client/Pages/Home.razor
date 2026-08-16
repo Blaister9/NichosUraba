@@ -127,7 +127,9 @@
                 @* El nombre del municipio no es un dato operativo, así que no se pinta de ámbar:
                    el ámbar es para el número que se verifica. *@
                 <section><p class="eyebrow">Tu lugar</p><strong class="rail-place">@ActiveMunicipalityName</strong><button type="button" class="inline-button" @onclick="() => locationOpen = true">Cambiar</button></section>
-                <a class="rail-activity" href="/seguimiento"><Icon Name="actividad" Size="22" /><span><strong>Mi actividad</strong><small>Turnos, citas y pedidos</small></span></a>
+                @* "Turnos, citas y pedidos" se leía como una lista de lo tuyo, y la pantalla es una
+                   consulta por código: no hay historial. El subtítulo dice lo que de verdad hace. *@
+                <a class="rail-activity" href="/seguimiento"><Icon Name="actividad" Size="22" /><span><strong>Mi actividad</strong><small>Consulta con tu código</small></span></a>
             </aside>
         </div>
     }

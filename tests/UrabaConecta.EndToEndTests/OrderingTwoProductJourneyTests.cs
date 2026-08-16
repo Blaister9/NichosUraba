@@ -104,6 +104,50 @@ public sealed class OrderingTwoProductJourneyTests(BrowserFixture fixture) : ICl
             "document.documentElement.scrollWidth > window.innerWidth"));
     }
 
+    /// <summary>
+    /// Lo que se lee en el vertical de pedidos, en español. Las franjas y el seguimiento salían con
+    /// la cultura del servidor ("Sun 16 Aug", "Sunday, 16 August 2026") mientras el dinero sí usaba
+    /// es-CO, y la validación mostraba el texto que arma ASP.NET con el nombre de la propiedad.
+    /// </summary>
+    [Fact]
+    public async Task The_ordering_screens_read_in_spanish()
+    {
+        await using var context = await MobileContext();
+        var page = await context.NewPageAsync();
+        await page.GotoAsync($"{fixture.BaseUrl}{Menu}");
+        await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Pedido para recoger" })).ToBeVisibleAsync();
+
+        // Las franjas: días y meses abreviados en español, y nunca los ingleses.
+        var franjas = await page.GetByLabel("Hora para recoger").Locator("option").AllTextContentsAsync();
+        var ofrecidas = franjas.Skip(1).ToArray();
+        Assert.NotEmpty(ofrecidas);
+        Assert.All(ofrecidas, texto => Assert.DoesNotMatch(
+            new Regex(@"\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b"), texto));
+        Assert.Contains(ofrecidas, texto => Regex.IsMatch(texto, @"\b(lun|mar|mié|jue|vie|sáb|dom)\b"));
+
+        // La validación le habla a quien pide, no nombra la propiedad del contrato.
+        await Add(page, "Hamburguesa tradicional", 1);
+        await page.GetByLabel("Hora para recoger").SelectOptionAsync(new SelectOptionValue { Index = 1 });
+        await page.GetByRole(AriaRole.Button, new() { Name = "Confirmar pedido" }).ClickAsync();
+        await Expect(page.GetByText("Escribe tu nombre o alias.")).ToBeVisibleAsync(new() { Timeout = 15_000 });
+        await Expect(page.GetByText("Escribe tu número de celular.")).ToBeVisibleAsync();
+        await Expect(page.GetByText("Debes aceptar el tratamiento de datos para continuar.")).ToBeVisibleAsync();
+        var validacion = await page.Locator(".validation-message").AllTextContentsAsync();
+        Assert.All(validacion, texto => Assert.DoesNotContain("field", texto, StringComparison.OrdinalIgnoreCase));
+
+        // Y el seguimiento, que es la pantalla que se guarda, con la fecha en español.
+        await page.GetByLabel("Nombre o alias").FillAsync("Pedido Español");
+        await page.GetByLabel("Celular").FillAsync("3001234567");
+        await page.GetByLabel("Acepto el uso de estos datos").CheckAsync();
+        await page.GetByRole(AriaRole.Button, new() { Name = "Confirmar pedido" }).ClickAsync();
+        await Expect(page.GetByTestId("order-created")).ToBeVisibleAsync(new() { Timeout = 15_000 });
+        await page.GetByRole(AriaRole.Link, new() { Name = "Seguir mi pedido" }).ClickAsync();
+        await Expect(page.GetByTestId("order-tracking")).ToBeVisibleAsync();
+        var recoges = await page.Locator(".lead").First.InnerTextAsync();
+        Assert.Matches(new Regex(@"(lunes|martes|miércoles|jueves|viernes|sábado|domingo)"), recoges);
+        Assert.DoesNotMatch(new Regex(@"\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b"), recoges);
+    }
+
     private static ILocator Line(IPage page, string product) =>
         page.Locator(".resumen-lineas li").Filter(new() { HasTextString = product });
 
