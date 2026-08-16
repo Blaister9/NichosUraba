@@ -20,7 +20,7 @@ else if (menu is not null && created is null)
         <div class="chip-row" role="group" aria-label="Ir a una parte del menú">
             @foreach (var category in menu.Categories)
             {
-                <a class="chip" href="#categoria-@category.Id">@category.Name</a>
+                <a class="chip" href="@Ancla($"categoria-{category.Id}")">@category.Name</a>
             }
         </div>
     }
@@ -88,7 +88,7 @@ else if (menu is not null && created is null)
                 <strong>@CartCount @(CartCount == 1 ? "unidad" : "unidades")</strong>
                 <span>@CartTotal.ToString("C0", Colombia)</span>
             </div>
-            <a class="button-link" href="#tu-pedido">Continuar</a>
+            <a class="button-link" href="@Ancla("tu-pedido")">Continuar</a>
         </div>
     }
     <section class="config-form" id="tu-pedido">
@@ -187,6 +187,12 @@ else if (created is not null)
         interactiveReady = true;
         StateHasChanged();
     }
+    @* El documento declara <base href="/">, así que un href que sólo lleva fragmento se resuelve
+       contra la raíz del sitio: "#tu-pedido" apuntaba a la Home. Blazor comparaba rutas, veía dos
+       páginas distintas y navegaba de verdad, así que "Continuar" echaba a la Home y el carrito
+       —que vive en el circuito— se perdía. Colgando el fragmento de la ruta actual, Blazor
+       reconoce el salto dentro de la misma página y sólo desplaza. *@
+    private string Ancla(string fragmento) => $"{new Uri(Navigation.Uri).PathAndQuery}#{fragmento}";
     private int Quantity(Guid id) => quantities.GetValueOrDefault(id);
     private void Change(Guid id, int delta) => quantities[id] = Math.Clamp(Quantity(id) + delta, 0, 20);
     private int CartCount => quantities.Values.Sum();
