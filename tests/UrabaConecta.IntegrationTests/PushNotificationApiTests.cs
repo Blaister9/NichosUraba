@@ -1,6 +1,8 @@
+using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -83,6 +85,51 @@ public sealed class PushNotificationApiTests(PushWebFactory factory) : IClassFix
         var worker = await client.GetStringAsync("/sw.js");
         Assert.Contains("addEventListener('push'", worker);
         Assert.Contains("addEventListener('notificationclick'", worker);
+    }
+
+    /// <summary>
+    /// Los iconos del manifiesto, con respaldo en mapa de bits.
+    ///
+    /// Chromium moderno decodifica SVG, pero la recomendación de la plataforma sigue siendo llevar
+    /// PNG: un navegador de fabricante que no lo decodifique deja de ofrecer instalación sin decir
+    /// por qué. Los dos formatos conviven y cubren los mismos propósitos, así que ninguna variante
+    /// —incluida la enmascarable— se queda sin respaldo. Las medidas se leen de la cabecera del
+    /// propio archivo: un PNG que dice 512 en el manifiesto y mide otra cosa es peor que no estar.
+    /// </summary>
+    [Fact]
+    public async Task Manifest_icons_ship_both_vector_and_raster_for_every_purpose()
+    {
+        using var client = factory.CreateClient();
+        var manifest = await client.GetStringAsync("/manifest.webmanifest");
+
+        foreach (var icono in new[] { "icon-192.svg", "icon-192.png", "icon-512.svg", "icon-512.png" })
+            Assert.Contains($"\"src\": \"/icons/{icono}\"", manifest);
+
+        // El respaldo tiene que cubrir también el propósito enmascarable, no sólo el corriente.
+        Assert.Contains("\"type\": \"image/png\"", manifest);
+        Assert.Equal(2, Regex.Matches(manifest, "\"purpose\": \"any maskable\"").Count);
+        Assert.Equal(2, Regex.Matches(manifest, "\"purpose\": \"any\"").Count);
+
+        foreach (var (nombre, lado) in new[] { ("icon-192.png", 192u), ("icon-512.png", 512u) })
+        {
+            var respuesta = await client.GetAsync($"/icons/{nombre}");
+            Assert.Equal(HttpStatusCode.OK, respuesta.StatusCode);
+            Assert.Equal("image/png", respuesta.Content.Headers.ContentType?.MediaType);
+
+            var bytes = await respuesta.Content.ReadAsByteArrayAsync();
+            Assert.Equal(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }, bytes[..8]);
+            // La cabecera IHDR lleva el ancho y el alto reales, en 32 bits y orden de red.
+            Assert.Equal(lado, BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(16, 4)));
+            Assert.Equal(lado, BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(20, 4)));
+        }
+
+        // Los vectores siguen ahí: el PNG es respaldo, no reemplazo.
+        foreach (var nombre in new[] { "icon-192.svg", "icon-512.svg" })
+        {
+            var respuesta = await client.GetAsync($"/icons/{nombre}");
+            Assert.Equal(HttpStatusCode.OK, respuesta.StatusCode);
+            Assert.Equal("image/svg+xml", respuesta.Content.Headers.ContentType?.MediaType);
+        }
     }
 
     /// <summary>
