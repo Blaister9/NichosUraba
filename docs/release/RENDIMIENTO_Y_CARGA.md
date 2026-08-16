@@ -2,6 +2,8 @@
 
 Para el rendimiento percibido de la Demo pública medido contra Railway el 29 de julio de 2026, con causas, mediciones antes y después y la recomendación sobre las regiones, ver [HOTFIX_RENDIMIENTO_DEMO.md](HOTFIX_RENDIMIENTO_DEMO.md).
 
+Para la medición y corrección del coste de la Home del 16 de agosto de 2026 —de 18 sentencias por visita a 6, constantes con el número de negocios, con mediana de 1.855 ms a 1.032 ms y carga sostenida antes y después— ver [RENDIMIENTO_HOME_2026-08.md](RENDIMIENTO_HOME_2026-08.md). Ahí están también los arneses reproducibles `tests/load/measure-endpoints.ps1` y `tests/load/sustained-load.ps1`, que miden TTFB y tiempo total por separado y sustituyen a las ráfagas para el trabajo de percentiles.
+
 Los listados privados de citas y pedidos se limitan a 200 registros para impedir respuestas sin cota. La paginación es deuda técnica.
 
 Prueba reproducible:
