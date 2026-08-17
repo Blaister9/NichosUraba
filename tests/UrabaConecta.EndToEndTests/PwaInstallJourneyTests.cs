@@ -69,18 +69,21 @@ public sealed class PwaInstallJourneyTests(BrowserFixture fixture) : IClassFixtu
         Assert.True(await page.EvaluateAsync<bool>("window.__dialogoAbierto === true"));
     }
 
-    /// <summary>Ya instalada: ni una invitación más, ni en el panel ni en el seguimiento.</summary>
+    /// <summary>
+    /// Corriendo de verdad como aplicación —el navegador lo dice por display-mode— no hay nada que
+    /// ofrecer: ya está dentro. Éste es el único caso en que el botón desaparece.
+    /// </summary>
     [Fact]
-    public async Task Installed_app_never_invites_again()
+    public async Task Running_as_the_installed_app_hides_the_call_to_action()
     {
         await using var context = await AndroidContext();
-        await context.AddInitScriptAsync(
-            "try { localStorage.setItem('urabaAppInstalada', '1'); } catch {}");
+        await context.AddInitScriptAsync(GuionModoApp);
         var page = await context.NewPageAsync();
 
         await page.GotoAsync($"{fixture.BaseUrl}/seguimiento");
         await Expect(page.GetByTestId("app-status-app-valor")).ToHaveTextAsync("Instalada",
             new() { Timeout = 30_000 });
+        Assert.True(await page.EvaluateAsync<bool>("urabaApp.install.state().runningAsApp"));
         await Expect(page.GetByTestId("app-status-install")).ToHaveCountAsync(0);
         await Expect(page.GetByTestId("install-invite")).ToHaveCountAsync(0);
 
@@ -88,6 +91,123 @@ public sealed class PwaInstallJourneyTests(BrowserFixture fixture) : IClassFixtu
         await Expect(page.GetByTestId("app-status-app-valor")).ToHaveTextAsync("Instalada",
             new() { Timeout = 30_000 });
         await Expect(page.GetByTestId("install-invite")).ToHaveCountAsync(0);
+    }
+
+    /// <summary>
+    /// Recordar una instalación no es estar dentro de la aplicación. La marca de localStorage
+    /// sobrevive a desinstalar, y antes bastaba para borrar el botón del DOM y dejar la pantalla
+    /// sin ninguna salida. El rótulo puede decir "Instalada"; el camino tiene que seguir ahí.
+    /// </summary>
+    [Fact]
+    public async Task A_remembered_install_still_offers_the_manual_route_in_a_browser_tab()
+    {
+        await using var context = await AndroidContext();
+        await context.AddInitScriptAsync(
+            "try { localStorage.setItem('urabaAppInstalada', '1'); } catch {}");
+        var page = await context.NewPageAsync();
+
+        await page.GotoAsync($"{fixture.BaseUrl}/seguimiento");
+        await Expect(page.GetByTestId("app-status")).ToBeVisibleAsync(new() { Timeout = 30_000 });
+        Assert.False(await page.EvaluateAsync<bool>("urabaApp.install.state().runningAsApp"));
+
+        var boton = page.GetByTestId("app-status-install");
+        await Expect(boton).ToBeVisibleAsync();
+        await Expect(boton).ToHaveTextAsync("Cómo instalarla");
+        await boton.ClickAsync();
+        await Expect(page.GetByTestId("app-status-steps")).ToContainTextAsync("Instalar aplicación");
+    }
+
+    /// <summary>
+    /// La causa del fallo en el Honor: Chrome de Android pone referrer "android-app://" a cualquier
+    /// enlace abierto desde otra aplicación —WhatsApp, el correo—, y lo tomábamos por "ya está
+    /// instalada". Quien llegaba a la Demo desde un mensaje no veía ningún botón.
+    /// </summary>
+    [Fact]
+    public async Task A_link_opened_from_another_android_app_still_offers_installation()
+    {
+        await using var context = await AndroidContext();
+        await context.AddInitScriptAsync(GuionReferrerDeApp);
+        var page = await context.NewPageAsync();
+
+        await page.GotoAsync($"{fixture.BaseUrl}/seguimiento");
+        await Expect(page.GetByTestId("app-status")).ToBeVisibleAsync(new() { Timeout = 30_000 });
+        Assert.Equal("android-app://com.whatsapp/",
+            await page.EvaluateAsync<string>("document.referrer"));
+        Assert.Equal("manual", await page.EvaluateAsync<string>("urabaApp.install.state().mode"));
+        await Expect(page.GetByTestId("app-status-app-valor")).ToHaveTextAsync("Instalar");
+        await Expect(page.GetByTestId("app-status-install")).ToHaveTextAsync("Cómo instalarla");
+    }
+
+    /// <summary>
+    /// El "ahora no" silencia la invitación contextual durante catorce días. La ficha permanente de
+    /// Mi actividad no se toca: es donde se va a mirar el estado a propósito.
+    /// </summary>
+    [Fact]
+    public async Task Dismissal_silences_the_invitation_but_never_the_status_card()
+    {
+        await using var context = await AndroidContext();
+        await context.AddInitScriptAsync(
+            "try { localStorage.setItem('urabaInstalarDescartada', String(Date.now())); } catch {}");
+        var page = await context.NewPageAsync();
+
+        await page.GotoAsync($"{fixture.BaseUrl}/seguimiento");
+        await Expect(page.GetByTestId("app-status")).ToBeVisibleAsync(new() { Timeout = 30_000 });
+        Assert.True(await page.EvaluateAsync<bool>("urabaApp.install.state().dismissed"));
+        await Expect(page.GetByTestId("install-invite")).ToHaveCountAsync(0);
+
+        // Lo que no puede pasar: que el descarte se lleve por delante la ficha y su CTA.
+        await Expect(page.GetByTestId("app-status-app-valor")).ToHaveTextAsync("Instalar");
+        await Expect(page.GetByTestId("app-status-install")).ToHaveTextAsync("Cómo instalarla");
+        await Expect(page.GetByTestId("app-status-install")).ToBeVisibleAsync();
+    }
+
+    /// <summary>
+    /// Visibilidad física, no sólo presencia en el DOM: el control tiene que medir algo, verse y no
+    /// estar tapado, en la pantalla de un teléfono y sin haber hecho ninguna operación antes.
+    /// </summary>
+    [Fact]
+    public async Task The_install_control_is_actually_visible_on_a_phone()
+    {
+        await using var context = await AndroidContext();
+        var page = await context.NewPageAsync();
+        await page.GotoAsync($"{fixture.BaseUrl}/seguimiento");
+        var boton = page.GetByTestId("app-status-install");
+        await Expect(boton).ToBeVisibleAsync(new() { Timeout = 30_000 });
+
+        var medida = await boton.EvaluateAsync<Medida>("""
+            boton => {
+              const c = getComputedStyle(boton), r = boton.getBoundingClientRect();
+              const centro = document.elementFromPoint(
+                Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2));
+              return {
+                ancho: r.width, alto: r.height, opacidad: parseFloat(c.opacity),
+                visibilidad: c.visibility, presentacion: c.display,
+                color: c.color, fondo: c.backgroundColor,
+                propio: boton === centro || boton.contains(centro)
+              };
+            }
+            """);
+        // Objetivo táctil real, no un rastro de 1 px.
+        Assert.True(medida.Ancho >= 88, $"ancho {medida.Ancho}");
+        Assert.True(medida.Alto >= 36, $"alto {medida.Alto}");
+        Assert.Equal(1d, medida.Opacidad);
+        Assert.Equal("visible", medida.Visibilidad);
+        Assert.NotEqual("none", medida.Presentacion);
+        // Texto SELVA sobre fondo SELVA: el fallo que no se ve en una captura de DOM.
+        Assert.NotEqual(medida.Color, medida.Fondo);
+        Assert.True(medida.Propio, "algo tapa el botón en el punto donde se toca");
+    }
+
+    private sealed record Medida
+    {
+        public double Ancho { get; init; }
+        public double Alto { get; init; }
+        public double Opacidad { get; init; }
+        public string Visibilidad { get; init; } = "";
+        public string Presentacion { get; init; } = "";
+        public string Color { get; init; } = "";
+        public string Fondo { get; init; } = "";
+        public bool Propio { get; init; }
     }
 
     /// <summary>
@@ -211,6 +331,30 @@ public sealed class PwaInstallJourneyTests(BrowserFixture fixture) : IClassFixtu
           evento.userChoice = Promise.resolve({ outcome: 'accepted' });
           window.dispatchEvent(evento);
         });
+        """;
+
+    /// <summary>
+    /// Finge que la pestaña ES la aplicación. Playwright no emula display-mode, así que se
+    /// interviene matchMedia y se deja intacto todo lo demás.
+    /// </summary>
+    private const string GuionModoApp = """
+        const originalMatchMedia = window.matchMedia.bind(window);
+        window.matchMedia = consulta => /display-mode:\s*standalone/.test(consulta)
+          ? { matches: true, media: consulta, onchange: null,
+              addEventListener() {}, removeEventListener() {},
+              addListener() {}, removeListener() {}, dispatchEvent() { return false; } }
+          : originalMatchMedia(consulta);
+        """;
+
+    /// <summary>
+    /// Llegar desde otra aplicación de Android. Es lo que hace Chrome con cualquier enlace tocado
+    /// dentro de WhatsApp o del correo, y no distingue de un TWA por el referrer.
+    /// </summary>
+    private const string GuionReferrerDeApp = """
+        try {
+          Object.defineProperty(document, 'referrer',
+            { get: () => 'android-app://com.whatsapp/', configurable: true });
+        } catch {}
         """;
 
     /// <summary>

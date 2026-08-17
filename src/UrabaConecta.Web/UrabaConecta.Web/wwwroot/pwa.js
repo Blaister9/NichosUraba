@@ -26,11 +26,18 @@
   const leer = clave => { try { return localStorage.getItem(clave); } catch { return null; } };
   const borrar = clave => { try { localStorage.removeItem(clave); } catch { } };
 
+  /* Correr como aplicación es algo que se comprueba ahora, no que se recuerda: lo dice el modo de
+     presentación que informa el propio navegador.
+
+     Aquí había también document.referrer.startsWith('android-app://'). Chrome de Android pone ese
+     referrer a CUALQUIER enlace abierto desde otra aplicación —WhatsApp, el correo, las notas—,
+     que es exactamente como llega la gente a la Demo. Concluíamos "ya está instalada", quitábamos
+     el botón del DOM y la persona se quedaba sin ninguna salida. Un TWA de verdad ya se declara
+     con display-mode: standalone, así que no se pierde ningún caso legítimo. */
   const enModoApp = () =>
     ['standalone', 'minimal-ui', 'fullscreen', 'window-controls-overlay']
       .some(modo => window.matchMedia(`(display-mode: ${modo})`).matches) ||
-    window.navigator.standalone === true ||
-    document.referrer.startsWith('android-app://');
+    window.navigator.standalone === true;
 
   const ua = navigator.userAgent || '';
   const esAndroid = /Android/i.test(ua);
@@ -98,9 +105,6 @@
     return { menu: '', steps: [] };
   };
 
-  /** Si el navegador vuelve a ofrecer instalar es que no está instalada: la marca se cae sola. */
-  const instalada = () => enModoApp() || leer(INSTALADA) === '1';
-
   const descartada = () => {
     const cuando = Number(leer(DESCARTADA));
     if (!cuando) return false;
@@ -109,13 +113,18 @@
 
   const estado = () => {
     const pasos = camino();
+    // Dos cosas distintas: correr como aplicación se comprueba; haberla instalado alguna vez sólo
+    // se recuerda. La marca sirve para rotular el estado, nunca para retirar la ayuda: si la marca
+    // quedó de una instalación que ya no existe, quien mira esta pestaña necesita el camino igual.
+    const comoApp = enModoApp();
     let mode;
-    if (instalada()) mode = 'installed';
+    if (comoApp || leer(INSTALADA) === '1') mode = 'installed';
     else if (oferta) mode = 'native';
     else if (pasos.steps.length > 0) mode = 'manual';
     else mode = 'unavailable';
     return {
       mode,
+      runningAsApp: comoApp,
       dismissed: descartada(),
       platform: plataforma(),
       browser: navegador(),

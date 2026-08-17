@@ -19,6 +19,13 @@ public sealed record AppInstallState
     /// <summary>La persona ya dijo "ahora no" y todavía corre el plazo de silencio.</summary>
     public bool Dismissed { get; init; }
 
+    /// <summary>
+    /// Esta pestaña ES la aplicación, comprobado ahora por el modo de presentación. Distinto de
+    /// <see cref="Installed"/>, que también es cierto cuando sólo recordamos una instalación
+    /// anterior: entonces seguimos estando en el navegador y la ayuda para instalar hace falta.
+    /// </summary>
+    public bool RunningAsApp { get; init; }
+
     public string Platform { get; init; } = "";
     public string Browser { get; init; } = "";
 

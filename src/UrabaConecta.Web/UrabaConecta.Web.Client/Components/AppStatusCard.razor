@@ -16,12 +16,16 @@
             <dt>App</dt>
             <dd>
                 <span class="estado-pastilla @ClaseApp" data-testid="app-status-app-valor">@EtiquetaApp</span>
+                @* El camino manual se ofrece siempre que exista y no estemos ya dentro de la
+                   aplicación. Antes se pedía Mode == "manual", así que cualquier conclusión de
+                   "instalada" —incluida una heredada y equivocada— borraba el botón del DOM y
+                   dejaba la pantalla sin salida. Ahora sólo lo retira estar de verdad en la app. *@
                 @if (instalacion is { Mode: "native" })
                 {
                     <button type="button" class="secondary" data-uraba-instalar="true"
                             data-testid="app-status-install">Instalar</button>
                 }
-                else if (instalacion is { Mode: "manual" })
+                else if (instalacion is { Steps.Count: > 0, RunningAsApp: false })
                 {
                     <button type="button" class="secondary" aria-expanded="@pasosVisibles"
                             aria-controls="@idPasos" @onclick="() => pasosVisibles = !pasosVisibles"
@@ -86,7 +90,11 @@
 
     private string DescripcionApp => instalacion switch
     {
-        { Mode: "installed" } => "La abres desde el icono, como cualquier otra aplicación.",
+        { Mode: "installed", RunningAsApp: true } => "La abres desde el icono, como cualquier otra aplicación.",
+        // Recordamos haberla instalado, pero esto es una pestaña del navegador. Si el icono no está
+        // —porque se desinstaló, o porque es otro teléfono— los pasos siguen a mano.
+        { Mode: "installed" } => "Ya la instalaste en este dispositivo. Si no encuentras el icono, "
+            + "aquí tienes los pasos otra vez.",
         { Mode: "native" or "manual" } => "Ten tus turnos, citas y pedidos a mano, sin escribir la dirección.",
         { Mode: "unavailable" } => "Este navegador no instala aplicaciones. Puedes seguir usándola aquí igual.",
         _ => "Estamos comprobando este dispositivo."
