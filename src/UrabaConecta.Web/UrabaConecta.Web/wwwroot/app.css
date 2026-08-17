@@ -1839,40 +1839,128 @@ body:has(.ficha-hero) .back-link { color: rgb(255 253 249 / 78%) }
 }
 .site-header.is-home .header-search { display: none }
 .footer-home { background: var(--uc-jungle) }
-.ahora-context {
-    position: sticky; top: 57px; z-index: 16; display: flex; align-items: center;
-    justify-content: space-between; min-height: 58px; padding: .45rem 1rem;
-    border-bottom: 0; background: rgb(12 22 19 / 92%);
-    backdrop-filter: blur(14px);
+/* RECORRIDO GUIADO — la pantalla contesta una pregunta a la vez.
+   Los tres pasos comparten el shell de selva y se distinguen por el peso de lo que hay que tocar:
+   filas compactas para el lugar, bloques altos para lo que se busca, y fotografía a sangre para los
+   resultados. Ese cambio de peso es lo que informa del avance, y es la razón de que no haga falta
+   escribir "Paso 2 de 3" en ninguna parte. */
+/* El margen negativo de .ahora-home existía para que la barra pegajosa de ubicación se uniera a la
+   cabecera y las dos leyeran como una sola banda oscura. Sin esa barra lo único que produce es
+   contenido pasando por debajo de un encabezado opaco, así que aquí se cancela. */
+.ahora-home.guided { margin-top: 0 }
+.guided-step { padding: .5rem 1rem 1.5rem }
+.guided-results-step { padding: .5rem 0 0 }
+.guided-boot { padding: 1rem }
+.guided-boot .skeleton { display: block; height: 22rem; border-radius: var(--radio-lg);
+    background: linear-gradient(90deg, var(--uc-jungle-soft) 25%, #22332C 50%, var(--uc-jungle-soft) 75%);
+    background-size: 200% 100% }
+/* La pregunta es el titular de la pantalla, y en el primer viewport no comparte sitio con nada más
+   que un patrocinado del alto de una fila. */
+.guided-ask { margin: .85rem 0 .7rem; font-size: var(--t-27); color: var(--uc-paper) }
+
+/* PATROCINADO EN LA ENTRADA — una sola pieza, marcada antes que nombrada: se lee "Patrocinado"
+   antes que el negocio. */
+.guided-banner {
+    display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: .7rem; align-items: center;
+    min-height: 72px; padding: .5rem .6rem; border-radius: 14px;
+    background: var(--uc-jungle-soft); color: var(--uc-paper); text-decoration: none;
 }
-.location-trigger, .ahora-search {
-    display: inline-flex; min-height: var(--alto-tocable); align-items: center; gap: .5rem; border: 0;
-    background: transparent; color: var(--uc-paper); text-decoration: none;
+.guided-banner img { width: 56px; height: 56px; border-radius: 10px; object-fit: cover }
+.guided-banner-art { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 10px;
+    background: rgb(255 253 249 / 8%); color: rgb(255 253 249 / 55%) }
+.guided-banner-copy { display: grid; min-width: 0 }
+.guided-banner-copy small { color: rgb(255 253 249 / 62%); font-size: var(--t-11);
+    font-weight: var(--p-titular); letter-spacing: .07em; text-transform: uppercase }
+.guided-banner-copy strong { overflow: hidden; font-size: var(--t-15); white-space: nowrap; text-overflow: ellipsis }
+.guided-banner-copy > span { overflow: hidden; color: var(--uc-amber); font-size: var(--t-13);
+    white-space: nowrap; text-overflow: ellipsis; font-variant-numeric: tabular-nums }
+
+/* PASO 1 — filas, no una rejilla de tarjetas grandes: un municipio es un nombre, y cuatro nombres en
+   columna se recorren de un barrido sin que ninguno pese más que otro. */
+.guided-places { display: grid; gap: .3rem }
+.guided-place {
+    display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: .75rem; align-items: center;
+    min-height: 64px; padding: .5rem .7rem; border-radius: 14px;
+    background: rgb(255 253 249 / 7%); color: var(--uc-paper); text-decoration: none;
+    transition: background .14s ease, transform .12s ease;
 }
-.location-trigger { padding: .2rem 0; cursor: pointer; text-align: left }
-.location-trigger > span { display: grid; line-height: 1.05 }
-.location-trigger small { color: rgb(255 253 249 / 58%); font-size: var(--t-11); font-weight: var(--p-fuerte); text-transform: uppercase; letter-spacing: .08em }
-.location-trigger strong { max-width: 13rem; overflow: hidden; font-family: var(--fuente-titular);
-    font-size: var(--t-17); font-weight: var(--p-titular); letter-spacing: -.03em; white-space: nowrap; text-overflow: ellipsis }
-.ahora-search { padding: .35rem .15rem .35rem .7rem; font-size: var(--t-13); font-weight: var(--p-fuerte) }
-/* La cinta de filtros vivía en una banda blanca que partía la pantalla en dos justo antes de la
-   primera fotografía. Ahora es parte del mismo shell oscuro y sólo el chip elegido se ilumina. */
-.feed-filters {
-    position: sticky; top: 115px; z-index: 15; display: flex; gap: .3rem; overflow-x: auto;
-    padding: .35rem 1rem .55rem; background: rgb(12 22 19 / 92%); scrollbar-width: none;
-    backdrop-filter: blur(14px);
+.guided-place:hover { background: rgb(255 253 249 / 13%) }
+.guided-place:active { transform: scale(.99) }
+.guided-place strong { font-family: var(--fuente-titular); font-size: var(--t-21);
+    font-weight: var(--p-titular); letter-spacing: -.02em }
+.guided-place-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%;
+    background: rgb(255 253 249 / 10%); color: var(--uc-paper) }
+.guided-place-all { margin-top: .45rem; border: 1px solid rgb(255 253 249 / 22%); background: transparent }
+.guided-place-all strong { font-size: var(--t-17) }
+/* Anunciado y no enlazado: un municipio sin negocios publicados no lleva a ninguna parte, y decirlo
+   cuesta menos que el toque que termina en una pantalla vacía. */
+.guided-place.proximamente { background: transparent; color: rgb(255 253 249 / 45%) }
+.guided-place.proximamente .guided-place-icon { background: rgb(255 253 249 / 5%); color: rgb(255 253 249 / 40%) }
+.guided-place.proximamente small { color: rgb(255 253 249 / 45%); font-size: var(--t-11);
+    font-weight: var(--p-fuerte); letter-spacing: .06em; text-transform: uppercase }
+/* Secundaria de verdad: sin fondo, sin peso y debajo de las opciones. */
+.guided-locate {
+    display: inline-flex; min-height: var(--alto-tocable); align-items: center; gap: .5rem;
+    margin-top: 1rem; padding: .4rem .2rem; border: 0; background: transparent;
+    color: rgb(255 253 249 / 70%); font-size: var(--t-13); font-weight: var(--p-fuerte); cursor: pointer;
 }
-.feed-filters::-webkit-scrollbar { display: none }
-.feed-filters button {
-    flex: 0 0 auto; min-height: var(--alto-tocable); padding: .35rem .95rem; border: 0; border-radius: var(--radio-pill);
-    background: rgb(255 253 249 / 10%); color: rgb(255 253 249 / 76%); font-size: var(--t-13);
-    font-weight: var(--p-fuerte); cursor: pointer;
-    transition: background .14s ease, color .14s ease, transform .12s ease;
+.guided-locate:hover:not(:disabled) { color: var(--uc-paper) }
+.guided-locate:disabled { opacity: .5; cursor: default }
+.guided-note { margin: .3rem 0 0; color: rgb(255 253 249 / 70%); font-size: var(--t-13) }
+
+/* CONTEXTO — lo ya decidido, tocable para deshacerlo. Es el botón atrás escrito con palabras: el
+   municipio devuelve al paso 1 y la categoría al paso 2. */
+.guided-toolbar { padding: 0 1rem }
+.guided-context { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; padding-top: .35rem }
+.guided-chip {
+    display: inline-flex; min-height: var(--alto-tocable); align-items: center; gap: .4rem;
+    padding: .3rem .7rem; border-radius: var(--radio-pill); background: rgb(255 253 249 / 12%);
+    color: var(--uc-paper); text-decoration: none; transition: background .14s ease;
 }
-/* Sobre selva el chip elegido se lee mejor en papel que en verde: el verde queda para el botón
-   que hace algo, y la cinta sólo dice dónde estás mirando. */
-.feed-filters button.active { background: var(--uc-paper); color: var(--uc-jungle) }
-.feed-filters button:active { transform: scale(.96) }
+.guided-chip:hover { background: rgb(255 253 249 / 20%) }
+.guided-chip strong { max-width: 11rem; overflow: hidden; font-size: var(--t-13);
+    font-weight: var(--p-titular); white-space: nowrap; text-overflow: ellipsis }
+.guided-back { display: inline-grid; place-items: center; width: var(--alto-tocable);
+    height: var(--alto-tocable); border-radius: 50%; color: rgb(255 253 249 / 78%); text-decoration: none }
+.guided-back:hover { background: rgb(255 253 249 / 12%); color: var(--uc-paper) }
+
+/* PASO 2 — bloques altos: aquí la decisión es visual y el icono manda sobre el nombre. Sin conteo,
+   sin descripción y sin ficha de negocio. */
+.guided-categories { display: grid; gap: .5rem }
+.guided-category {
+    display: grid; align-content: center; justify-items: center; gap: .5rem; min-height: 104px;
+    padding: 1rem; border-radius: var(--radio-lg); background: rgb(255 253 249 / 7%);
+    color: var(--uc-paper); text-align: center; text-decoration: none;
+    transition: background .14s ease, transform .12s ease;
+}
+.guided-category:hover { background: rgb(255 253 249 / 13%) }
+.guided-category:active { transform: scale(.99) }
+.guided-category-art { color: var(--uc-paper); opacity: .92 }
+.guided-category strong { font-family: var(--fuente-titular); font-size: var(--t-21);
+    font-weight: var(--p-titular); letter-spacing: -.02em }
+
+/* BÚSQUEDA — acelerador y no puerta: aparece con los resultados ya en pantalla y filtra lo que hay.
+   Nadie está obligado a escribir nada. */
+.guided-search {
+    display: flex; align-items: center; gap: .55rem; margin: .55rem 0 .7rem; padding: 0 .85rem;
+    border: 1px solid rgb(255 253 249 / 20%); border-radius: var(--radio-pill);
+    background: rgb(255 253 249 / 7%); color: rgb(255 253 249 / 62%);
+}
+.guided-search:focus-within { border-color: rgb(255 253 249 / 45%) }
+.guided-search input {
+    flex: 1; min-width: 0; min-height: var(--alto-tocable); border: 0; background: transparent;
+    color: var(--uc-paper); font-size: var(--t-15);
+}
+.guided-search input::placeholder { color: rgb(255 253 249 / 52%) }
+.guided-search input:focus { outline: 0 }
+.guided-search input:disabled { cursor: default }
+
+.guided-empty { padding: 2rem 0; color: var(--uc-paper) }
+.guided-empty h2 { margin: 0 0 .5rem; font-size: var(--t-21); color: var(--uc-paper) }
+.guided-empty p { margin: 0 0 1rem; color: rgb(255 253 249 / 70%) }
+.guided-empty .button-link { background: var(--uc-paper); border-color: var(--uc-paper); color: var(--uc-jungle) }
+.guided-empty .tertiary, .quiet-feed .tertiary { display: inline-block; margin-left: .75rem;
+    color: rgb(255 253 249 / 70%) }
 .ahora-layout { display: grid; align-items: start }
 .feed-column { width: 100%; max-width: 780px; margin-inline: auto }
 .feed-piece { position: relative; margin: 0; padding: 0 0 1.1rem; background: var(--uc-jungle) }
@@ -1935,7 +2023,9 @@ body:has(.ficha-hero) .back-link { color: rgb(255 253 249 / 78%) }
 /* 27px sobre fotografía, tal cual: un clamp fluido devolvía 23.4px a 390px de ancho, que no es
    ningún paso de la escala aprobada. El titular crece a 34 en escritorio y en ningún punto
    intermedio. */
-.feed-copy h1 { max-width: 28ch; margin: 0 0 .45rem; font-size: var(--t-27); color: var(--uc-paper) }
+/* Es h2 y no h1: el h1 de la pantalla es la pregunta del recorrido, y una pila de h1 —uno por
+   escena— dejaba a FocusOnNavigate llevando el foco a una fotografía en vez de al encabezado. */
+.feed-copy h2 { max-width: 28ch; margin: 0 0 .45rem; font-size: var(--t-27); color: var(--uc-paper) }
 /* Sobre selva el ámbar puro ya es legible, así que el dato operativo recupera el color de la
    paleta en vez de la versión oscurecida que hacía falta sobre papel. */
 .feed-state { margin: 0; color: var(--uc-amber); font-size: var(--t-15); font-weight: var(--p-titular);
@@ -1968,39 +2058,12 @@ body:has(.ficha-hero) .back-link { color: rgb(255 253 249 / 78%) }
 .feed-more:hover { background: rgb(255 253 249 / 10%) }
 .quiet-feed { min-height: 55vh; padding: 3rem 1.2rem; text-align: center; color: var(--uc-paper) }
 .quiet-feed .icono { margin-inline: auto; color: rgb(255 253 249 / 55%) }
-.quiet-feed h1 { margin: .7rem auto; font-size: var(--t-27); color: var(--uc-paper) }
+.quiet-feed h2 { max-width: 28ch; margin: .7rem auto; font-size: var(--t-27); color: var(--uc-paper) }
 .quiet-feed p { max-width: 35ch; margin: 0 auto 1rem; color: rgb(255 253 249 / 70%) }
 .quiet-feed .secondary { background: var(--uc-paper); border-color: var(--uc-paper); color: var(--uc-jungle) }
 .ahora-error { margin: 1rem }
-.skeleton-feed { min-height: 620px }
-/* El esqueleto también nace oscuro: si arrancara claro, cada carga daría un fogonazo blanco justo
-   antes de la primera fotografía. */
-.skeleton-feed .skeleton { display: block; height: 465px; border-radius: 0;
-    background: linear-gradient(90deg, var(--uc-jungle-soft) 25%, #22332C 50%, var(--uc-jungle-soft) 75%);
-    background-size: 200% 100% }
 
 .ahora-rail { display: none }
-.location-backdrop { position: fixed; inset: 0; z-index: 59; background: rgb(12 22 19 / 52%); animation: fade-in .16s ease-out both }
-.location-sheet {
-    position: fixed; right: 0; bottom: 0; left: 0; z-index: 60; max-height: calc(100svh - 2rem); overflow-y: auto;
-    padding: 1rem 1rem calc(var(--alto-nav) + 1rem); border-radius: var(--radio-lg) var(--radio-lg) 0 0;
-    background: var(--uc-paper);
-    box-shadow: var(--sombra-lg); animation: sheet-up .2s cubic-bezier(.2,.8,.2,1) both;
-}
-.location-sheet header { display: flex; align-items: start; justify-content: space-between; gap: 1rem }
-.location-sheet h2 { margin: 0 0 .75rem; font-size: var(--t-21)}
-.sheet-close { width: var(--alto-tocable); height: var(--alto-tocable); border: 0; border-radius: 50%; background: var(--superficie-2); font-size: var(--t-27); cursor: pointer }
-.use-location, .location-options button {
-    display: flex; width: 100%; min-height: 52px; align-items: center; gap: .7rem; padding: .55rem .65rem;
-    border: 0; border-radius: 14px; background: transparent; color: var(--texto); text-align: left; cursor: pointer;
-}
-.use-location { margin-bottom: .35rem; background: var(--marca-050); color: var(--marca-800) }
-.use-location > span { display: grid }
-.use-location small { color: var(--texto-suave); font-size: var(--t-11)}
-.location-options { display: grid; gap: .1rem }
-.location-options button span { flex: 1 }
-.location-options button.active { background: var(--superficie-2); color: var(--marca-800); font-weight: var(--p-titular) }
-.location-options button:active, .use-location:active { transform: scale(.985) }
 
 .push-prompt.is-compact { align-items: flex-start; gap: .55rem; margin: .45rem 0 0; padding: .7rem;
     border: 0; border-radius: 14px; background: var(--superficie-2); box-shadow: none }
@@ -2024,19 +2087,21 @@ body:has(.ficha-hero) .back-link { color: rgb(255 253 249 / 78%) }
 .feed-entry:nth-child(4) { animation-delay: .12s }
 .feed-entry:nth-child(5) { animation-delay: .16s }
 .feed-entry:nth-child(6) { animation-delay: .2s }
-/* CAMBIO DE MUNICIPIO Y DE FILTRO — el feed no salta de un contenido a otro: se funde. Blazor
-   vuelve a renderizar la columna con una clave distinta por municipio y filtro, así que la
+/* CAMBIO DE MUNICIPIO Y DE CATEGORÍA — el feed no salta de un contenido a otro: se funde. Blazor
+   vuelve a renderizar la columna con una clave distinta por municipio y categoría, así que la
    animación se reinicia sola y el crossfade ocurre sin tocar el modelo de navegación. */
 .feed-column { animation: feed-swap .18s ease-out both }
 .feed-column[data-swap="place"] { animation: feed-swap-place .22s cubic-bezier(.2,.8,.2,1) both }
+/* Cada paso del recorrido entra igual que una escena del feed: el gesto es el mismo, así que la
+   transición también. Lugar → categorías sube; categorías → resultados se funde. */
+.guided-step { animation: feed-swap .18s ease-out both }
+.guided[data-paso="categoria"] .guided-step { animation: feed-swap-place .22s cubic-bezier(.2,.8,.2,1) both }
 .ahora-home.is-leaving { opacity: .72; transform: translateY(-3px); transition: opacity .12s ease, transform .12s ease }
 @keyframes feed-enter { from { opacity: 0 } to { opacity: 1 } }
 @keyframes feed-piece-in { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: translateY(0) } }
 @keyframes feed-swap { from { opacity: 0 } to { opacity: 1 } }
 @keyframes feed-swap-place { from { opacity: 0; transform: translateY(14px) } to { opacity: 1; transform: translateY(0) } }
 @keyframes live-pulse { 50% { opacity: .55; transform: scale(.82) } }
-@keyframes sheet-up { from { transform: translateY(20px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
-@keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
 
 @media (max-width: 900px) {
     .page-shell:has(.ahora-home) { width: 100%; padding-right: 0; padding-left: 0; padding-bottom: 0 }
@@ -2050,14 +2115,23 @@ body:has(.ficha-hero) .back-link { color: rgb(255 253 249 / 78%) }
    pálido que dejó de existir. */
 @media (min-width: 901px) {
     /* El armazón deja de estar limitado a los 1120px del resto del producto: la Home ya no es una
-       página con márgenes, es una sala. La cinta y la barra de ubicación se alinean con el ancho
-       exacto de la rejilla —780 + 320 + 32— para que el borde izquierdo de la fotografía y el de
-       los filtros sean la misma línea. */
+       página con márgenes, es una sala. La barra de contexto se alinea con el ancho exacto de la
+       rejilla —780 + 320 + 32— para que el borde izquierdo de la fotografía y el del contexto sean
+       la misma línea. */
     body:has(.ahora-home) .page-shell { width: 100%; max-width: none; padding-inline: 0 }
     .ahora-home { max-width: none; width: 100%; margin-top: calc(var(--e5) * -1); padding: 1.25rem 1.25rem 0 }
-    .ahora-context, .feed-filters { position: static; width: min(1132px, 100%); margin-inline: auto; padding-inline: 0; background: transparent; backdrop-filter: none }
-    .ahora-context { border-bottom: 0 }
-    .feed-filters { padding-top: .15rem; padding-bottom: 1rem }
+
+    /* La decisión no se estira a 1400px. En escritorio los pasos 1 y 2 conservan composición
+       editorial —una columna centrada y aire alrededor— porque cuatro nombres repartidos en un
+       monitor entero se leen peor, no mejor. El ancho se aprovecha donde hay algo que mirar: la
+       fotografía de los resultados. */
+    .guided-place-step, .guided-category-step { width: min(560px, 100%); margin-inline: auto; padding-top: 2rem }
+    .guided-ask { margin: 1.15rem 0 .9rem; font-size: var(--t-34) }
+    .guided-categories { grid-template-columns: repeat(3, minmax(0, 1fr)) }
+    .guided-category { min-height: 168px }
+    .guided-results-step { padding: 0 }
+    .guided-toolbar { width: min(1132px, 100%); margin-inline: auto; padding-inline: 0 }
+    .guided-search { width: min(420px, 100%); margin-block: .7rem 1.1rem }
     .ahora-layout { grid-template-columns: minmax(0, 780px) 320px; justify-content: center; gap: 2rem }
     .feed-column { margin: 0 }
     .feed-piece { border-radius: var(--radio-0) }
@@ -2068,7 +2142,7 @@ body:has(.ficha-hero) .back-link { color: rgb(255 253 249 / 78%) }
     .feed-media { height: 520px; border-radius: var(--radio-0) }
     .feed-primary .feed-media { height: 620px }
     .feed-copy { padding: 1.1rem 0 1.5rem }
-    .feed-copy h1, .feed-primary .feed-copy h1 { font-size: var(--t-34) }
+    .feed-copy h2, .feed-primary .feed-copy h2 { font-size: var(--t-34) }
     .capture-piece { margin-block: 8px; padding: 1.75rem }
 
     /* El rail es una sola superficie, un tono por encima de la selva del shell. El número manda y
@@ -2084,8 +2158,12 @@ body:has(.ficha-hero) .back-link { color: rgb(255 253 249 / 78%) }
         line-height: 1.02; letter-spacing: -.03em; color: var(--uc-amber); font-variant-numeric: tabular-nums }
     .ahora-rail section span { color: rgb(255 253 249 / 70%); font-size: var(--t-13) }
     .ahora-rail .rail-place { color: var(--uc-paper); font-size: var(--t-27) }
-    .ahora-rail .inline-button { justify-self: start; margin-top: .55rem; min-height: var(--alto-tocable);
-        background: rgb(255 253 249 / 12%); border-color: rgb(255 253 249 / 28%); color: var(--uc-paper) }
+    /* Es un enlace y no un botón: navega al paso 1, así que funciona también antes de que el
+       circuito conecte. Por eso necesita la caja que un botón traía puesta. */
+    .ahora-rail .inline-button { display: inline-flex; align-items: center; justify-self: start;
+        margin-top: .55rem; min-height: var(--alto-tocable); border: 1px solid rgb(255 253 249 / 28%);
+        border-radius: var(--radio-pill); background: rgb(255 253 249 / 12%); color: var(--uc-paper);
+        font-size: var(--t-13); font-weight: var(--p-fuerte); text-decoration: none }
     .ahora-rail .inline-button:hover { background: rgb(255 253 249 / 20%) }
     .rail-activity { display: flex; align-items: center; gap: .65rem; padding: 1.1rem 1.2rem;
         border-top: 1px solid rgb(255 253 249 / 10%); background: transparent; color: var(--uc-paper); text-decoration: none }

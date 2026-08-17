@@ -168,6 +168,9 @@ builder.Services.AddScoped<IPlatformAdministrationUseCases, PlatformAdministrati
 builder.Services.AddScoped<IOwnerDashboardUseCases, OwnerDashboardUseCases>();
 builder.Services.AddScoped<IQueueChangeNotifier, SignalRQueueChangeNotifier>();
 builder.Services.AddScoped<IUrabaConectaApi, ServerUrabaConectaApi>();
+// La preferencia de municipio se lee de la petición: es lo que permite al prerender entregar el
+// paso correcto del recorrido guiado en la primera pintura, sin el salto de una visita siguiente.
+builder.Services.AddScoped<UrabaConecta.Web.Client.Services.IPlacePreference, CookiePlacePreference>();
 builder.Services.AddSignalR();
 builder.Services.AddMemoryCache();
 builder.Services.Configure<PublicCacheOptions>(builder.Configuration.GetSection(PublicCacheOptions.SectionName));

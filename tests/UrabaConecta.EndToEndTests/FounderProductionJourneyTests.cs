@@ -110,7 +110,9 @@ public sealed class FounderProductionJourneyTests(BrowserFixture fixture) : ICla
         // El negocio todavía no aparece en el directorio público.
         await using var visitorContext = await fixture.Browser.NewContextAsync();
         var visitor = await visitorContext.NewPageAsync();
-        await visitor.GotoAsync($"{fixture.BaseUrl}/");
+        // El directorio público es /explorar. La entrada del sitio pregunta primero dónde y qué
+        // busca la persona, así que no es —ni era— el sitio donde comprobar si un negocio existe.
+        await visitor.GotoAsync($"{fixture.BaseUrl}/explorar");
         await Expect(visitor.GetByText($"Piloto {slug}", new() { Exact = true })).ToHaveCountAsync(0);
 
         // 10. La socia envía a revisión; no puede publicar por sí misma.
@@ -144,7 +146,7 @@ public sealed class FounderProductionJourneyTests(BrowserFixture fixture) : ICla
         await Expect(admin.Locator("[data-testid=ficha-estado]")).ToHaveTextAsync("Publicado");
 
         // 13. El negocio aparece públicamente, con su logo y su ficha completa.
-        await visitor.GotoAsync($"{fixture.BaseUrl}/");
+        await visitor.GotoAsync($"{fixture.BaseUrl}/explorar");
         await Expect(visitor.GetByText($"Piloto {slug}", new() { Exact = false }).First).ToBeVisibleAsync();
         await visitor.GotoAsync($"{fixture.BaseUrl}/negocios/{slug}");
         await Expect(visitor.GetByAltText("Imagen ficticia de prueba").First).ToBeVisibleAsync();
@@ -196,7 +198,9 @@ public sealed class FounderProductionJourneyTests(BrowserFixture fixture) : ICla
             new PlatformBusinessStateRequest { Version = current.Version, Reason = "Pausa del recorrido" })).Body,
             Json)!;
         Assert.Equal("Suspended", suspended.Status);
-        await visitor.GotoAsync($"{fixture.BaseUrl}/");
+        // El directorio público es /explorar. La entrada del sitio pregunta primero dónde y qué
+        // busca la persona, así que no es —ni era— el sitio donde comprobar si un negocio existe.
+        await visitor.GotoAsync($"{fixture.BaseUrl}/explorar");
         await Expect(visitor.GetByText($"Piloto {slug}", new() { Exact = true })).ToHaveCountAsync(0);
         var blocked = await Fetch(visitor, "POST", $"/api/v1/public/businesses/{slug}/appointments",
             AppointmentBody(serviceId, slots.Slots[^1].Start, "Cliente bloqueado", legal.PolicyVersion));
@@ -206,7 +210,7 @@ public sealed class FounderProductionJourneyTests(BrowserFixture fixture) : ICla
         var reactivated = await Fetch(admin, "POST", $"/api/v1/admin/businesses/{businessId}/reactivate",
             new PlatformBusinessStateRequest { Version = suspended.Version });
         Assert.Equal(200, reactivated.Status);
-        await visitor.GotoAsync($"{fixture.BaseUrl}/");
+        await visitor.GotoAsync($"{fixture.BaseUrl}/explorar");
         await Expect(visitor.GetByText($"Piloto {slug}", new() { Exact = false }).First).ToBeVisibleAsync();
 
         var history = JsonSerializer.Deserialize<List<BusinessStatusChangeDto>>(

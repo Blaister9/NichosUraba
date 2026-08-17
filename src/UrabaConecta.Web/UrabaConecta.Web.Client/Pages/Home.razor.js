@@ -1,11 +1,19 @@
-const preferenceKey = 'urabaPreferredMunicipality';
-const filterKey = 'urabaAhoraFilter';
+// El mismo nombre que lee CookiePlacePreference en el servidor. Si cambia aquí, cambia allí.
+const placeCookie = 'uc_lugar';
 const scrollKey = 'urabaAhoraScroll';
 const returnKey = 'urabaAhoraReturn';
+
+// Restos de cuando la preferencia vivía en el navegador y el servidor no podía leerla. Se limpian
+// una vez para que no quede una segunda fuente capaz de contradecir a la cookie.
+const retired = ['urabaPreferredMunicipality', 'urabaAhoraFilter'];
 
 export function initialize() {
   if (!globalThis.__urabaAhoraScrollBound) {
     globalThis.__urabaAhoraScrollBound = true;
+    try {
+      localStorage.removeItem(retired[0]);
+      sessionStorage.removeItem(retired[1]);
+    } catch { /* almacenamiento bloqueado: nada que limpiar */ }
     document.addEventListener('click', event => {
       if (!event.target.closest?.('.feed-business-link')) return;
       sessionStorage.setItem(scrollKey, String(window.scrollY));
@@ -17,10 +25,6 @@ export function initialize() {
     document.addEventListener('enhancedload', queueScrollRestore);
   }
   queueScrollRestore();
-  return {
-    municipality: localStorage.getItem(preferenceKey) || '',
-    vertical: sessionStorage.getItem(filterKey) || 'ahora'
-  };
 }
 
 function queueScrollRestore() {
@@ -45,14 +49,13 @@ function queueScrollRestore() {
   requestAnimationFrame(waitForFeed);
 }
 
-export function rememberMunicipality(slug) {
-  if (slug) localStorage.setItem(preferenceKey, slug);
-  else localStorage.removeItem(preferenceKey);
-}
-
-export function rememberVertical(vertical) {
-  if (vertical && vertical !== 'ahora') sessionStorage.setItem(filterKey, vertical);
-  else sessionStorage.removeItem(filterKey);
+// Escribir la cookie es lo único que el servidor no puede hacer por su cuenta: cuando la pantalla
+// ya respondió no queda encabezado donde ponerla. Seis meses, sin subdominios y sin viajar en
+// peticiones de terceros.
+export function rememberPlace(slug) {
+  if (!slug) return;
+  const secure = location.protocol === 'https:' ? '; secure' : '';
+  document.cookie = `${placeCookie}=${encodeURIComponent(slug)}; path=/; max-age=15552000; samesite=lax${secure}`;
 }
 
 export function requestLocation() {

@@ -3,37 +3,38 @@ using UrabaConecta.Infrastructure.Persistence;
 
 namespace UrabaConecta.EndToEndTests;
 
-public sealed class CommercialReadinessTests(BrowserFixture fixture) : IClassFixture<BrowserFixture>
+[Collection(PublicSiteCollection.Name)]
+public sealed class CommercialReadinessTests(BrowserFixture fixture)
 {
     private static readonly byte[] TinyPng = Convert.FromBase64String(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
 
     [Fact]
-    public async Task Ahora_feed_opens_with_content_and_location_category_controls_on_mobile()
+    public async Task Guided_results_open_with_content_and_survive_a_visit_to_a_business_on_mobile()
     {
         await using var context = await fixture.Browser.NewContextAsync(new() { ViewportSize = new() { Width = 390, Height = 844 } });
         var page = await context.NewPageAsync();
-        await page.GotoAsync(fixture.BaseUrl);
+        // Los resultados son el tercer paso del recorrido, y llegar por dirección es una de las dos
+        // formas legítimas de estar aquí; la otra —tocando— la cubre GuidedDiscoveryJourneyTests.
+        await page.GotoAsync($"{fixture.BaseUrl}/?lugar=uraba&busco=belleza-cuidado-personal");
 
-        await Assertions.Expect(page.Locator("[data-testid=location-trigger]")).ToBeEnabledAsync();
         await Assertions.Expect(page.Locator("[data-testid=live-feed] [data-testid=feed-piece]").First)
             .ToBeVisibleAsync();
         await Assertions.Expect(page.Locator(".portal-municipalities, .portal-category-grid")).ToHaveCountAsync(0);
         await Assertions.Expect(page.GetByText("Pronto", new() { Exact = true })).ToHaveCountAsync(0);
+        await Assertions.Expect(page.Locator("[data-testid=feed-piece]").First).ToContainTextAsync("Bella");
+        // La geometría se mide con la pantalla ya viva. Antes de que el circuito conecte, Blazor
+        // sustituye el DOM prerenderizado y un elemento medido a mitad de ese cambio no tiene caja:
+        // la aserción de maquetación no diría nada sobre la maquetación. El buscador habilitado es la
+        // señal de que esa sustitución terminó.
+        await Assertions.Expect(page.Locator("[data-testid=results-search]"))
+            .ToBeEnabledAsync(new() { Timeout = 30_000 });
         var firstPiece = await page.Locator("[data-testid=feed-piece]").First.BoundingBoxAsync();
         Assert.NotNull(firstPiece);
-        Assert.True(firstPiece!.Y < 190, $"El contenido empieza demasiado abajo: {firstPiece.Y}");
+        // Sigue empezando arriba, aunque encima haya contexto y búsqueda en vez de una cinta de
+        // filtros: el contenido no puede caer bajo el pliegue.
+        Assert.True(firstPiece!.Y < 240, $"El contenido empieza demasiado abajo: {firstPiece.Y}");
         Assert.True(firstPiece.Height > 480, $"La primera pieza no domina el viewport: {firstPiece.Height}");
-
-        await page.Locator("[data-testid=location-trigger]").ClickAsync();
-        await Assertions.Expect(page.Locator("[data-testid=location-sheet]")).ToBeVisibleAsync();
-        foreach (var name in new[] { "Apartadó", "Carepa", "Chigorodó", "Turbo", "Todo Urabá" })
-            await Assertions.Expect(page.Locator("[data-testid=location-sheet]").GetByText(name, new() { Exact = true }))
-                .ToBeVisibleAsync();
-        await page.Locator("[data-testid=location-sheet]").GetByText("Apartadó", new() { Exact = true }).ClickAsync();
-        await Assertions.Expect(page.Locator("[data-testid=location-trigger]")).ToContainTextAsync("Apartadó");
-        await page.Locator("[data-testid=feed-filters]").GetByRole(AriaRole.Button, new() { Name = "Belleza" }).ClickAsync();
-        await Assertions.Expect(page.Locator("[data-testid=feed-piece]").First).ToContainTextAsync("Bella");
 
         await page.EvaluateAsync("window.scrollTo(0, 260)");
         await page.Locator(".feed-business-link").First.ClickAsync();
@@ -46,11 +47,13 @@ public sealed class CommercialReadinessTests(BrowserFixture fixture) : IClassFix
             returnReady = await page.EvaluateAsync<bool>("() => sessionStorage.getItem('urabaAhoraReturn') === null && Boolean(document.querySelector('[data-testid=feed-piece]'))");
             if (!returnReady) await Task.Delay(50);
         }
-        var returnDebug = await page.EvaluateAsync<string>("() => JSON.stringify({ url: location.href, returning: sessionStorage.getItem('urabaAhoraReturn'), stored: sessionStorage.getItem('urabaAhoraScroll'), filter: sessionStorage.getItem('urabaAhoraFilter'), municipality: localStorage.getItem('urabaPreferredMunicipality'), pieces: document.querySelectorAll('[data-testid=feed-piece]').length, home: Boolean(document.querySelector('.ahora-home')), state: document.querySelector('.quiet-feed,.ahora-error,.skeleton-feed')?.textContent })");
+        var returnDebug = await page.EvaluateAsync<string>("() => JSON.stringify({ url: location.href, returning: sessionStorage.getItem('urabaAhoraReturn'), stored: sessionStorage.getItem('urabaAhoraScroll'), cookie: document.cookie, pieces: document.querySelectorAll('[data-testid=feed-piece]').length, home: Boolean(document.querySelector('.ahora-home')), state: document.querySelector('.quiet-feed,.ahora-error,.guided-boot')?.textContent })");
         var logTail = string.Join(Environment.NewLine, fixture.RecentLog.Split(Environment.NewLine).TakeLast(40));
         Assert.True(returnReady, $"La Home no restauró el feed después de volver desde el negocio: {returnDebug}\n{logTail}");
-        await Assertions.Expect(page.Locator("[data-testid=location-trigger]")).ToContainTextAsync("Apartadó");
-        await Assertions.Expect(page.Locator("[data-testid=feed-filters] button.active")).ToHaveTextAsync("Belleza");
+        // El contexto no se restaura desde almacenamiento efímero: viaja en la dirección, así que
+        // volver de una ficha no puede perderlo.
+        await Assertions.Expect(page.Locator("[data-testid=place-chip]")).ToContainTextAsync("Todo Urabá");
+        await Assertions.Expect(page.Locator("[data-testid=category-chip]")).ToContainTextAsync("Belleza");
         var restoredScroll = await page.EvaluateAsync<int>("window.scrollY");
         Assert.InRange(Math.Abs(restoredScroll - savedScroll), 0, 12);
 

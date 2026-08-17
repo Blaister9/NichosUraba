@@ -1,218 +1,408 @@
 @page "/"
 @rendermode InteractiveServer
 @implements IAsyncDisposable
+@using UrabaConecta.Web.Client.Services
 @inject IUrabaConectaApi Api
 @inject IJSRuntime JS
+@inject NavigationManager Nav
+@inject IPlacePreference RecordedPlace
 @inject PersistentComponentState FeedState
 
-<PageTitle>Ahora en Urabá | UrabáConecta</PageTitle>
+@* DESCUBRIMIENTO GUIADO — una pantalla, tres momentos.
 
-<div class="ahora-home" data-testid="ahora-home">
-    <header class="ahora-context">
-        <button type="button" class="location-trigger" disabled="@(!interactiveReady)" @onclick="() => locationOpen = true"
-                aria-haspopup="dialog" aria-expanded="@locationOpen" data-testid="location-trigger">
-            <Icon Name="ubicacion" Size="16" />
-            <span><small>Ahora en</small><strong>@ActiveMunicipalityName</strong></span>
-            <Icon Name="chevron" Size="16" />
-        </button>
-        <a class="ahora-search" href="/explorar" data-enhance-nav="false">
-            <Icon Name="explorar" Size="22" /><span>Buscar</span>
-        </a>
-    </header>
+   Dónde buscas → qué buscas → qué puedes hacer ahora. No es un formulario de tres pasos: es la
+   misma pantalla contestando una pregunta a la vez, y la dirección dice en cuál va, así que el
+   recorrido se comparte, se recarga y el botón atrás deshace exactamente una decisión.
 
-    <nav class="feed-filters" aria-label="Filtrar lo que pasa ahora" data-testid="feed-filters">
-        @foreach (var filter in Filters)
-        {
-            <button type="button" class="@(activeVertical == filter.Key ? "active" : null)"
-                    disabled="@(!interactiveReady)" aria-pressed="@(activeVertical == filter.Key)"
-                    @onclick="() => SelectFilter(filter.Key)">
-                @filter.Label
-            </button>
-        }
-    </nav>
+       /                              todavía no eligió lugar
+       /?lugar=carepa                 eligió lugar, falta qué
+       /?lugar=carepa&busco=barberia  resultados
+       /?lugar=                       quiere volver a elegir lugar
 
+   Con la dirección vacía manda la cookie de preferencia, que el servidor lee mientras compone el
+   HTML: quien ya eligió una vez recibe su paso 2 en la primera pintura, sin ver pasar el selector
+   de municipio. El feed sigue siendo UNA lectura para los tres momentos —moverse entre ellos no
+   consulta nada— y las categorías salen de los negocios publicados, no de una lista escrita a mano. *@
+<PageTitle>@Titulo | UrabáConecta</PageTitle>
+
+<div class="ahora-home guided" data-paso="@Paso" data-testid="ahora-home">
     @if (loading)
     {
-        <main class="feed-column" aria-busy="true">
-            <article class="feed-piece feed-primary skeleton-feed"><span class="skeleton"></span></article>
-        </main>
+        <div class="guided-boot" aria-busy="true"><span class="skeleton"></span></div>
     }
     else if (error is not null)
     {
         <p class="error ahora-error" role="alert">@error</p>
     }
+    else if (place is null)
+    {
+        @* PASO 1 — la única decisión de la pantalla.
+           Los municipios son enlaces y no botones a propósito: funcionan en el HTML prerenderizado,
+           antes de que el circuito conecte. La decisión principal no puede depender de una conexión. *@
+        <section class="guided-step guided-place-step" data-testid="guided-place">
+            @if (sponsored is { } piece)
+            {
+                <a class="guided-banner" href="@piece.Url" data-enhance-nav="false" data-testid="guided-banner">
+                    @if (piece.ImageUrl is { Length: > 0 } bannerImage)
+                    {
+                        <img src="@bannerImage" alt="@piece.ImageAlt" width="160" height="160" loading="eager" />
+                    }
+                    else
+                    {
+                        <span class="guided-banner-art"><Icon Name="@piece.Icon" Size="26" /></span>
+                    }
+                    <span class="guided-banner-copy">
+                        <small>Patrocinado</small>
+                        <strong>@piece.Headline</strong>
+                        <span>@piece.State</span>
+                    </span>
+                    <Icon Name="flecha" Size="16" />
+                </a>
+            }
+
+            <h1 class="guided-ask">¿Dónde estás buscando?</h1>
+
+            <nav class="guided-places" aria-label="Elegir municipio">
+                @foreach (var option in Places)
+                {
+                    if (option.HasBusinesses)
+                    {
+                        <a class="guided-place" data-place="@option.Look.Tone" href="@PlaceHref(option.Slug)"
+                           data-testid="place-option" @onclick="() => ChoosePlace(PlaceHref(option.Slug))"
+                           @onclick:preventDefault="true">
+                            <span class="guided-place-icon"><Icon Name="@option.Look.Icon" Size="24" /></span>
+                            <strong>@option.Name</strong>
+                            <Icon Name="chevron" Size="16" />
+                        </a>
+                    }
+                    else
+                    {
+                        @* Un municipio sin negocios publicados se anuncia, no se enlaza: un toque que
+                           lleva a una pantalla vacía cuesta más que la línea que lo evita. *@
+                        <span class="guided-place proximamente" data-testid="place-soon">
+                            <span class="guided-place-icon"><Icon Name="@option.Look.Icon" Size="24" /></span>
+                            <strong>@option.Name</strong>
+                            <small>Próximamente</small>
+                        </span>
+                    }
+                }
+                <a class="guided-place guided-place-all" href="@PlaceHref(PlacePreference.Everywhere)"
+                   data-testid="place-option" @onclick="() => ChoosePlace(PlaceHref(PlacePreference.Everywhere))"
+                   @onclick:preventDefault="true">
+                    <span class="guided-place-icon"><Icon Name="ubicacion" Size="24" /></span>
+                    <strong>Todo Urabá</strong>
+                    <Icon Name="chevron" Size="16" />
+                </a>
+            </nav>
+
+            @* Secundaria y apagada. El permiso se pide al tocar aquí y en ningún otro momento. *@
+            <button type="button" class="guided-locate" disabled="@(!interactiveReady || locating)"
+                    @onclick="UseLocation" data-testid="use-location">
+                <Icon Name="ubicacion" Size="18" />
+                <span>@(locating ? "Ubicándote…" : "Usar mi ubicación")</span>
+            </button>
+            @if (locationMessage is not null) { <p class="guided-note" role="status">@locationMessage</p> }
+        </section>
+    }
+    else if (category is null)
+    {
+        @* PASO 2 — el lugar ya está resuelto y se puede volver a tocar. *@
+        <section class="guided-step guided-category-step" data-testid="guided-category">
+            <nav class="guided-context" aria-label="Dónde estás buscando">
+                <a class="guided-chip" href="@ChangePlaceHref" data-testid="place-chip"
+                   @onclick="() => GoTo(ChangePlaceHref)" @onclick:preventDefault="true">
+                    <Icon Name="ubicacion" Size="16" /><strong>@PlaceName</strong><Icon Name="chevron" Size="14" />
+                </a>
+            </nav>
+
+            <h1 class="guided-ask">¿Qué estás buscando?</h1>
+
+            @if (Categories.Count == 0)
+            {
+                <div class="guided-empty" data-testid="guided-empty">
+                    <h2>Estamos sumando negocios en @PlaceName</h2>
+                    <p>Puedes ver lo que ya hay disponible en el resto de Urabá.</p>
+                    <a class="button-link" href="@PlaceHref(PlacePreference.Everywhere)">Ver todo Urabá</a>
+                    <a class="tertiary" href="@ChangePlaceHref">Cambiar municipio</a>
+                </div>
+            }
+            else
+            {
+                <nav class="guided-categories" aria-label="Elegir qué buscas">
+                    @foreach (var option in Categories)
+                    {
+                        <a class="guided-category" data-tono="@CategoryLook.Tone(option.Slug)"
+                           href="@CategoryHref(option.Slug)" data-testid="category-option"
+                           @onclick="() => GoTo(CategoryHref(option.Slug))" @onclick:preventDefault="true">
+                            <span class="guided-category-art"><Icon Name="@CategoryLook.Icon(option.Slug)" Size="40" /></span>
+                            <strong>@option.Name</strong>
+                        </a>
+                    }
+                </nav>
+            }
+        </section>
+    }
     else
     {
-        <div class="ahora-layout">
-            @* La clave compuesta es lo que produce el crossfade del Design Spec: al cambiar de
-               municipio o de filtro, Blazor descarta la columna y monta otra, así que la animación
-               de entrada vuelve a correr sin que nadie la dispare a mano. El modelo de navegación
-               no se toca: sigue siendo la misma pantalla. *@
-            <main class="feed-column" aria-label="Qué puedes hacer ahora" data-testid="live-feed"
-                  @key="@($"{activeMunicipality}|{activeVertical}")" data-swap="@lastSwap">
-                @if (VisiblePieces.Count == 0)
-                {
-                    <section class="quiet-feed">
-                        <Icon Name="reloj" Size="30" />
-                        <h1>¿Buscas algo en @ActiveMunicipalityName?</h1>
-                        <p>No hay novedades útiles con este filtro ahora mismo. Prueba otra categoría o todo Urabá.</p>
-                        <button type="button" class="secondary" @onclick="ClearFilters">Ver todo Urabá</button>
-                    </section>
-                }
-                else
-                {
-                    @foreach (var piece in VisiblePieces)
-                    {
-                        if (piece.Kind == FeedKind.Capture)
-                        {
-                            <article class="capture-piece feed-entry" data-testid="business-capture">
-                                <span class="capture-mark"><Icon Name="tienda" Size="28" /></span>
-                                <div><p class="eyebrow">Para negocios</p><h2>¿Tienes un negocio en Urabá?</h2>
-                                <p>Así podría verse aquí: con fotos, estado y una acción clara.</p></div>
-                                <a class="button-link secondary" href="/para-negocios">Quiero aparecer</a>
-                            </article>
-                        }
-                        else
-                        {
-                            <article class="feed-piece feed-entry @(piece.IsPrimary ? "feed-primary" : null)"
-                                     data-vertical="@piece.Vertical" data-testid="feed-piece">
-                                <a class="feed-media feed-business-link @(piece.ImageUrl is null ? "feed-art" : null)"
-                                   href="@piece.Url" aria-label="@piece.CtaLabel" data-enhance-nav="false">
-                                    @if (piece.ImageUrl is { Length: > 0 } image)
-                                    {
-                                        <img src="@image" alt="@piece.ImageAlt" width="760" height="620"
-                                             loading="@(piece.IsPrimary ? "eager" : "lazy")"
-                                             fetchpriority="@(piece.IsPrimary ? "high" : "auto")" />
-                                    }
-                                    else
-                                    {
-                                        <span class="feed-art-icon"><Icon Name="@piece.Icon" Size="72" /></span>
-                                    }
-                                    <span class="feed-shade" aria-hidden="true"></span>
-                                    @* Tres distintivos y no hay un cuarto. "Promoción" decía qué
-                                       era la pieza, no qué le pasa a quien la mira: lo que importa
-                                       de una promoción es que se puede aprovechar hoy. *@
-                                    <span class="feed-badges">
-                                        @if (piece.IsLive) { <span class="live-badge"><i></i> EN VIVO</span> }
-                                        @if (piece.IsSponsored) { <span class="sponsored-badge">Patrocinado</span> }
-                                        @if (piece.IsPromotion) { <span class="promotion-badge">Hoy</span> }
-                                    </span>
-                                    <span class="feed-overlay-copy">
-                                        <small>@piece.BusinessLine</small>
-                                        <strong>@piece.VisualStatus</strong>
-                                    </span>
-                                </a>
-                                <div class="feed-copy">
-                                    <p class="feed-question">@piece.Question</p>
-                                    <h1>@piece.Headline</h1>
-                                    <p class="feed-state @(piece.IsLive ? "is-live" : null)">@piece.State</p>
-                                    @if (!string.IsNullOrWhiteSpace(piece.Detail)) { <p class="feed-detail">@piece.Detail</p> }
-                                    <a class="feed-action feed-business-link" href="@piece.Url" data-enhance-nav="false">
-                                        @piece.CtaLabel <Icon Name="flecha" Size="16" />
-                                    </a>
-                                </div>
-                            </article>
-                        }
-                    }
-                    @if (!showAll && FilteredPieces.Count > InitialCount)
-                    {
-                        <button type="button" class="feed-more" @onclick="() => showAll = true">Ver más de Urabá</button>
-                    }
-                }
-            </main>
+        @* PASO 3 — el trabajo del feed actual, intacto: fotografía, estado en vivo y una acción.
+           Lo único nuevo es que llega filtrado por el municipio y la categoría que la persona
+           eligió, en vez de por una vertical escrita a mano. *@
+        <section class="guided-step guided-results-step" data-testid="guided-results">
+            <h1 class="visually-hidden">@CategoryName en @PlaceName</h1>
+            <div class="guided-toolbar">
+            <nav class="guided-context" aria-label="Qué estás viendo">
+                <a class="guided-back" href="@BackToCategoriesHref" aria-label="Volver a categorías"
+                   @onclick="() => GoTo(BackToCategoriesHref)" @onclick:preventDefault="true">
+                    <Icon Name="atras" Size="16" />
+                </a>
+                <a class="guided-chip" href="@ChangePlaceHref" data-testid="place-chip"
+                   @onclick="() => GoTo(ChangePlaceHref)" @onclick:preventDefault="true">
+                    <Icon Name="ubicacion" Size="16" /><strong>@PlaceName</strong><Icon Name="chevron" Size="14" />
+                </a>
+                <a class="guided-chip" href="@BackToCategoriesHref" data-testid="category-chip"
+                   @onclick="() => GoTo(BackToCategoriesHref)" @onclick:preventDefault="true">
+                    <Icon Name="@CategoryLook.Icon(category)" Size="16" /><strong>@CategoryName</strong><Icon Name="chevron" Size="14" />
+                </a>
+            </nav>
 
-            <aside class="ahora-rail" aria-label="Contexto local">
-                <section><p class="eyebrow">En vivo</p><strong>@LiveCount</strong><span>@(LiveCount == 1 ? "estado activo" : "estados activos")</span></section>
-                <section><p class="eyebrow">Hoy</p><strong>@ActionableCount</strong><span>opciones con acción directa</span></section>
-                @* El nombre del municipio no es un dato operativo, así que no se pinta de ámbar:
-                   el ámbar es para el número que se verifica. *@
-                <section><p class="eyebrow">Tu lugar</p><strong class="rail-place">@ActiveMunicipalityName</strong><button type="button" class="inline-button" @onclick="() => locationOpen = true">Cambiar</button></section>
-                @* "Turnos, citas y pedidos" se leía como una lista de lo tuyo, y la pantalla es una
-                   consulta por código: no hay historial. El subtítulo dice lo que de verdad hace. *@
-                <a class="rail-activity" href="/seguimiento"><Icon Name="actividad" Size="22" /><span><strong>Mi actividad</strong><small>Consulta con tu código</small></span></a>
-            </aside>
-        </div>
+            @* La búsqueda acelera, no gobierna: filtra lo que ya está en pantalla y nadie está
+               obligado a escribir nada para ver resultados. *@
+            <label class="guided-search">
+                <Icon Name="explorar" Size="18" />
+                <input type="search" @bind-value="search" @bind-value:event="oninput"
+                       placeholder="@SearchPlaceholder" autocomplete="off" disabled="@(!interactiveReady)"
+                       aria-label="@SearchPlaceholder" data-testid="results-search" />
+            </label>
+            </div>
+
+            <div class="ahora-layout">
+                <main class="feed-column" aria-label="Qué puedes hacer ahora" data-testid="live-feed"
+                      @key="@($"{place}|{category}")" data-swap="@lastSwap">
+                    @if (VisiblePieces.Count == 0 && search.Length > 0)
+                    {
+                        <section class="quiet-feed" data-testid="guided-empty">
+                            <Icon Name="explorar" Size="30" />
+                            <h2>Nada con «@search» aquí</h2>
+                            <p>Puedes buscarlo en todo el directorio de Urabá.</p>
+                            <a class="button-link secondary" href="@SearchEverywhereHref">Buscar en todo Urabá</a>
+                        </section>
+                    }
+                    else if (VisiblePieces.Count == 0)
+                    {
+                        @* No se inventa disponibilidad ni se rellena con negocios de otra categoría:
+                           se dice qué falta y se ofrecen las dos salidas que sí existen. *@
+                        <section class="quiet-feed" data-testid="guided-empty">
+                            <Icon Name="reloj" Size="30" />
+                            <h2>Todavía no tenemos @CategoryName.ToLowerInvariant() en @PlaceName</h2>
+                            <p>Es una categoría que ya existe en Urabá; aquí todavía no hay negocios publicados.</p>
+                            @if (place != PlacePreference.Everywhere)
+                            {
+                                <a class="button-link secondary" href="@EverywhereInCategoryHref">Ver en todo Urabá</a>
+                            }
+                            <a class="tertiary" href="@ChangePlaceHref">Cambiar municipio</a>
+                        </section>
+                    }
+                    else
+                    {
+                        @foreach (var piece in VisiblePieces)
+                        {
+                            if (piece.Kind == FeedKind.Capture)
+                            {
+                                <article class="capture-piece feed-entry" data-testid="business-capture">
+                                    <span class="capture-mark"><Icon Name="tienda" Size="28" /></span>
+                                    <div><p class="eyebrow">Para negocios</p><h2>¿Tienes un negocio en Urabá?</h2>
+                                    <p>Así podría verse aquí: con fotos, estado y una acción clara.</p></div>
+                                    <a class="button-link secondary" href="/para-negocios">Quiero aparecer</a>
+                                </article>
+                            }
+                            else
+                            {
+                                <article class="feed-piece feed-entry @(piece.IsPrimary ? "feed-primary" : null)"
+                                         data-categoria="@piece.CategorySlug" data-testid="feed-piece">
+                                    <a class="feed-media feed-business-link @(piece.ImageUrl is null ? "feed-art" : null)"
+                                       href="@piece.Url" aria-label="@piece.CtaLabel" data-enhance-nav="false">
+                                        @if (piece.ImageUrl is { Length: > 0 } image)
+                                        {
+                                            <img src="@image" alt="@piece.ImageAlt" width="760" height="620"
+                                                 loading="@(piece.IsPrimary ? "eager" : "lazy")"
+                                                 fetchpriority="@(piece.IsPrimary ? "high" : "auto")" />
+                                        }
+                                        else
+                                        {
+                                            <span class="feed-art-icon"><Icon Name="@piece.Icon" Size="72" /></span>
+                                        }
+                                        <span class="feed-shade" aria-hidden="true"></span>
+                                        @* Tres distintivos y no hay un cuarto. "Promoción" decía qué
+                                           era la pieza, no qué le pasa a quien la mira: lo que importa
+                                           de una promoción es que se puede aprovechar hoy. *@
+                                        <span class="feed-badges">
+                                            @if (piece.IsLive) { <span class="live-badge"><i></i> EN VIVO</span> }
+                                            @if (piece.IsSponsored) { <span class="sponsored-badge">Patrocinado</span> }
+                                            @if (piece.IsPromotion) { <span class="promotion-badge">Hoy</span> }
+                                        </span>
+                                        <span class="feed-overlay-copy">
+                                            <small>@piece.BusinessLine</small>
+                                            <strong>@piece.VisualStatus</strong>
+                                        </span>
+                                    </a>
+                                    <div class="feed-copy">
+                                        <p class="feed-question">@piece.Question</p>
+                                        <h2>@piece.Headline</h2>
+                                        <p class="feed-state @(piece.IsLive ? "is-live" : null)">@piece.State</p>
+                                        @if (!string.IsNullOrWhiteSpace(piece.Detail)) { <p class="feed-detail">@piece.Detail</p> }
+                                        <a class="feed-action feed-business-link" href="@piece.Url" data-enhance-nav="false">
+                                            @piece.CtaLabel <Icon Name="flecha" Size="16" />
+                                        </a>
+                                    </div>
+                                </article>
+                            }
+                        }
+                        @if (!showAll && MatchingPieces.Count > InitialCount)
+                        {
+                            <button type="button" class="feed-more" @onclick="() => showAll = true">Ver más</button>
+                        }
+                    }
+                </main>
+
+                <aside class="ahora-rail" aria-label="Contexto local">
+                    <section><p class="eyebrow">En vivo</p><strong>@LiveCount</strong><span>@(LiveCount == 1 ? "estado activo" : "estados activos")</span></section>
+                    <section><p class="eyebrow">Hoy</p><strong>@ActionableCount</strong><span>opciones con acción directa</span></section>
+                    @* El nombre del municipio no es un dato operativo, así que no se pinta de ámbar:
+                       el ámbar es para el número que se verifica. *@
+                    <section><p class="eyebrow">Tu lugar</p><strong class="rail-place">@PlaceName</strong>
+                        <a class="inline-button" href="@ChangePlaceHref">Cambiar</a></section>
+                    @* "Turnos, citas y pedidos" se leía como una lista de lo tuyo, y la pantalla es una
+                       consulta por código: no hay historial. El subtítulo dice lo que de verdad hace. *@
+                    <a class="rail-activity" href="/seguimiento"><Icon Name="actividad" Size="22" /><span><strong>Mi actividad</strong><small>Consulta con tu código</small></span></a>
+                </aside>
+            </div>
+        </section>
     }
 </div>
-
-@if (locationOpen)
-{
-    <div class="location-backdrop" @onclick="() => locationOpen = false" aria-hidden="true"></div>
-    <section class="location-sheet" role="dialog" aria-modal="true" aria-labelledby="location-title" data-testid="location-sheet">
-        <header><div><p class="eyebrow">Tu zona</p><h2 id="location-title">¿Dónde estás buscando?</h2></div>
-            <button type="button" class="sheet-close" aria-label="Cerrar" @onclick="() => locationOpen = false">×</button></header>
-        <button type="button" class="use-location" disabled="@locating" @onclick="UseLocation">
-            <Icon Name="ubicacion" Size="22" /><span><strong>@(locating ? "Ubicándote…" : "Usar mi ubicación")</strong><small>Sólo preguntaremos al tocar aquí</small></span>
-        </button>
-        @if (locationMessage is not null) { <p class="meta" role="status">@locationMessage</p> }
-        <div class="location-options">
-            @foreach (var municipality in Municipalities)
-            {
-                <button type="button" class="@(activeMunicipality == municipality.Slug ? "active" : null)"
-                        @onclick="() => SelectMunicipality(municipality.Slug, municipality.Name)">
-                    <Icon Name="@municipality.Icon" Size="22" /><span>@municipality.Name</span>
-                    @if (activeMunicipality == municipality.Slug) { <Icon Name="check" Size="16" /> }
-                </button>
-            }
-            <button type="button" class="@(activeMunicipality.Length == 0 ? "active" : null)"
-                    @onclick="SelectAllMunicipalities">
-                <Icon Name="ubicacion" Size="22" /><span>Todo Urabá</span>
-                @if (activeMunicipality.Length == 0) { <Icon Name="check" Size="16" /> }
-            </button>
-        </div>
-    </section>
-}
 
 @code {
     private const int InitialCount = 8;
     /// <summary>Jornadas que se miran buscando el próximo horario libre. Eran cuatro y siguen siendo cuatro.</summary>
     private const int AvailabilityDays = 4;
     private static readonly TimeZoneInfo Colombia = TimeZoneInfo.FindSystemTimeZoneById("America/Bogota");
-    private static readonly FilterOption[] Filters =
-    [
-        new("ahora", "Ahora"), new("barberia", "Barbería"), new("belleza", "Belleza"),
-        new("tienda", "Tienda")
-    ];
-    private static readonly MunicipalityOption[] Municipalities =
-    [
-        new("apartado", "Apartadó", "palmera", 7.8828, -76.6259),
-        new("carepa", "Carepa", "hoja", 7.7585, -76.6525),
-        new("chigorodo", "Chigorodó", "montana", 7.6664, -76.6811),
-        new("turbo", "Turbo", "ola", 8.0926, -76.7282)
-    ];
+
+    /// <summary>
+    /// La dirección manda sobre la cookie: <c>/?lugar=cambiar</c> enseña el selector aunque haya
+    /// preferencia guardada, y <c>/</c> a secas la respeta.
+    /// </summary>
+    [SupplyParameterFromQuery(Name = "lugar")] public string? LugarUrl { get; set; }
+    [SupplyParameterFromQuery(Name = "busco")] public string? BuscoUrl { get; set; }
 
     private readonly List<FeedPiece> pieces = [];
+    /// <summary>Negocios que ya tienen al menos una pieza, para que ninguno se quede sin ella.</summary>
+    private readonly HashSet<string> covered = new(StringComparer.OrdinalIgnoreCase);
     private HomeFeedDto? feed;
+    private FeedPiece? sponsored;
     private IJSObjectReference? module;
-    private string activeMunicipality = "";
-    private string activeMunicipalityName = "Todo Urabá";
-    private string activeVertical = "ahora";
+    /// <summary>Lo que dice la cookie ahora mismo. Nulo mientras esta persona no haya elegido.</summary>
+    private string? recorded;
+    private string? place, category, previousPlace, previousCategory;
+    private string search = "";
     private string? error, locationMessage;
     /// <summary>
-    /// Qué provocó el último cambio del feed. El municipio entra desde abajo y el filtro se funde:
+    /// Qué provocó el último cambio del feed. El municipio entra desde abajo y la categoría se funde:
     /// son dos gestos distintos y el Design Spec les da dos entradas distintas.
     /// </summary>
     private string lastSwap = "filter";
-    private bool loading = true, locationOpen, locating, showAll, interactiveReady;
+    private bool loading = true, locating, showAll, interactiveReady;
 
-    private string ActiveMunicipalityName => activeMunicipality.Length == 0 ? "Todo Urabá" : activeMunicipalityName;
-    private IReadOnlyList<FeedPiece> FilteredPieces => pieces.Where(piece =>
-            (piece.Kind == FeedKind.Capture || activeMunicipality.Length == 0 ||
-                piece.MunicipalitySlug.Equals(activeMunicipality, StringComparison.OrdinalIgnoreCase)) &&
-            (activeVertical == "ahora" || piece.Vertical == activeVertical) &&
-            (!piece.IsSponsored || activeVertical == "ahora" && activeMunicipality.Length == 0))
-        .ToArray();
-    private IReadOnlyList<FeedPiece> VisiblePieces => FilteredPieces.Take(showAll ? 10 : InitialCount).ToArray();
-    private int LiveCount => FilteredPieces.Count(x => x.IsLive);
-    private int ActionableCount => FilteredPieces.Count(x => x.Kind == FeedKind.Business);
+    private string Paso => place is null ? "lugar" : category is null ? "categoria" : "resultados";
+    private string PlaceName => place == PlacePreference.Everywhere ? "Todo Urabá"
+        : DiscoveryCatalog.MunicipalityBySlug(place)?.Name ?? "Urabá";
+    private string CategoryName => CategoryNameOf(category) ?? "Negocios";
+    private string SearchPlaceholder => $"Buscar en {CategoryName.ToLowerInvariant()}…";
+    private string Titulo => place is null ? "¿Dónde buscas?"
+        : category is null ? PlaceName : $"{CategoryName} en {PlaceName}";
 
     /// <summary>
-    /// El feed que compuso el prerender, para que la hidratación no lo vuelva a pedir. Sólo viaja
-    /// lo que ya está pintado en el HTML que el visitante tiene delante: negocios publicados,
-    /// estado de sus filas y promociones vigentes. Nada personal ni dependiente de la sesión.
+    /// Qué se buscaba, incluso mientras se cambia de municipio. Cambiar de lugar desde unos
+    /// resultados no debería obligar a repetir la categoría: se conserva y, si en el municipio nuevo
+    /// no hay nada de eso, lo que aparece es el vacío que lo explica.
     /// </summary>
-    private const string FeedStateKey = "home.feed-ahora";
+    private string? Intent
+        => BuscoUrl is { Length: > 0 } slug && CategoryNameOf(slug) is not null ? slug : null;
+    private string CarriedIntent => Intent is { } slug ? $"&busco={Uri.EscapeDataString(slug)}" : "";
+
+    private string PlaceHref(string slug) => $"/?lugar={Uri.EscapeDataString(slug)}{CarriedIntent}";
+    private string CategoryHref(string slug)
+        => $"/?lugar={Uri.EscapeDataString(place ?? "")}&busco={Uri.EscapeDataString(slug)}";
+    private string ChangePlaceHref => $"/?lugar={PlacePreference.Change}{CarriedIntent}";
+    private string BackToCategoriesHref => $"/?lugar={Uri.EscapeDataString(place ?? "")}";
+    private string EverywhereInCategoryHref
+        => $"/?lugar={PlacePreference.Everywhere}&busco={Uri.EscapeDataString(category ?? "")}";
+    private string SearchEverywhereHref => $"/explorar?q={Uri.EscapeDataString(search.Trim())}";
+
+    private sealed record PlaceOption(string Slug, string Name, MunicipalityLook.Look Look, bool HasBusinesses);
+    private sealed record CategoryOption(string Slug, string Name);
+
+    private IReadOnlyList<PlaceOption> Places => DiscoveryCatalog.Municipalities
+        .Select(x => new PlaceOption(x.Slug, x.Name, MunicipalityLook.For(x.Slug),
+            feed?.Businesses.Any(b => b.Municipality.Slug.Equals(x.Slug, StringComparison.OrdinalIgnoreCase)) == true))
+        .ToArray();
+
+    /// <summary>
+    /// Las categorías del municipio elegido, tal como están en los datos. Una categoría aparece si
+    /// —y sólo si— hay un negocio publicado detrás, con el nombre que le puso la plataforma. Antes
+    /// eran cuatro etiquetas escritas en el código y una función que colapsaba la taxonomía real:
+    /// "Restaurante" y "Servicios profesionales" acababan las dos dentro de "Belleza".
+    /// </summary>
+    private IReadOnlyList<CategoryOption> Categories => (feed?.Businesses ?? [])
+        .Where(x => Here(x.Municipality.Slug))
+        .GroupBy(x => x.Category.Slug, StringComparer.OrdinalIgnoreCase)
+        .Select(g => new CategoryOption(g.Key, ShortName(g.Key, g.First().Category.Name)))
+        .OrderBy(x => CatalogOrder(x.Slug)).ThenBy(x => x.Name, StringComparer.CurrentCulture)
+        .ToArray();
+
+    private bool Here(string slug) => place == PlacePreference.Everywhere
+        || slug.Equals(place, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Lo que corresponde al municipio y a la categoría elegidos. Un patrocinado no tiene excepción:
+    /// pasa por el mismo filtro que todo lo demás, así que sólo puede aparecer donde es pertinente.
+    /// </summary>
+    private IReadOnlyList<FeedPiece> ResultPieces
+    {
+        get
+        {
+            var matching = pieces.Where(Belongs).ToArray();
+            // La pieza de captación acompaña a los resultados pero no es uno: sin ningún negocio
+            // detrás, dejarla convertía el vacío útil en un anuncio, que es peor que la pantalla
+            // muerta que se quería evitar.
+            return matching.Any(x => x.Kind == FeedKind.Business) ? matching : [];
+        }
+    }
+
+    /// <summary>La captación no es un negocio, así que no se filtra por categoría.</summary>
+    private bool Belongs(FeedPiece piece) => piece.Kind == FeedKind.Capture
+        || Here(piece.MunicipalitySlug) && piece.CategorySlug.Equals(category, StringComparison.OrdinalIgnoreCase);
+
+    private IReadOnlyList<FeedPiece> MatchingPieces => search.Trim() is { Length: > 0 } term
+        ? ResultPieces.Where(x => x.Kind == FeedKind.Business && Mentions(x, term)).ToArray()
+        : ResultPieces;
+    private IReadOnlyList<FeedPiece> VisiblePieces => MatchingPieces.Take(showAll ? 20 : InitialCount).ToArray();
+    private int LiveCount => ResultPieces.Count(x => x.IsLive);
+    private int ActionableCount => ResultPieces.Count(x => x.Kind == FeedKind.Business);
+
+    private static bool Mentions(FeedPiece piece, string term)
+        => piece.Headline.Contains(term, StringComparison.OrdinalIgnoreCase)
+        || piece.Detail.Contains(term, StringComparison.OrdinalIgnoreCase)
+        || piece.State.Contains(term, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// El feed que compuso el prerender más el municipio recordado, para que la hidratación no vuelva
+    /// a pedir lo uno ni pierda lo otro: la cookie sólo se puede leer donde hay petición, y el
+    /// circuito ya no la tiene. Sólo viaja lo que está pintado en el HTML que el visitante tiene
+    /// delante —negocios publicados, estado de sus filas, promociones vigentes— y una de cinco
+    /// etiquetas de lugar. Nada personal ni dependiente de la sesión.
+    /// </summary>
+    private const string FeedStateKey = "home.guided";
     private PersistingComponentStateSubscription persistence;
+    private sealed record PersistedHome(HomeFeedDto Feed, string? Place);
 
     protected override async Task OnInitializedAsync()
     {
@@ -226,16 +416,21 @@
             // otra al abrir el circuito. Sin esto la pantalla resolvía el feed entero las dos veces
             // —doce sentencias por visita en lugar de seis— y la segunda ocurría cuando el
             // visitante ya estaba mirando la página, así que lo único que retrasaba era el momento
-            // en que los filtros empiezan a responder.
-            if (FeedState.TryTakeFromJson<HomeFeedDto>(FeedStateKey, out var prerenderizado)
+            // en que los controles empiezan a responder.
+            if (FeedState.TryTakeFromJson<PersistedHome>(FeedStateKey, out var prerenderizado)
                 && prerenderizado is not null)
             {
-                Compose(prerenderizado, today);
+                recorded = prerenderizado.Place;
+                Compose(prerenderizado.Feed, today);
                 return;
             }
-            // Una lectura para toda la pantalla. Antes eran el directorio, la ficha de cada negocio
-            // y después su fila, sus horarios, su carta y sus franjas, una llamada por dato y por
-            // negocio: dieciocho idas y vueltas con tres negocios, y una más por cada negocio nuevo.
+            // Sólo aquí se sabe: durante el prerender hay petición y la cookie se puede leer. Lo que
+            // se resuelva ahora viaja al circuito en el estado persistido.
+            recorded = PlacePreference.Normalize(RecordedPlace.Read());
+            // Una lectura para toda la pantalla, y para los tres pasos. Antes eran el directorio, la
+            // ficha de cada negocio y después su fila, sus horarios, su carta y sus franjas, una
+            // llamada por dato y por negocio: dieciocho idas y vueltas con tres negocios, y una más
+            // por cada negocio nuevo.
             feed = await Api.GetHomeFeedAsync(today, AvailabilityDays);
             Compose(feed, today);
         }
@@ -244,42 +439,112 @@
         finally { loading = false; }
     }
 
+    /// <summary>
+    /// Precedencia: dirección, después cookie, después nada. Se resuelve en cada cambio de parámetros
+    /// porque navegar entre pasos es exactamente eso —cambiar la dirección— y no una recarga.
+    /// </summary>
+    protected override void OnParametersSet()
+    {
+        place = LugarUrl is null ? recorded : PlacePreference.Normalize(LugarUrl);
+        category = place is null ? null : Intent;
+        if (place != previousPlace) { lastSwap = "place"; search = ""; showAll = false; }
+        else if (category != previousCategory) { lastSwap = "filter"; search = ""; showAll = false; }
+        (previousPlace, previousCategory) = (place, category);
+    }
+
     private void Compose(HomeFeedDto source, DateOnly today)
     {
+        feed = source;
         BuildPrimaryPieces(source.Businesses, today);
         BuildEditorialPieces(source.Businesses);
+        BuildPlainPieces(source.Businesses);
         BuildPromotionPieces(source.Promotions);
         InsertCaptureAndSponsored(source.Businesses);
+    }
+
+    /// <summary>
+    /// El negocio publicado que no tiene fila, ni horarios, ni carta, ni un servicio con precio. Sin
+    /// esto quedaba fuera del feed y su categoría acababa siendo un bloque tocable que llevaba a una
+    /// pantalla vacía: el paso 2 ofrece las categorías de los negocios publicados, así que todo
+    /// negocio publicado tiene que tener su pieza. No se le inventa disponibilidad —dice su horario y
+    /// lleva a su ficha— que es exactamente lo que corresponde cuando no hay nada en vivo que contar.
+    /// </summary>
+    private void BuildPlainPieces(IReadOnlyList<HomeFeedBusinessDto> businesses)
+    {
+        foreach (var business in businesses.Where(x => !covered.Contains(x.Slug)).OrderBy(ShowcasePriority))
+            pieces.Add(new FeedPiece(FeedKind.Business, business.Category.Slug, business.Municipality.Slug,
+                business.CoverUrl, business.CoverAltText ?? CleanName(business.Name),
+                CategoryLook.Icon(business.Category.Slug), "¿Lo tenías pendiente?", CleanName(business.Name),
+                CalmState(business), $"{business.Category.Name} · {business.Municipality.Name}",
+                "Ver negocio", $"/negocios/{business.Slug}", false, false, false, false));
     }
 
     /// <summary>Sin feed no se guarda nada, y la hidratación vuelve a pedirlo: eso es el reintento.</summary>
     private Task PersistFeed()
     {
-        if (feed is not null) FeedState.PersistAsJson(FeedStateKey, feed);
+        if (feed is not null) FeedState.PersistAsJson(FeedStateKey, new PersistedHome(feed, recorded));
         return Task.CompletedTask;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender) return;
-        try
+        if (firstRender)
         {
-            module = await JS.InvokeAsync<IJSObjectReference>("import", "./Pages/Home.razor.js");
-            var preferred = await module.InvokeAsync<HomePreference?>("initialize");
-            if (!string.IsNullOrWhiteSpace(preferred?.Municipality) &&
-                Municipalities.FirstOrDefault(x => x.Slug == preferred.Municipality) is { } place)
+            try
             {
-                activeMunicipality = place.Slug; activeMunicipalityName = place.Name; StateHasChanged();
+                module = await JS.InvokeAsync<IJSObjectReference>("import", "./Pages/Home.razor.js");
+                // Deja enganchada la restauración de scroll al volver de una ficha. Ya no lee ninguna
+                // preferencia: eso lo resolvió el servidor antes de pintar.
+                await module.InvokeVoidAsync("initialize");
             }
-            if (preferred?.Vertical is { Length: > 0 } vertical && Filters.Any(x => x.Key == vertical))
-                activeVertical = vertical;
-        }
-        catch (JSException) { }
-        finally
-        {
+            catch (JSException) { }
             interactiveReady = true;
             StateHasChanged();
         }
+        await Remember();
+    }
+
+    /// <summary>
+    /// Una sola preferencia y un único momento en que se escribe: cuando la pantalla ya está
+    /// mostrando un lugar. Así un toque y una dirección compartida dejan la misma huella, y no hay
+    /// dos almacenes que puedan contradecirse. Volver a elegir no borra nada: mientras no haya nueva
+    /// elección, la anterior sigue siendo la verdad.
+    /// </summary>
+    private async Task Remember()
+    {
+        if (module is null || place is null || place == recorded) return;
+        try
+        {
+            await module.InvokeVoidAsync("rememberPlace", place);
+            recorded = place;
+        }
+        catch (JSException) { }
+    }
+
+    private void GoTo(string href) => Nav.NavigateTo(href);
+
+    /// <summary>
+    /// Elegir municipio reemplaza la entrada de historial en vez de añadir una. El selector de lugar
+    /// es un estado transitorio —como una hoja que se abre y se cierra—, y dejarlo en el historial
+    /// producía un "atrás" que no hacía nada: se volvía a una dirección que, con la preferencia ya
+    /// guardada, vuelve a pintar el paso 2. Elegir categoría sí empuja: eso es avanzar.
+    /// </summary>
+    private void ChoosePlace(string href)
+        => Nav.NavigateTo(href, new NavigationOptions { ReplaceHistoryEntry = true });
+
+    private async Task UseLocation()
+    {
+        if (module is null) return;
+        locating = true; locationMessage = null;
+        try
+        {
+            var point = await module.InvokeAsync<LocationPoint?>("requestLocation");
+            if (point is null) { locationMessage = "No pudimos usar tu ubicación. Puedes elegir un municipio."; return; }
+            var nearest = Coordinates.OrderBy(x => Distance(point.Latitude, point.Longitude, x.Latitude, x.Longitude)).First();
+            ChoosePlace(PlaceHref(nearest.Slug));
+        }
+        catch (JSException) { locationMessage = "La ubicación no fue autorizada. Elige un municipio para continuar."; }
+        finally { locating = false; }
     }
 
     private void BuildPrimaryPieces(IReadOnlyList<HomeFeedBusinessDto> businesses, DateOnly today)
@@ -290,13 +555,14 @@
             var live = business.Queue?.IsOpen == true;
             var waiting = business.Queue?.WaitingCount ?? 0;
             var wait = business.Queue?.ApproximateWaitMinutes ?? 0;
-            primaryPieces.Add(new FeedPiece(FeedKind.Business, "barberia", business.Municipality.Slug,
+            primaryPieces.Add(new FeedPiece(FeedKind.Business, business.Category.Slug, business.Municipality.Slug,
                 business.CoverUrl, business.CoverAltText ?? $"Interior de {business.Name}", "tijeras",
                 "¿Necesitas un corte hoy?", live ? $"{CleanName(business.Name)} tiene la fila abierta" :
                     $"¿A qué hora abre {CleanName(business.Name)}?",
                 live ? $"{waiting} esperando · {(wait == 0 ? "pasa ahora" : $"~{wait} min")}" : CalmState(business),
-                $"Barbería · {business.Municipality.Name}", "Tomar turno", $"/negocios/{business.Slug}/turnos",
-                live, false, false, true));
+                $"{business.Category.Name} · {business.Municipality.Name}", "Tomar turno",
+                $"/negocios/{business.Slug}/turnos", live, false, false, true));
+            covered.Add(business.Slug);
         }
 
         foreach (var business in businesses.Where(x => x.HasScheduling && !x.HasVirtualQueue)
@@ -305,7 +571,7 @@
             if (business.Services.Count == 0) continue;
             var service = business.Services[0];
             var availability = Availability(business, today);
-            primaryPieces.Add(new FeedPiece(FeedKind.Business, "belleza", business.Municipality.Slug,
+            primaryPieces.Add(new FeedPiece(FeedKind.Business, business.Category.Slug, business.Municipality.Slug,
                 service.ImageUrl ?? business.CoverUrl, service.ImageAltText ?? business.CoverAltText ?? service.Name,
                 "rostro", "¿Te quieres consentir?", availability.Count > 0
                     ? $"{CleanName(business.Name)} tiene horarios disponibles"
@@ -313,12 +579,14 @@
                 availability.Count > 0 ? $"{availability.Count} horarios {availability.When}" : CalmState(business),
                 $"{service.Name} · {Money(service.ReferencePrice)} · {Duration(service.DurationMinutes)}",
                 "Ver horarios", $"/negocios/{business.Slug}/citas?serviceId={service.Id}", false, false, false, false));
+            covered.Add(business.Slug);
         }
 
         foreach (var business in businesses.Where(x => x.HasPickupOrdering).OrderBy(ShowcasePriority))
         {
             if (business.Product is not { } product) continue;
             primaryPieces.Add(ProductPiece(business, product, PickupText(business.NextPickupStart), primary: false));
+            covered.Add(business.Slug);
         }
         pieces.AddRange(primaryPieces.OrderBy(PrimaryPiecePriority));
     }
@@ -327,19 +595,17 @@
     {
         foreach (var business in businesses.OrderBy(ShowcasePriority))
         {
-            var vertical = business.HasPickupOrdering ? "tienda" : business.HasVirtualQueue ? "barberia" : "belleza";
-            if (!business.HasPickupOrdering)
-            {
-                foreach (var service in business.Services)
-                    pieces.Add(new FeedPiece(FeedKind.Business, vertical, business.Municipality.Slug,
-                        service.ImageUrl ?? business.CoverUrl, service.ImageAltText ?? business.CoverAltText ?? service.Name,
-                        CategoryLook.Icon(business.Category.Slug), $"¿Qué te provoca hacerte?", service.Name,
-                        $"{Money(service.ReferencePrice)} · {Duration(service.DurationMinutes)}",
-                        $"{business.Category.Name} · {business.Municipality.Name}",
-                        business.HasVirtualQueue ? "Tomar turno" : "Reservar",
-                        business.HasVirtualQueue ? $"/negocios/{business.Slug}/turnos" :
-                            $"/negocios/{business.Slug}/citas?serviceId={service.Id}", false, false, false, false));
-            }
+            if (business.HasPickupOrdering) continue;
+            if (business.Services.Count > 0) covered.Add(business.Slug);
+            foreach (var service in business.Services)
+                pieces.Add(new FeedPiece(FeedKind.Business, business.Category.Slug, business.Municipality.Slug,
+                    service.ImageUrl ?? business.CoverUrl, service.ImageAltText ?? business.CoverAltText ?? service.Name,
+                    CategoryLook.Icon(business.Category.Slug), "¿Qué te provoca hacerte?", service.Name,
+                    $"{Money(service.ReferencePrice)} · {Duration(service.DurationMinutes)}",
+                    $"{business.Category.Name} · {business.Municipality.Name}",
+                    business.HasVirtualQueue ? "Tomar turno" : "Reservar",
+                    business.HasVirtualQueue ? $"/negocios/{business.Slug}/turnos" :
+                        $"/negocios/{business.Slug}/citas?serviceId={service.Id}", false, false, false, false));
         }
     }
 
@@ -348,8 +614,7 @@
         var position = 4;
         foreach (var promotion in promotions.Take(2))
         {
-            var vertical = Vertical(promotion.Category.Slug);
-            var piece = new FeedPiece(FeedKind.Business, vertical, promotion.Municipality.Slug,
+            var piece = new FeedPiece(FeedKind.Business, promotion.Category.Slug, promotion.Municipality.Slug,
                 promotion.ImageUrl, $"Promoción de {promotion.BusinessName}", CategoryLook.Icon(promotion.Category.Slug),
                 "¿Aprovechas esta novedad?", promotion.Headline,
                 promotion.Body, $"{promotion.BusinessName} · {promotion.Municipality.Name}", promotion.CtaLabel,
@@ -367,7 +632,7 @@
             ?? businesses.Where(x => x.HasPickupOrdering).OrderBy(ShowcasePriority).FirstOrDefault()
             ?? businesses.OrderByDescending(ShowcasePriority).FirstOrDefault();
         if (sponsoredBusiness is null) return;
-        var sponsored = new FeedPiece(FeedKind.Business, Vertical(sponsoredBusiness.Category.Slug),
+        sponsored = new FeedPiece(FeedKind.Business, sponsoredBusiness.Category.Slug,
             sponsoredBusiness.Municipality.Slug, sponsoredBusiness.CoverUrl,
             sponsoredBusiness.CoverAltText ?? sponsoredBusiness.Name, CategoryLook.Icon(sponsoredBusiness.Category.Slug),
             "¿Quieres descubrir algo nuevo?", CleanName(sponsoredBusiness.Name),
@@ -380,7 +645,8 @@
     }
 
     private FeedPiece ProductPiece(HomeFeedBusinessDto business, HomeProductDto product, string pickup, bool primary)
-        => new(FeedKind.Business, "tienda", business.Municipality.Slug, product.ImageUrl ?? business.CoverUrl,
+        => new(FeedKind.Business, business.Category.Slug, business.Municipality.Slug,
+            product.ImageUrl ?? business.CoverUrl,
             product.ImageAltText ?? business.CoverAltText ?? product.Name, "bolsa", "¿Buscas algo para hoy?",
             product.Name, product.IsAvailable ? $"{Money(product.ReferencePrice)} · {pickup}" :
                 $"{Money(product.ReferencePrice)} · agotado por ahora",
@@ -400,49 +666,36 @@
             $"el {found.Date.ToString("dddd", Colombiano)}");
     }
 
-    private async Task SelectFilter(string key)
+    /// <summary>El nombre real de una categoría: el que le puso la plataforma, no uno inventado aquí.</summary>
+    private string? CategoryNameOf(string? slug) => slug is not { Length: > 0 } ? null
+        : feed?.Businesses.FirstOrDefault(x => x.Category.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase))
+            is { } match ? ShortName(match.Category.Slug, match.Category.Name)
+        : DiscoveryCatalog.CategoryBySlug(slug) is { } known ? ShortName(known.Slug, known.Name) : null;
+
+    /// <summary>Orden de la taxonomía de la plataforma; lo que no está en ella va al final.</summary>
+    private static int CatalogOrder(string slug)
     {
-        activeVertical = key; showAll = false; lastSwap = "filter";
-        if (module is not null)
-            try { await module.InvokeVoidAsync("rememberVertical", key); } catch (JSException) { }
+        for (var index = 0; index < DiscoveryCatalog.Categories.Count; index++)
+            if (DiscoveryCatalog.Categories[index].Slug.Equals(slug, StringComparison.OrdinalIgnoreCase))
+                return index;
+        return DiscoveryCatalog.Categories.Count;
     }
-    private async Task SelectMunicipality(string slug, string name)
+
+    /// <summary>
+    /// Un bloque para tocar no cabe un nombre administrativo entero. Es el mismo recorte que ya usa
+    /// la pantalla de municipio; el nombre completo sigue siendo el de la plataforma.
+    /// </summary>
+    private static string ShortName(string slug, string fallback) => slug switch
     {
-        activeMunicipality = slug; activeMunicipalityName = name; locationOpen = false; showAll = false;
-        lastSwap = "place";
-        if (module is not null) try { await module.InvokeVoidAsync("rememberMunicipality", slug); } catch (JSException) { }
-    }
-    private async Task UseLocation()
-    {
-        if (module is null) return;
-        locating = true; locationMessage = null;
-        try
-        {
-            var point = await module.InvokeAsync<LocationPoint?>("requestLocation");
-            if (point is null) { locationMessage = "No pudimos usar tu ubicación. Puedes elegir un municipio."; return; }
-            var nearest = Municipalities.OrderBy(x => Distance(point.Latitude, point.Longitude, x.Latitude, x.Longitude)).First();
-            await SelectMunicipality(nearest.Slug, nearest.Name);
-        }
-        catch (JSException) { locationMessage = "La ubicación no fue autorizada. Elige un municipio para continuar."; }
-        finally { locating = false; }
-    }
-    private async Task ClearFilters()
-    {
-        activeMunicipality = ""; activeMunicipalityName = "Todo Urabá"; activeVertical = "ahora"; showAll = false;
-        if (module is null) return;
-        try
-        {
-            await module.InvokeVoidAsync("rememberMunicipality", "");
-            await module.InvokeVoidAsync("rememberVertical", "ahora");
-        }
-        catch (JSException) { }
-    }
-    private Task SelectAllMunicipalities() => SelectMunicipality("", "Todo Urabá");
+        "belleza-cuidado-personal" => "Belleza",
+        "maquillaje-y-cosmeticos" => "Maquillaje",
+        "salud-bienestar" => "Bienestar",
+        "servicios-profesionales" => "Servicios",
+        _ => fallback,
+    };
 
     private static double Distance(double lat1, double lon1, double lat2, double lon2)
         => Math.Pow(lat1 - lat2, 2) + Math.Pow(lon1 - lon2, 2);
-    private static string Vertical(string category) => category == "barberia" ? "barberia"
-        : category == "maquillaje-y-cosmeticos" ? "tienda" : "belleza";
     /// <summary>
     /// El contenedor arranca con la cultura invariante, así que un día de la semana sin cultura
     /// explícita salía en inglés —"el Monday"— cada vez que el horario más cercano caía a dos días
@@ -470,8 +723,15 @@
         if (piece.Url.Contains("brio-nativo-barberia-demo", StringComparison.OrdinalIgnoreCase)) return 0;
         if (piece.Headline.Contains("Studio Laura", StringComparison.OrdinalIgnoreCase)) return 1;
         if (piece.Url.Contains("lumina-coral-beauty-demo", StringComparison.OrdinalIgnoreCase)) return 2;
-        return piece.Vertical switch { "barberia" => 10, "belleza" => 11, "tienda" => 12, _ => 20 };
+        return 10;
     }
+
+    /// <summary>Sólo para resolver "usar mi ubicación": el municipio más cercano al punto.</summary>
+    private static readonly (string Slug, double Latitude, double Longitude)[] Coordinates =
+    [
+        ("apartado", 7.8828, -76.6259), ("carepa", 7.7585, -76.6525),
+        ("chigorodo", 7.6664, -76.6811), ("turbo", 8.0926, -76.7282)
+    ];
 
     public async ValueTask DisposeAsync()
     {
@@ -481,23 +741,16 @@
     }
 
     private enum FeedKind { Business, Capture }
-    private sealed record FilterOption(string Key, string Label);
-    private sealed record MunicipalityOption(string Slug, string Name, string Icon, double Latitude, double Longitude);
     private sealed record AvailabilitySignal(int Count, string When);
     private sealed class LocationPoint { public double Latitude { get; set; } public double Longitude { get; set; } }
-    private sealed class HomePreference
-    {
-        public string Municipality { get; set; } = "";
-        public string Vertical { get; set; } = "ahora";
-    }
-    private sealed record FeedPiece(FeedKind Kind, string Vertical, string MunicipalitySlug,
+    private sealed record FeedPiece(FeedKind Kind, string CategorySlug, string MunicipalitySlug,
         string? ImageUrl, string ImageAlt, string Icon, string Question, string Headline, string State,
         string Detail, string CtaLabel, string Url, bool IsLive, bool IsSponsored, bool IsPromotion,
         bool IsPrimary)
     {
         public string BusinessLine => Detail;
         public string VisualStatus => State;
-        public static FeedPiece Capture() => new(FeedKind.Capture, "ahora", "", null, "", "tienda",
+        public static FeedPiece Capture() => new(FeedKind.Capture, "", "", null, "", "tienda",
             "", "", "", "", "", "", false, false, false, false);
     }
 }

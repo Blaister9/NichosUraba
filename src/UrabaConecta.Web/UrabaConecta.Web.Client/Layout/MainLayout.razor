@@ -10,10 +10,16 @@
    justamente lo que hace que algo se sienta una página suelta y no una aplicación. *@
 <header class="site-header @(Ruta() == "/" ? "is-home" : null)">
     <a class="brand" href="/"><span aria-hidden="true">U</span> UrabáConecta</a>
+    @* data-enhance-nav="false" en los destinos del armazón, igual que en los enlaces a negocios.
+       La navegación mejorada compite con el arranque del circuito: si alguien toca un destino en los
+       primeros milisegundos, el documento nuevo se pinta y después el circuito —que quedó enganchado
+       al conjunto de componentes de la pantalla anterior— lo repinta encima, así que se acaba en la
+       pantalla de la que se venía. Antes lo tapaba el buscador de la Home, que ya salía de la
+       navegación mejorada; ahora salen los destinos, que es donde corresponde. *@
     <nav class="nav-escritorio" aria-label="Navegación principal">
         @foreach (var item in Publicas)
         {
-            <a href="@item.Href" class="@(EsActiva(item.Href) ? "activo" : null)"
+            <a href="@item.Href" class="@(EsActiva(item.Href) ? "activo" : null)" data-enhance-nav="false"
                aria-current="@(EsActiva(item.Href) ? "page" : null)">@item.Label</a>
         }
     </nav>
@@ -58,7 +64,7 @@
 <nav class="nav-inferior" aria-label="Navegación">
     @foreach (var item in Moviles)
     {
-        <a href="@item.Href" class="@(EsActivaMovil(item) ? "activo" : null)"
+        <a href="@item.Href" class="@(EsActivaMovil(item) ? "activo" : null)" data-enhance-nav="false"
            aria-current="@(EsActivaMovil(item) ? "page" : null)">
             <Icon Name="@item.Icono" Size="22" /><span>@item.Label</span>
         </a>
