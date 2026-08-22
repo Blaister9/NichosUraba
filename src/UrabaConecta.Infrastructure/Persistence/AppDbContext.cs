@@ -34,6 +34,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<PickupOrderLine> PickupOrderLines => Set<PickupOrderLine>();
     public DbSet<BusinessImage> BusinessImages => Set<BusinessImage>();
     public DbSet<WebPushSubscription> WebPushSubscriptions => Set<WebPushSubscription>();
+    public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<NotificationDelivery> NotificationDeliveries => Set<NotificationDelivery>();
     public DbSet<BusinessPromotion> BusinessPromotions => Set<BusinessPromotion>();
     public DbSet<AccessInvitation> AccessInvitations => Set<AccessInvitation>();
     public DbSet<BusinessStatusChange> BusinessStatusChanges => Set<BusinessStatusChange>();
@@ -397,6 +399,46 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             x.Property(e => e.Version).IsConcurrencyToken();
             x.HasOne<Business>().WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Cascade);
             x.HasOne<ApplicationUser>().WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        builder.Entity<Notification>(x =>
+        {
+            x.ToTable("notifications");
+            x.HasKey(e => e.Id);
+            // La clave de deduplicación es única en toda la tabla: es lo que convierte un doble clic
+            // —o dos peticiones simultáneas— en un solo aviso, sin depender de que la aplicación
+            // recuerde comprobarlo antes.
+            x.HasIndex(e => e.DedupKey).IsUnique();
+            x.HasIndex(e => new { e.BusinessId, e.Audience, e.ReadAtUtc, e.CreatedAtUtc });
+            x.HasIndex(e => new { e.EntityId, e.Audience, e.CreatedAtUtc });
+            // El buzón: lo pendiente de repartir se busca por aquí en cada pasada del trabajador.
+            x.HasIndex(e => new { e.FannedOutAtUtc, e.CreatedAtUtc });
+            x.Property(e => e.Audience).HasConversion<string>().HasMaxLength(16);
+            x.Property(e => e.Kind).HasConversion<string>().HasMaxLength(48);
+            x.Property(e => e.PushAudience).HasConversion<string>().HasMaxLength(24);
+            x.Property(e => e.Title).HasMaxLength(120);
+            x.Property(e => e.Body).HasMaxLength(240);
+            x.Property(e => e.DeepLink).HasMaxLength(500);
+            x.Property(e => e.EntityType).HasMaxLength(32);
+            x.Property(e => e.DedupKey).HasMaxLength(160);
+            x.Property(e => e.Version).IsConcurrencyToken();
+            x.HasOne<Business>().WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Cascade);
+        });
+        builder.Entity<NotificationDelivery>(x =>
+        {
+            x.ToTable("notification_deliveries");
+            x.HasKey(e => e.Id);
+            // Un aviso no puede intentarse dos veces contra el mismo dispositivo, ni aunque dos
+            // repartos concurrentes intenten materializar la misma fila.
+            x.HasIndex(e => new { e.NotificationId, e.SubscriptionId }).IsUnique();
+            // Lo que el trabajador reclama en cada pasada: pendientes cuya hora ya llegó.
+            x.HasIndex(e => new { e.Status, e.NextAttemptAtUtc });
+            x.HasIndex(e => new { e.BusinessId, e.Status, e.CreatedAtUtc });
+            x.Property(e => e.Status).HasConversion<string>().HasMaxLength(16);
+            x.Property(e => e.LastError).HasMaxLength(300);
+            x.Property(e => e.Version).IsConcurrencyToken();
+            x.HasOne<Notification>().WithMany().HasForeignKey(e => e.NotificationId).OnDelete(DeleteBehavior.Cascade);
+            x.HasOne<WebPushSubscription>().WithMany().HasForeignKey(e => e.SubscriptionId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
         builder.Entity<BusinessPromotion>(x =>
         {

@@ -5,7 +5,7 @@ namespace UrabaConecta.Application;
 
 public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService codes,
     IPersonalDataProtector protector, IConsentPolicyProvider consentPolicy,
-    IObjectStorage storage, IPushNotificationService push, TimeProvider clock) : IOrderingUseCases
+    IObjectStorage storage, INotificationPublisher notifications, TimeProvider clock) : IOrderingUseCases
 {
     public async Task<PickupMenuDto?> GetMenuAsync(string slug, CancellationToken ct = default)
     {
@@ -106,10 +106,14 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
         consent.LinkPickupOrder(order.Id);
         store.AddOrder(order); store.AddConsent(consent);
         await store.SaveChangesAsync(ct); await tx.CommitAsync(ct);
-        await push.NotifyBusinessAsync(order.BusinessId, new("Nuevo pedido para recoger",
+        // Éste es el aviso que Lúmina no recibió. Ahora queda guardado antes de que nadie dependa
+        // del servicio Push: la bandeja del negocio lo tiene aunque el aviso del teléfono no llegue.
+        await notifications.PublishAsync(new(order.BusinessId, NotificationAudience.Business,
+            NotificationKind.OrderPlaced, "Nuevo pedido para recoger",
             $"Pedido #{order.PublicOrderNumber} por {order.Total:C0}.",
-            $"/panel/{order.BusinessId}/pedidos#order-{order.Id}",
-            $"business-order-{order.Id}"), ct);
+            $"/panel/{order.BusinessId}/pedidos#order-{order.Id}", TrackedEntities.PickupOrder, order.Id,
+            Notification.Key(NotificationAudience.Business, NotificationKind.OrderPlaced, order.Id),
+            PushAudience.Owner), ct);
         return new(order.PublicOrderNumber, code.PlainText, order.Status.ToString(), order.Total, order.PickupStartUtc);
     }
 
@@ -212,7 +216,14 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
         {
             var business = await store.GetBusinessAsync(businessId, ct)
                 ?? throw new ApiException("BUSINESS_NOT_FOUND", "No encontramos el establecimiento.", 404);
-            await push.NotifyProductRestockedAsync(businessId, product.Id, product.Name, business.Slug, ct);
+            // La suscripción de reposición se consume al entregarse: quien pidió el aviso ya lo
+            // recibió y no debe seguir enganchado a ese artículo.
+            await notifications.PublishAsync(new(businessId, NotificationAudience.Customer,
+                NotificationKind.ProductRestocked, $"Volvió {product.Name}",
+                "Ya está disponible en UrabáConecta.", null, TrackedEntities.Product, product.Id,
+                Notification.Key(NotificationAudience.Customer, NotificationKind.ProductRestocked,
+                    product.Id, clock.GetUtcNow().ToUnixTimeSeconds().ToString()),
+                PushAudience.ProductRestock, Renotify: true, DeactivateTargetAfterDelivery: true), ct);
         }
         return ProductDto(product);
     }
@@ -244,10 +255,27 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
         };
         TryDomain(() => order.Transition(target, clock.GetUtcNow(), request.Version, request.Reason));
         await store.SaveChangesAsync(ct);
-        if (target == PickupOrderStatus.ReadyForPickup)
-            await push.NotifyClientAsync(PushAudience.PickupOrder, order.Id,
-                new("Pedido listo para recoger", $"Tu pedido #{order.PublicOrderNumber} ya está listo.", "",
-                    $"order-{order.Id}", true), ct);
+        // Antes sólo "listo para recoger" avisaba a quien hizo el pedido, así que aceptar o
+        // rechazar era invisible desde el otro lado. Ahora cada paso del flujo deja su rastro.
+        var (kind, title, body) = target switch
+        {
+            PickupOrderStatus.Accepted => (NotificationKind.OrderAccepted, "Pedido aceptado",
+                $"El negocio aceptó tu pedido #{order.PublicOrderNumber}."),
+            PickupOrderStatus.Rejected => (NotificationKind.OrderRejected, "Pedido rechazado",
+                $"El negocio no pudo tomar tu pedido #{order.PublicOrderNumber}. Revisa el seguimiento."),
+            PickupOrderStatus.Preparing => (NotificationKind.OrderPreparing, "Pedido en preparación",
+                $"Ya están preparando tu pedido #{order.PublicOrderNumber}."),
+            PickupOrderStatus.ReadyForPickup => (NotificationKind.OrderReady, "Pedido listo para recoger",
+                $"Tu pedido #{order.PublicOrderNumber} ya está listo."),
+            PickupOrderStatus.Delivered => (NotificationKind.OrderDelivered, "Pedido entregado",
+                $"El negocio registró la entrega de tu pedido #{order.PublicOrderNumber}."),
+            _ => (NotificationKind.OrderCancelled, "Pedido cancelado",
+                $"Tu pedido #{order.PublicOrderNumber} fue cancelado. Revisa el seguimiento.")
+        };
+        await notifications.PublishAsync(new(order.BusinessId, NotificationAudience.Customer, kind,
+            title, body, null, TrackedEntities.PickupOrder, order.Id,
+            Notification.Key(NotificationAudience.Customer, kind, order.Id),
+            PushAudience.PickupOrder, Renotify: true), ct);
         return AdminDto(order);
     }
 

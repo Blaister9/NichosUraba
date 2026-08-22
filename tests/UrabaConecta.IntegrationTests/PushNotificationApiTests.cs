@@ -208,12 +208,14 @@ public sealed class PushNotificationApiTests(PushWebFactory factory) : IClassFix
     [Fact]
     public async Task Queue_client_registration_protects_the_deep_link_and_receives_confirmation()
     {
+        await factory.DrainNotificationsAsync();
         factory.Transport.Reset();
         using var client = factory.CreateClient();
         var created = await JoinQueue(client, "Push cliente");
         var response = await client.PostAsJsonAsync(
             $"/api/v1/public/queue/tickets/{created.TrackingCode}/push-subscriptions", Subscription("queue"));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await factory.DrainNotificationsAsync();
         Assert.Contains(factory.Transport.Sent, x => x.Audience == PushAudience.QueueTicket &&
             x.Message.Title == "Turno registrado");
 
@@ -232,10 +234,12 @@ public sealed class PushNotificationApiTests(PushWebFactory factory) : IClassFix
         await PlatformAdministrationApiTests.Login(owner, DevelopmentSeeder.CorteOwnerEmail);
         await owner.PostAsJsonAsync($"/api/v1/businesses/{DevelopmentSeeder.CorteBusinessId}/push-subscriptions",
             Subscription("corte-owner"));
+        await factory.DrainNotificationsAsync();
         factory.Transport.Reset();
 
         using var client = factory.CreateClient();
         await JoinQueue(client, "Aislamiento push");
+        await factory.DrainNotificationsAsync();
         var sent = factory.Transport.Sent.Where(x => x.Message.Title == "Nuevo turno en la fila").ToList();
         Assert.NotEmpty(sent);
         Assert.All(sent, x => Assert.Equal(DevelopmentSeeder.CorteBusinessId, x.BusinessId));
@@ -254,9 +258,11 @@ public sealed class PushNotificationApiTests(PushWebFactory factory) : IClassFix
         await orderOwner.PostAsJsonAsync(
             $"/api/v1/businesses/{DevelopmentSeeder.SazonBusinessId}/push-subscriptions", Subscription("sazon-owner"));
 
+        await factory.DrainNotificationsAsync();
         factory.Transport.Reset();
         var appointment = await CreateAppointment(visitor);
         var order = await CreateOrder(visitor);
+        await factory.DrainNotificationsAsync();
         Assert.Contains(factory.Transport.Sent, x => x.Audience == PushAudience.Owner &&
             x.Message.Title == "Nueva cita" &&
             x.Message.Url.StartsWith($"/panel/{DevelopmentSeeder.BellaBusinessId}/citas#appointment-"));
@@ -271,6 +277,7 @@ public sealed class PushNotificationApiTests(PushWebFactory factory) : IClassFix
         Assert.Equal(HttpStatusCode.OK, (await visitor.PostAsJsonAsync(
             $"/api/v1/public/orders/{order.TrackingCode}/push-subscriptions",
             Subscription("order-client"))).StatusCode);
+        await factory.DrainNotificationsAsync();
         Assert.Contains(factory.Transport.Sent, x => x.Audience == PushAudience.Appointment &&
             x.Message.Url == $"/seguimiento/citas/{appointment.TrackingCode}");
         Assert.Contains(factory.Transport.Sent, x => x.Audience == PushAudience.PickupOrder &&
@@ -293,6 +300,7 @@ public sealed class PushNotificationApiTests(PushWebFactory factory) : IClassFix
         storedOrder = await ChangeOrder(orderOwner, storedOrder, "prepare");
         _ = await ChangeOrder(orderOwner, storedOrder, "ready");
 
+        await factory.DrainNotificationsAsync();
         Assert.Contains(factory.Transport.Sent, x => x.Audience == PushAudience.Appointment &&
             x.Message.Title == "Cita confirmada" &&
             x.Message.Url == $"/seguimiento/citas/{appointment.TrackingCode}");
@@ -304,6 +312,7 @@ public sealed class PushNotificationApiTests(PushWebFactory factory) : IClassFix
     [Fact]
     public async Task Gone_subscription_is_deactivated_after_delivery_attempt()
     {
+        await factory.DrainNotificationsAsync();
         factory.Transport.Reset();
         factory.Transport.FailureStatusCode = 410;
         using var client = factory.CreateClient();
@@ -311,6 +320,10 @@ public sealed class PushNotificationApiTests(PushWebFactory factory) : IClassFix
         var request = Subscription("gone");
         Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync(
             $"/api/v1/public/queue/tickets/{created.TrackingCode}/push-subscriptions", request)).StatusCode);
+        // Un 410 es el navegador diciendo que ese destino ya no existe: se desactiva en el primer
+        // intento y no se reintenta, a diferencia de un fallo pasajero.
+        var report = await factory.DrainNotificationsAsync();
+        Assert.True(report.Expired >= 1);
 
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -339,9 +352,11 @@ public sealed class PushNotificationApiTests(PushWebFactory factory) : IClassFix
         Assert.Equal(HttpStatusCode.OK, (await visitor.PostAsJsonAsync(
             $"/api/v1/public/businesses/restaurante-sazon-local/products/{product.Id}/push-subscriptions",
             subscription)).StatusCode);
+        await factory.DrainNotificationsAsync();
         factory.Transport.Reset();
 
         product = await SaveProduct(owner, product, available: true);
+        await factory.DrainNotificationsAsync();
         var sent = Assert.Single(factory.Transport.Sent, x => x.Audience == PushAudience.ProductRestock);
         Assert.Equal($"Volvió {product.Name}", sent.Message.Title);
         Assert.Equal($"/negocios/restaurante-sazon-local/pedidos#producto-{product.Id}", sent.Message.Url);
@@ -361,6 +376,7 @@ public sealed class PushNotificationApiTests(PushWebFactory factory) : IClassFix
         var follower = Subscription("follower");
         Assert.Equal(HttpStatusCode.OK, (await visitor.PostAsJsonAsync(
             "/api/v1/public/businesses/restaurante-sazon-local/followers/push-subscriptions", follower)).StatusCode);
+        await factory.DrainNotificationsAsync();
         factory.Transport.Reset();
 
         var first = await owner.PostAsJsonAsync(
@@ -368,6 +384,7 @@ public sealed class PushNotificationApiTests(PushWebFactory factory) : IClassFix
         Assert.Equal(HttpStatusCode.Created, first.StatusCode);
         var firstResult = await first.Content.ReadFromJsonAsync<BusinessPromotionSaveResultDto>();
         Assert.True(firstResult!.PushSent);
+        await factory.DrainNotificationsAsync();
         var sent = Assert.Single(factory.Transport.Sent, x => x.Audience == PushAudience.BusinessFollower);
         Assert.Equal("Almuerzo listo", sent.Message.Title);
         Assert.Equal("/negocios/restaurante-sazon-local/pedidos", sent.Message.Url);
@@ -378,6 +395,7 @@ public sealed class PushNotificationApiTests(PushWebFactory factory) : IClassFix
         var secondResult = await second.Content.ReadFromJsonAsync<BusinessPromotionSaveResultDto>();
         Assert.False(secondResult!.PushSent);
         Assert.NotNull(secondResult.NextPushAllowedAtUtc);
+        await factory.DrainNotificationsAsync();
         Assert.DoesNotContain(factory.Transport.Sent, x => x.Audience == PushAudience.BusinessFollower);
 
         var publicPromotions = await visitor.GetFromJsonAsync<BusinessPromotionDto[]>("/api/v1/public/promotions");

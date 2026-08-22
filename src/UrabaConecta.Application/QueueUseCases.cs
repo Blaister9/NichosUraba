@@ -1,11 +1,11 @@
-﻿using UrabaConecta.Contracts;
+using UrabaConecta.Contracts;
 using UrabaConecta.Domain;
 
 namespace UrabaConecta.Application;
 
 public sealed class QueueUseCases(IQueueStore store, IPublicCodeService codes, IPersonalDataProtector protector,
-    IQueueChangeNotifier notifier, IConsentPolicyProvider consentPolicy, IPushNotificationService push,
-    TimeProvider clock) : IQueueUseCases
+    IQueueChangeNotifier notifier, IConsentPolicyProvider consentPolicy,
+    INotificationPublisher notifications, TimeProvider clock) : IQueueUseCases
 {
     public async Task<QueuePublicStatusDto?> GetPublicAsync(string slug, CancellationToken ct = default)
     {
@@ -135,18 +135,33 @@ public sealed class QueueUseCases(IQueueStore store, IPublicCodeService codes, I
         await store.SaveChangesAsync(ct); await tx.CommitAsync(ct);
         var definition = await store.GetDefinitionAsync(businessId, ct);
         await Notify(definition!.Id, ticket.Id, businessId, ct);
-        await push.NotifyClientAsync(PushAudience.QueueTicket, ticket.Id,
-            new("Es tu turno", $"Turno #{ticket.Number}: te están llamando.", "",
-                $"queue-{ticket.Id}", true), ct);
+        // Un mismo turno se puede llamar varias veces —el "recall" existe justamente para eso—, así
+        // que el llamado lleva su número de llamada en la clave: cada llamado es un hecho distinto.
+        var announcements = new List<NotificationRequest>
+        {
+            new(businessId, NotificationAudience.Customer, NotificationKind.QueueTicketCalled,
+                "Es tu turno", $"Turno #{ticket.Number}: te están llamando.", null,
+                TrackedEntities.QueueTicket, ticket.Id,
+                Notification.Key(NotificationAudience.Customer, NotificationKind.QueueTicketCalled,
+                    ticket.Id, ticket.Version.ToString()),
+                PushAudience.QueueTicket, Renotify: true)
+        };
         var nearby = tickets.Where(x => x.Status == QueueTicketStatus.Waiting).OrderBy(x => x.Number).Take(2).ToList();
         if (nearby.Count > 0)
-            await push.NotifyClientAsync(PushAudience.QueueTicket, nearby[0].Id,
-                new("Ya puedes venir", $"Eres la siguiente persona después del turno #{ticket.Number}.", "",
-                    $"queue-{nearby[0].Id}"), ct);
+            announcements.Add(new(businessId, NotificationAudience.Customer, NotificationKind.QueueTicketAlmost,
+                "Ya puedes venir", $"Eres la siguiente persona después del turno #{ticket.Number}.", null,
+                TrackedEntities.QueueTicket, nearby[0].Id,
+                Notification.Key(NotificationAudience.Customer, NotificationKind.QueueTicketAlmost,
+                    nearby[0].Id, ticket.Number.ToString()),
+                PushAudience.QueueTicket));
         if (nearby.Count > 1)
-            await push.NotifyClientAsync(PushAudience.QueueTicket, nearby[1].Id,
-                new("Tu turno se aproxima", "Hay pocas personas delante de ti. Revisa tu seguimiento.", "",
-                    $"queue-{nearby[1].Id}"), ct);
+            announcements.Add(new(businessId, NotificationAudience.Customer, NotificationKind.QueueTicketAlmost,
+                "Tu turno se aproxima", "Hay pocas personas delante de ti. Revisa tu seguimiento.", null,
+                TrackedEntities.QueueTicket, nearby[1].Id,
+                Notification.Key(NotificationAudience.Customer, NotificationKind.QueueTicketAlmost,
+                    nearby[1].Id, ticket.Number.ToString()),
+                PushAudience.QueueTicket));
+        await notifications.PublishManyAsync(announcements, ct);
         return await AdminDto(businessId, ct);
     }
 
@@ -212,10 +227,12 @@ public sealed class QueueUseCases(IQueueStore store, IPublicCodeService codes, I
         await store.SaveChangesAsync(ct); await tx.CommitAsync(ct);
         await Notify(definition.Id, ticket.Id, businessId, ct);
         if (source == QueueTicketSource.Online)
-            await push.NotifyBusinessAsync(businessId, new("Nuevo turno en la fila",
+            await notifications.PublishAsync(new(businessId, NotificationAudience.Business,
+                NotificationKind.QueueTicketJoined, "Nuevo turno en la fila",
                 $"Turno #{ticket.Number} se unió desde UrabáConecta.",
-                $"/panel/{businessId}/turnos#ticket-{ticket.Id}",
-                $"business-queue-{ticket.Id}"), ct);
+                $"/panel/{businessId}/turnos#ticket-{ticket.Id}", TrackedEntities.QueueTicket, ticket.Id,
+                Notification.Key(NotificationAudience.Business, NotificationKind.QueueTicketJoined, ticket.Id),
+                PushAudience.Owner), ct);
         return new(number, publicCode.PlainText, ticket.Status.ToString(), waiting, waiting * definition.AverageDurationMinutes);
     }
 

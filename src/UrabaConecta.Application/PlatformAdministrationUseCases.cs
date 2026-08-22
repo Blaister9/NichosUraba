@@ -50,6 +50,12 @@ public sealed class PlatformAdministrationUseCases(
         business.AssignCreator(actor.UserId);
         store.AddBusiness(business);
         foreach (var module in modules) store.AddModule(new BusinessModule(business.Id, module, true, now));
+        // Se dejan escritas también las capacidades derivadas del alta. Guardarlas explícitas desde
+        // el principio evita que un negocio recién creado dependa de que cada consulta repita la
+        // misma deducción, y deja la fila lista para que la administración la cambie sin adivinar.
+        foreach (var derived in BusinessCapabilities.Derived)
+            store.AddModule(new BusinessModule(business.Id, derived,
+                BusinessCapabilities.DerivedDefault(derived, modules), now));
         CreateInitialConfiguration(business.Id, request, modules, now);
 
         string? temporaryPassword = null;
@@ -292,11 +298,28 @@ public sealed class PlatformAdministrationUseCases(
         var record = await store.GetAsync(businessId, cancellationToken)
             ?? throw new ApiException("BUSINESS_NOT_FOUND", "No encontramos el negocio.", 404);
         var now = timeProvider.GetUtcNow();
-        foreach (var kind in Enum.GetValues<BusinessModuleKind>())
+        // Las operaciones se guardan tal cual llegan. Las capacidades derivadas —servicios,
+        // productos, personal— se guardan resueltas: lo que el formulario mandó si dijo algo, y la
+        // derivación de la operación si vino en blanco. Así la fila siempre refleja la decisión
+        // efectiva y ninguna pantalla tiene que volver a deducirla mirando la categoría.
+        foreach (var kind in BusinessCapabilities.Operations)
+            Apply(kind, selected.Contains(kind));
+        foreach (var derived in BusinessCapabilities.Derived)
+        {
+            var stated = derived switch
+            {
+                BusinessModuleKind.Services => request.Services,
+                BusinessModuleKind.Products => request.Products,
+                _ => request.Staff
+            };
+            Apply(derived, stated ?? BusinessCapabilities.DerivedDefault(derived, selected));
+        }
+
+        void Apply(BusinessModuleKind kind, bool enabled)
         {
             var module = record.Modules.SingleOrDefault(x => x.Module == kind);
-            if (module is null) store.AddModule(new BusinessModule(businessId, kind, selected.Contains(kind), now));
-            else module.SetEnabled(selected.Contains(kind), now, module.Version);
+            if (module is null) store.AddModule(new BusinessModule(businessId, kind, enabled, now));
+            else module.SetEnabled(enabled, now, module.Version);
         }
         TryDomain(() =>
         {

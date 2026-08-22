@@ -2,7 +2,14 @@ using System.Text.RegularExpressions;
 
 namespace UrabaConecta.Domain;
 
-public enum BusinessModuleKind { Appointments, VirtualQueues, PickupOrders }
+/// <summary>
+/// Las tres primeras son operaciones que el negocio abre al público. Las tres últimas son el
+/// material que esas operaciones consumen y se derivan de ellas mientras nadie las fije a mano;
+/// la regla vive en <see cref="BusinessCapabilities"/>. Se guardan en la misma tabla porque son
+/// la misma decisión —qué tiene este negocio— y separarlas obligaría a consultar dos sitios para
+/// responder una sola pregunta.
+/// </summary>
+public enum BusinessModuleKind { Appointments, VirtualQueues, PickupOrders, Services, Products, Staff }
 public enum PlatformAuditAction
 {
     BusinessCreated, BusinessUpdated, ModulesChanged, OwnerAssigned, OwnerChanged,
@@ -377,7 +384,10 @@ public static class BusinessReadinessCalculator
             new("location", "Ubicación", true, s.HasLocation, "Falta la dirección del establecimiento."),
             new("logo", "Logo", true, s.HasLogo, "Cargue el logo del negocio."),
             new("cover", "Imagen de portada", true, s.HasCover, "Cargue la imagen de portada."),
-            new("modules", "Funciones disponibles", true, enabledModules.Count > 0,
+            // Se cuentan sólo las operaciones que se abren al público: un negocio con "productos"
+            // encendido pero sin pedidos, citas ni fila no tiene nada que ofrecer todavía.
+            new("modules", "Funciones disponibles", true,
+                enabledModules.Any(BusinessCapabilities.Operations.Contains),
                 "Habilite al menos una función."),
             new("hours", "Horario", appointments, !appointments || hasHours, "Configure el horario de atención."),
             new("services", "Servicios", appointments, !appointments || hasService,

@@ -164,10 +164,24 @@ builder.Services.AddScoped<IQueueUseCases, QueueUseCases>();
 builder.Services.AddScoped<IOrderingUseCases, OrderingUseCases>();
 builder.Services.AddScoped<IWebPushTransport, WebPushTransport>();
 builder.Services.AddScoped<IPushNotificationService, PushNotificationService>();
+// El buzón de avisos. El publicador guarda el hecho y da un golpecito; el trabajador de fondo es
+// quien habla con el servicio Web Push, fuera del hilo de la operación de negocio.
+builder.Services.Configure<NotificationOptions>(
+    builder.Configuration.GetSection(NotificationOptions.SectionName));
+builder.Services.AddSingleton<INotificationSignal, NotificationSignal>();
+builder.Services.AddScoped<INotificationPublisher, NotificationPublisher>();
+builder.Services.AddScoped<INotificationUseCases, NotificationUseCases>();
+builder.Services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
+builder.Services.AddScoped<IRealtimeAccessGuard, RealtimeAccessGuard>();
+builder.Services.AddScoped<IRealtimeNotifier, SignalRRealtimeNotifier>();
+builder.Services.AddHostedService<NotificationBackgroundService>();
 builder.Services.AddScoped<IPlatformAdministrationUseCases, PlatformAdministrationUseCases>();
 builder.Services.AddScoped<IOwnerDashboardUseCases, OwnerDashboardUseCases>();
 builder.Services.AddScoped<IQueueChangeNotifier, SignalRQueueChangeNotifier>();
 builder.Services.AddScoped<IUrabaConectaApi, ServerUrabaConectaApi>();
+// La misma caché de capacidades que usa WebAssembly: la navegación por capacidades tiene que
+// decidir igual en el prerender que en el circuito, o la pantalla parpadea con otras secciones.
+builder.Services.AddScoped<UrabaConecta.Web.Client.Services.BusinessAccess>();
 // La preferencia de municipio se lee de la petición: es lo que permite al prerender entregar el
 // paso correcto del recorrido guiado en la primera pintura, sin el salto de una visita siguiente.
 builder.Services.AddScoped<UrabaConecta.Web.Client.Services.IPlacePreference, CookiePlacePreference>();
@@ -379,6 +393,21 @@ publicApi.MapPost("/businesses/{slug}/followers/push-subscriptions/remove",
     .RequireRateLimiting("public-write");
 publicApi.MapGet("/promotions", (IPushNotificationService push, CancellationToken ct)
     => push.GetPublicPromotionsAsync(ct));
+// Los avisos de una operación, para quien ya llegó a su seguimiento con el código. Complementa la
+// página de estado: si un Push se perdió, aquí queda escrito qué pasó y cuándo. No abre una vía
+// nueva de enumeración —un código inexistente y uno mal formado devuelven lo mismo: nada—.
+publicApi.MapGet("/appointments/{code}/notifications",
+    (string code, INotificationUseCases inbox, CancellationToken ct)
+        => inbox.GetCustomerInboxAsync(PushAudience.Appointment, code, ct))
+    .RequireRateLimiting("public-sensitive-read");
+publicApi.MapGet("/orders/{code}/notifications",
+    (string code, INotificationUseCases inbox, CancellationToken ct)
+        => inbox.GetCustomerInboxAsync(PushAudience.PickupOrder, code, ct))
+    .RequireRateLimiting("public-sensitive-read");
+publicApi.MapGet("/queue/tickets/{code}/notifications",
+    (string code, INotificationUseCases inbox, CancellationToken ct)
+        => inbox.GetCustomerInboxAsync(PushAudience.QueueTicket, code, ct))
+    .RequireRateLimiting("public-sensitive-read");
 // PolicyVersion es la versión *efectiva*: la que el servidor exigirá en los formularios públicos.
 publicApi.MapGet("/legal", (IOptions<LegalOptions> legal, IConsentPolicyProvider consent) =>
 {
@@ -534,6 +563,13 @@ platformApi.MapGet("/health",
         http.User.IsInRole("PlatformAdmin")
             ? Results.Ok(await health.GetAsync(ct))
             : Results.StatusCode(StatusCodes.Status403Forbidden));
+// Diagnóstico del buzón para la administración técnica. Lleva conteos y nombres de negocio; nunca
+// endpoints, claves ni datos de clientes.
+platformApi.MapGet("/notifications/health",
+    async (HttpContext http, INotificationUseCases inbox, CancellationToken ct) =>
+        http.User.IsInRole("PlatformAdmin")
+            ? Results.Ok(await inbox.GetPlatformHealthAsync(ct))
+            : Results.StatusCode(StatusCodes.Status403Forbidden));
 // Comodín de acciones de estado. Los segmentos literales de arriba tienen mayor precedencia
 // de enrutamiento, así que "submit-review" y "reject-review" nunca llegan aquí.
 platformApi.MapPost("/businesses/{businessId:guid}/{action}",
@@ -560,6 +596,25 @@ privateApi.MapPost("/{businessId:guid}/push-subscriptions/remove",
     async (Guid businessId, WebPushUnsubscribeRequest request, ClaimsPrincipal user,
         IPushNotificationService push, CancellationToken ct) =>
     { await push.UnregisterOwnerAsync(UserId(user), businessId, request, ct); return Results.NoContent(); });
+
+// --- Bandeja de avisos del negocio -----------------------------------------------------------
+// Existe para que un aviso no dependa de que Chrome, Android o el servicio Push hayan cooperado.
+// El alcance de cada ruta sale de la membresía de quien pregunta, nunca del identificador que
+// mande el navegador; el conteo global ni siquiera acepta identificadores.
+privateApi.MapGet("/notifications/unread",
+    (ClaimsPrincipal user, INotificationUseCases inbox, CancellationToken ct)
+        => inbox.GetUnreadCountsAsync(UserId(user), ct));
+privateApi.MapGet("/{businessId:guid}/notifications",
+    (Guid businessId, bool? unreadOnly, int? take, ClaimsPrincipal user, INotificationUseCases inbox,
+        CancellationToken ct)
+        => inbox.GetBusinessInboxAsync(UserId(user), businessId, unreadOnly ?? false, take ?? 30, ct));
+privateApi.MapPost("/{businessId:guid}/notifications/read",
+    (Guid businessId, MarkNotificationsReadRequest request, ClaimsPrincipal user,
+        INotificationUseCases inbox, CancellationToken ct)
+        => inbox.MarkReadAsync(UserId(user), businessId, request, ct));
+privateApi.MapGet("/{businessId:guid}/notifications/diagnostics",
+    (Guid businessId, ClaimsPrincipal user, INotificationUseCases inbox, CancellationToken ct)
+        => inbox.GetDiagnosticsAsync(UserId(user), businessId, ct));
 
 // --- Perfil e imágenes del propietario -------------------------------------------------------
 // Mismos casos de uso que usa la administración: la autorización distingue quién entra, no qué
@@ -812,6 +867,7 @@ privateApi.MapPost("/{businessId:guid}/orders/{orderId:guid}/{action}",
         => orders.ChangeStatusAsync(UserId(user), businessId, orderId, action, request, ct));
 
 app.MapHub<QueueHub>("/hubs/queue");
+app.MapHub<OperationsHub>("/hubs/operations");
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()
     .AddInteractiveWebAssemblyRenderMode()

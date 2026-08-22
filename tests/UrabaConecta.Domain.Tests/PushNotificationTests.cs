@@ -40,18 +40,43 @@ public sealed class PushNotificationTests
     }
 
     [Fact]
-    public void Refresh_reactivates_and_three_transient_failures_deactivate()
+    public void Transient_failures_never_cost_a_healthy_device()
+    {
+        var subscription = NewSubscription();
+        var now = DateTimeOffset.UtcNow;
+        for (var attempt = 1; attempt < WebPushSubscription.ConsecutiveFailureCeiling; attempt++)
+            subscription.MarkFailed(now.AddMinutes(attempt), false);
+
+        // Una caída del proveedor no puede dejar sin avisos a quien atiende el negocio.
+        Assert.True(subscription.IsActive);
+        Assert.Equal(WebPushSubscription.ConsecutiveFailureCeiling - 1, subscription.FailureCount);
+
+        subscription.Refresh("https://push.example/new", "new-key", "new-auth", Guid.NewGuid(), null,
+            now.AddHours(1));
+        Assert.True(subscription.IsActive);
+        Assert.Equal(0, subscription.FailureCount);
+    }
+
+    [Fact]
+    public void Endless_failure_eventually_reaches_the_safety_ceiling()
+    {
+        var subscription = NewSubscription();
+        var now = DateTimeOffset.UtcNow;
+        for (var attempt = 0; attempt < WebPushSubscription.ConsecutiveFailureCeiling; attempt++)
+            subscription.MarkFailed(now.AddMinutes(attempt), false);
+
+        Assert.False(subscription.IsActive);
+    }
+
+    [Fact]
+    public void Successful_delivery_clears_the_failure_streak()
     {
         var subscription = NewSubscription();
         var now = DateTimeOffset.UtcNow;
         subscription.MarkFailed(now, false);
         subscription.MarkFailed(now.AddMinutes(1), false);
-        Assert.True(subscription.IsActive);
-        subscription.MarkFailed(now.AddMinutes(2), false);
-        Assert.False(subscription.IsActive);
+        subscription.MarkDelivered(now.AddMinutes(2));
 
-        subscription.Refresh("https://push.example/new", "new-key", "new-auth", Guid.NewGuid(), null,
-            now.AddMinutes(3));
         Assert.True(subscription.IsActive);
         Assert.Equal(0, subscription.FailureCount);
     }

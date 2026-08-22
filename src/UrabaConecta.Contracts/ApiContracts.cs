@@ -140,7 +140,8 @@ public sealed record MyBusinessDto(Guid Id, string Name, string Slug, string Mem
     bool CanManageConfiguration = false, bool CanManageAppointments = true, bool CanManageMembers = false,
     bool CanManageQueues = false, bool CanManageOrders = false, bool SupportsPickupOrdering = false,
     string BusinessStatus = "Active",
-    bool HasAppointments = false, bool HasVirtualQueues = false, bool HasPickupOrders = false)
+    bool HasAppointments = false, bool HasVirtualQueues = false, bool HasPickupOrders = false,
+    bool HasServices = false, bool HasProducts = false, bool HasStaff = false)
 {
     /// <summary>Perfil e imágenes son del propietario; un trabajador no las administra.</summary>
     public bool IsOwner => string.Equals(MembershipRole, "Owner", StringComparison.OrdinalIgnoreCase);
@@ -149,6 +150,21 @@ public sealed record MyBusinessDto(Guid Id, string Name, string Slug, string Mem
     public bool ShowAppointments => HasAppointments && CanManageAppointments;
     public bool ShowQueues => HasVirtualQueues && CanManageQueues;
     public bool ShowOrders => HasPickupOrders && CanManageOrders;
+
+    /// <summary>
+    /// Las secciones de configuración siguen la misma regla que las operaciones: capacidad del
+    /// negocio Y permiso de la persona. Ofrecer "Servicios" a una droguería que sólo despacha
+    /// pedidos era prometerle una pantalla que no le sirve para nada.
+    /// </summary>
+    public bool ShowServices => HasServices && CanManageConfiguration;
+    public bool ShowProducts => HasProducts && CanManageConfiguration;
+    public bool ShowStaff => HasStaff && CanManageConfiguration;
+
+    /// <summary>El horario sostiene las tres operaciones, así que basta con tener alguna.</summary>
+    public bool ShowSchedule => Capabilities.HasAnyOperation && CanManageConfiguration;
+
+    public BusinessCapabilitiesDto Capabilities => new(HasAppointments, HasVirtualQueues, HasPickupOrders,
+        HasServices, HasProducts, HasStaff);
 }
 // ---------------------------------------------------------------------------
 // Resumen operativo del propietario
@@ -535,11 +551,21 @@ public sealed class PlatformBusinessStateRequest
     public long Version { get; set; }
     [StringLength(240)] public string? Reason { get; set; }
 }
+/// <summary>
+/// Las tres operaciones son decisiones directas. Servicios, productos y personal viajan nulos
+/// mientras nadie quiera apartarse de la derivación —citas traen servicios y personal, pedidos
+/// traen productos—, y sólo entonces se guarda la decisión explícita. Enviarlos siempre como
+/// booleanos habría apagado esas tres capacidades en cada negocio que guardara módulos desde un
+/// cliente que aún no las conoce.
+/// </summary>
 public sealed class UpdatePlatformModulesRequest
 {
     public bool Appointments { get; set; }
     public bool VirtualQueues { get; set; }
     public bool PickupOrders { get; set; }
+    public bool? Services { get; set; }
+    public bool? Products { get; set; }
+    public bool? Staff { get; set; }
     public long Version { get; set; }
 }
 public sealed class ChangeTemporaryPasswordRequest
@@ -757,4 +783,18 @@ public interface IUrabaConectaApi
         CancellationToken cancellationToken = default);
     Task<PlatformHealthDto> GetPlatformHealthAsync(CancellationToken cancellationToken = default);
     Task<LegalInfoDto> GetLegalInfoAsync(CancellationToken cancellationToken = default);
+    // --- Bandeja de avisos ----------------------------------------------------------------
+    /// <summary>No leídos por negocio. No recibe identificadores: el alcance sale de la sesión.</summary>
+    Task<IReadOnlyList<NotificationCountDto>> GetUnreadNotificationCountsAsync(
+        CancellationToken cancellationToken = default);
+    Task<NotificationPageDto> GetBusinessNotificationsAsync(Guid businessId, bool unreadOnly = false,
+        int take = 30, CancellationToken cancellationToken = default);
+    Task<NotificationPageDto> MarkNotificationsReadAsync(Guid businessId,
+        MarkNotificationsReadRequest request, CancellationToken cancellationToken = default);
+    Task<NotificationDiagnosticsDto> GetNotificationDiagnosticsAsync(Guid businessId,
+        CancellationToken cancellationToken = default);
+    /// <summary><paramref name="kind"/> es "citas", "pedidos" o "turnos", como en la ruta pública.</summary>
+    Task<IReadOnlyList<NotificationDto>> GetTrackingNotificationsAsync(string kind, string code,
+        CancellationToken cancellationToken = default);
+    Task<NotificationHealthDto> GetNotificationHealthAsync(CancellationToken cancellationToken = default);
 }

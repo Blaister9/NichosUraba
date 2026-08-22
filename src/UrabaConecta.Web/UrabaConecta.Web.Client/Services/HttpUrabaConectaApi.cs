@@ -424,6 +424,34 @@ public sealed class HttpUrabaConectaApi(HttpClient http) : IUrabaConectaApi
         => Get<PlatformHealthDto>("api/v1/admin/health", cancellationToken);
     public Task<LegalInfoDto> GetLegalInfoAsync(CancellationToken cancellationToken = default)
         => Get<LegalInfoDto>("api/v1/public/legal", cancellationToken);
+    public Task<IReadOnlyList<NotificationCountDto>> GetUnreadNotificationCountsAsync(
+        CancellationToken cancellationToken = default)
+        => Get<IReadOnlyList<NotificationCountDto>>("api/v1/businesses/notifications/unread", cancellationToken);
+    public Task<NotificationPageDto> GetBusinessNotificationsAsync(Guid businessId, bool unreadOnly = false,
+        int take = 30, CancellationToken cancellationToken = default)
+        => Get<NotificationPageDto>(
+            $"api/v1/businesses/{businessId}/notifications?unreadOnly={(unreadOnly ? "true" : "false")}&take={take}",
+            cancellationToken);
+    public async Task<NotificationPageDto> MarkNotificationsReadAsync(Guid businessId,
+        MarkNotificationsReadRequest request, CancellationToken cancellationToken = default)
+        => await Read<NotificationPageDto>(await http.PostAsJsonAsync(
+            $"api/v1/businesses/{businessId}/notifications/read", request, Json, cancellationToken),
+            cancellationToken);
+    public Task<NotificationDiagnosticsDto> GetNotificationDiagnosticsAsync(Guid businessId,
+        CancellationToken cancellationToken = default)
+        => Get<NotificationDiagnosticsDto>($"api/v1/businesses/{businessId}/notifications/diagnostics",
+            cancellationToken);
+    public Task<IReadOnlyList<NotificationDto>> GetTrackingNotificationsAsync(string kind, string code,
+        CancellationToken cancellationToken = default)
+        => Get<IReadOnlyList<NotificationDto>>(kind switch
+        {
+            "citas" => $"api/v1/public/appointments/{E(code)}/notifications",
+            "pedidos" => $"api/v1/public/orders/{E(code)}/notifications",
+            "turnos" => $"api/v1/public/queue/tickets/{E(code)}/notifications",
+            _ => throw new ApiException("INVALID_TRACKING_KIND", "El tipo de seguimiento no es válido.")
+        }, cancellationToken);
+    public Task<NotificationHealthDto> GetNotificationHealthAsync(CancellationToken cancellationToken = default)
+        => Get<NotificationHealthDto>("api/v1/admin/notifications/health", cancellationToken);
 
     private async Task<BusinessMemberDto> PostVersion(Guid businessId, Guid membershipId, string action, long version,
         CancellationToken cancellationToken)

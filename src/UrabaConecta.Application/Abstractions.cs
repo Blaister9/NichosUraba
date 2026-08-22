@@ -5,6 +5,12 @@ namespace UrabaConecta.Application;
 
 public sealed record PushMessage(string Title, string Body, string Url, string Tag, bool Renotify = false);
 
+/// <summary>
+/// Registro y baja de dispositivos, y las promociones que un negocio publica. Lo que ya NO vive
+/// aquí es el envío: enviar en el hilo de la operación era lo que hacía que un fallo del proveedor
+/// se llevara por delante el aviso —y, en el peor caso, la operación—. Ese trabajo pasó a
+/// <see cref="INotificationPublisher"/> y al buzón que lo reparte.
+/// </summary>
 public interface IPushNotificationService
 {
     PushConfigurationDto Configuration { get; }
@@ -24,12 +30,6 @@ public interface IPushNotificationService
         WebPushSubscriptionRequest request, CancellationToken cancellationToken = default);
     Task UnregisterBusinessFollowerAsync(string businessSlug, WebPushUnsubscribeRequest request,
         CancellationToken cancellationToken = default);
-    Task NotifyBusinessAsync(Guid businessId, PushMessage message,
-        CancellationToken cancellationToken = default);
-    Task NotifyClientAsync(PushAudience audience, Guid entityId, PushMessage message,
-        CancellationToken cancellationToken = default);
-    Task NotifyProductRestockedAsync(Guid businessId, Guid productId, string productName,
-        string businessSlug, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<BusinessPromotionDto>> GetPublicPromotionsAsync(
         CancellationToken cancellationToken = default);
     Task<IReadOnlyList<BusinessPromotionDto>> GetBusinessPromotionsAsync(Guid userId, Guid businessId,
@@ -283,6 +283,13 @@ public interface IMembershipAdministrationStore
 
 public interface IUrabaStore
 {
+    /// <summary>
+    /// Capacidad efectiva, con la derivación aplicada. No es lo mismo que preguntar por una fila:
+    /// un negocio anterior a las capacidades derivadas no tiene fila de "Servicios" y aun así
+    /// tiene servicios porque agenda citas.
+    /// </summary>
+    Task<bool> HasCapabilityAsync(Guid businessId, BusinessModuleKind capability,
+        CancellationToken cancellationToken);
     Task<IReadOnlyList<CategoryCardDto>> FindCategoriesAsync(string? municipality,
         CancellationToken cancellationToken);
     Task<IReadOnlyList<BusinessCardDto>> FindBusinessesAsync(string? search, string? municipality, string? category,

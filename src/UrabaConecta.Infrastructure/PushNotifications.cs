@@ -1,9 +1,7 @@
-using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using UrabaConecta.Application;
 using UrabaConecta.Contracts;
@@ -70,8 +68,9 @@ public sealed class WebPushTransport(IOptions<WebPushOptions> options) : IWebPus
 }
 
 public sealed class PushNotificationService(AppDbContext db, IPublicCodeService codes,
-    IPersonalDataProtector protector, IWebPushTransport transport, IOptions<WebPushOptions> options,
-    IObjectStorage storage, TimeProvider clock, ILogger<PushNotificationService> logger) : IPushNotificationService
+    IPersonalDataProtector protector, INotificationPublisher notifications,
+    IOptions<WebPushOptions> options, IObjectStorage storage, TimeProvider clock)
+    : IPushNotificationService
 {
     private readonly WebPushOptions settings = options.Value;
     public PushConfigurationDto Configuration => new(settings.IsConfigured,
@@ -104,19 +103,25 @@ public sealed class PushNotificationService(AppDbContext db, IPublicCodeService 
         };
         var saved = await Upsert(target.BusinessId, audience, target.EntityId.ToString("N"), request,
             null, target.EntityId, protector.Protect(deepLink), cancellationToken);
-        var confirmation = audience switch
+        // La confirmación pasa por el mismo buzón que el resto: es el aviso que le dice a la
+        // persona que el registro funcionó, y si sale por un camino aparte no se puede diagnosticar
+        // junto a los demás cuando alguien reporta que "no me llega nada".
+        var (title, body, entityType) = audience switch
         {
-            PushAudience.Appointment => new PushMessage("Cita registrada",
-                "Te avisaremos aquí cuando haya una novedad útil sobre tu cita.", deepLink,
-                $"appointment-{target.EntityId}"),
-            PushAudience.QueueTicket => new PushMessage("Turno registrado",
-                "Te avisaremos cuando tu turno esté cerca y cuando te llamen.", deepLink,
-                $"queue-{target.EntityId}"),
-            _ => new PushMessage("Pedido recibido",
-                "Te avisaremos cuando tu pedido esté listo para recoger.", deepLink,
-                $"order-{target.EntityId}")
+            PushAudience.Appointment => ("Cita registrada",
+                "Te avisaremos aquí cuando haya una novedad útil sobre tu cita.",
+                TrackedEntities.Appointment),
+            PushAudience.QueueTicket => ("Turno registrado",
+                "Te avisaremos cuando tu turno esté cerca y cuando te llamen.",
+                TrackedEntities.QueueTicket),
+            _ => ("Pedido recibido", "Te avisaremos cuando tu pedido esté listo para recoger.",
+                TrackedEntities.PickupOrder)
         };
-        await NotifyClientAsync(audience, target.EntityId, confirmation, cancellationToken);
+        await notifications.PublishAsync(new(target.BusinessId, NotificationAudience.Customer,
+            NotificationKind.TrackingSubscribed, title, body, null, entityType, target.EntityId,
+            Notification.Key(NotificationAudience.Customer, NotificationKind.TrackingSubscribed,
+                target.EntityId, Hash(request.Endpoint)[..16]),
+            audience), cancellationToken);
         return saved;
     }
 
@@ -190,49 +195,6 @@ public sealed class PushNotificationService(AppDbContext db, IPublicCodeService 
             cancellationToken);
     }
 
-    public async Task NotifyBusinessAsync(Guid businessId, PushMessage message,
-        CancellationToken cancellationToken = default)
-    {
-        if (!settings.IsConfigured) return;
-        var subscriptions = await db.WebPushSubscriptions.Where(x => x.BusinessId == businessId &&
-                x.Audience == PushAudience.Owner && x.IsActive && x.UserId != null &&
-                db.BusinessMemberships.Any(m => m.BusinessId == businessId && m.UserId == x.UserId && m.IsActive))
-            .ToListAsync(cancellationToken);
-        await Deliver(subscriptions, message, cancellationToken);
-    }
-
-    public async Task NotifyClientAsync(PushAudience audience, Guid entityId, PushMessage message,
-        CancellationToken cancellationToken = default)
-    {
-        if (!settings.IsConfigured || audience == PushAudience.Owner) return;
-        var subscriptions = await db.WebPushSubscriptions
-            .Where(x => x.Audience == audience && x.EntityId == entityId && x.IsActive)
-            .ToListAsync(cancellationToken);
-        foreach (var subscription in subscriptions)
-        {
-            var link = subscription.ProtectedDeepLink is null
-                ? message.Url : protector.Unprotect(subscription.ProtectedDeepLink);
-            await Deliver([subscription], message with { Url = link }, cancellationToken);
-        }
-    }
-
-    public async Task NotifyProductRestockedAsync(Guid businessId, Guid productId, string productName,
-        string businessSlug, CancellationToken cancellationToken = default)
-    {
-        if (!settings.IsConfigured) return;
-        var started = clock.GetUtcNow();
-        var subscriptions = await db.WebPushSubscriptions.Where(x => x.BusinessId == businessId &&
-            x.Audience == PushAudience.ProductRestock && x.EntityId == productId && x.IsActive)
-            .ToListAsync(cancellationToken);
-        var message = new PushMessage($"Volvió {productName}", "Ya está disponible en UrabáConecta.",
-            $"/negocios/{Uri.EscapeDataString(businessSlug)}/pedidos#producto-{productId}",
-            $"restock-{productId}", true);
-        await Deliver(subscriptions, message, cancellationToken);
-        foreach (var subscription in subscriptions.Where(x => x.LastSuccessfulAtUtc >= started))
-            subscription.Deactivate(clock.GetUtcNow());
-        if (subscriptions.Any(x => x.LastSuccessfulAtUtc >= started)) await db.SaveChangesAsync(cancellationToken);
-    }
-
     public async Task<IReadOnlyList<BusinessPromotionDto>> GetPublicPromotionsAsync(
         CancellationToken cancellationToken = default)
     {
@@ -301,22 +263,32 @@ public sealed class PushNotificationService(AppDbContext db, IPublicCodeService 
             }
             else
             {
-                var followers = await db.WebPushSubscriptions.Where(x => x.BusinessId == businessId &&
-                    x.Audience == PushAudience.BusinessFollower && x.EntityId == businessId && x.IsActive)
-                    .ToListAsync(cancellationToken);
-                if (followers.Count == 0)
+                var followers = await db.WebPushSubscriptions.AsNoTracking()
+                    .CountAsync(x => x.BusinessId == businessId &&
+                        x.Audience == PushAudience.BusinessFollower && x.EntityId == businessId &&
+                        x.IsActive, cancellationToken);
+                if (followers == 0)
                 {
                     message = "Promoción guardada. El negocio todavía no tiene seguidores con avisos activos.";
                 }
                 else
                 {
-                    await Deliver(followers, new PushMessage(promotion.Headline,
-                        string.IsNullOrWhiteSpace(promotion.Body) ? "Hay una novedad en el negocio que sigues." : promotion.Body,
-                        promotion.DeepLink, $"promotion-{promotion.Id}", true), cancellationToken);
+                    // Se encola, no se envía aquí. Antes, un proveedor lento dejaba el formulario
+                    // colgado tantos segundos como seguidores hubiera, y un fallo a mitad enviaba a
+                    // unos sí y a otros no sin dejar rastro de a quiénes.
+                    await notifications.PublishAsync(new(businessId, NotificationAudience.Customer,
+                        NotificationKind.PromotionPublished, promotion.Headline,
+                        string.IsNullOrWhiteSpace(promotion.Body)
+                            ? "Hay una novedad en el negocio que sigues." : promotion.Body,
+                        promotion.DeepLink, TrackedEntities.Business, businessId,
+                        Notification.Key(NotificationAudience.Customer,
+                            NotificationKind.PromotionPublished, promotion.Id,
+                            now.ToUnixTimeSeconds().ToString()),
+                        PushAudience.BusinessFollower, Renotify: true), cancellationToken);
                     promotion.MarkPushSent(now);
                     await db.SaveChangesAsync(cancellationToken);
                     sent = true; nextAllowed = now.AddHours(24);
-                    message = $"Promoción guardada y enviada a {followers.Count} dispositivo(s) seguidor(es).";
+                    message = $"Promoción guardada y en camino a {followers} dispositivo(s) seguidor(es).";
                 }
             }
         }
@@ -355,32 +327,6 @@ public sealed class PushNotificationService(AppDbContext db, IPublicCodeService 
         if (subscription is null) return;
         subscription.Deactivate(clock.GetUtcNow());
         await db.SaveChangesAsync(ct);
-    }
-
-    private async Task Deliver(IReadOnlyList<StoredPushSubscription> subscriptions, PushMessage message,
-        CancellationToken ct)
-    {
-        foreach (var subscription in subscriptions)
-        {
-            try
-            {
-                await transport.SendAsync(subscription, message, ct);
-                subscription.MarkDelivered(clock.GetUtcNow());
-            }
-            catch (PushDeliveryException ex)
-            {
-                var expired = ex.StatusCode is (int)HttpStatusCode.NotFound or (int)HttpStatusCode.Gone;
-                subscription.MarkFailed(clock.GetUtcNow(), expired);
-                logger.LogWarning(ex, "Web Push rechazado con {StatusCode}; suscripción {SubscriptionId}.",
-                    ex.StatusCode, subscription.Id);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
-            {
-                subscription.MarkFailed(clock.GetUtcNow(), false);
-                logger.LogWarning(ex, "Falló Web Push para la suscripción {SubscriptionId}.", subscription.Id);
-            }
-        }
-        if (subscriptions.Count > 0) await db.SaveChangesAsync(ct);
     }
 
     private async Task DemandPromotionAccess(Guid userId, Guid businessId, CancellationToken ct)

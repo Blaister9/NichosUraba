@@ -8,7 +8,8 @@ namespace UrabaConecta.Application;
 public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdministrationStore membershipStore,
     IIdentityAccountManager identityAccounts, IPublicCodeService codes,
     IPersonalDataProtector protector, IConsentPolicyProvider consentPolicy,
-    IPushNotificationService push, TimeProvider timeProvider) : IUrabaUseCases
+    IPushNotificationService push, INotificationPublisher notifications,
+    TimeProvider timeProvider) : IUrabaUseCases
 {
     public Task<IReadOnlyList<BusinessCardDto>> GetBusinessesAsync(string? search, string? municipality,
         string? category, CancellationToken cancellationToken = default)
@@ -261,10 +262,15 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
 
         if (!await store.AddAppointmentAsync(appointment, consent, cancellationToken))
             throw new ApiException("SLOT_UNAVAILABLE", "Ese horario acaba de ocuparse. Elija otro.", 409);
-        await push.NotifyBusinessAsync(appointment.BusinessId, new("Nueva cita",
+        // El aviso se guarda; sacarlo hacia los dispositivos es trabajo del buzón. Si el servicio
+        // Push está caído, la cita queda creada igual y el negocio la encuentra en su bandeja.
+        await notifications.PublishAsync(new(appointment.BusinessId, NotificationAudience.Business,
+            NotificationKind.AppointmentRequested, "Nueva cita",
             $"Solicitud para {appointment.ServiceName}.",
             $"/panel/{appointment.BusinessId}/citas#appointment-{appointment.Id}",
-            $"business-appointment-{appointment.Id}"), cancellationToken);
+            TrackedEntities.Appointment, appointment.Id,
+            Notification.Key(NotificationAudience.Business, NotificationKind.AppointmentRequested, appointment.Id),
+            PushAudience.Owner), cancellationToken);
         return new(code.PlainText, appointment.Status.ToString(), appointment.ServiceName, appointment.StartAtUtc,
             appointment.DepositStatus.ToString(), appointment.DepositAmount);
     }
@@ -362,29 +368,36 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
             throw new ApiException("INVALID_STATUS", "El estado solicitado no existe.");
         TryDomain(() => record.Appointment.ChangeStatus(target, timeProvider.GetUtcNow(), request.Reason));
         await store.SaveChangesAsync(cancellationToken);
-        var clientMessage = target switch
+        // Todos los estados dejan rastro para el cliente, no sólo los tres que antes salían por
+        // Push: quien abre su seguimiento tiene que poder leer qué pasó y cuándo.
+        var appointment = record.Appointment;
+        (NotificationKind Kind, string Title, string Body)? announcement = target switch
         {
-            AppointmentStatus.Confirmed => new PushMessage("Cita confirmada",
-                $"{record.Appointment.ServiceName}: el negocio confirmó tu cita.", "",
-                $"appointment-{record.Appointment.Id}", true),
-            AppointmentStatus.Rejected => new PushMessage("Novedad en tu cita",
-                "El negocio no pudo confirmar la solicitud. Revisa el seguimiento.", "",
-                $"appointment-{record.Appointment.Id}", true),
-            AppointmentStatus.Cancelled => new PushMessage("Cita cancelada",
-                "La cita fue cancelada. Revisa el seguimiento para ver su estado.", "",
-                $"appointment-{record.Appointment.Id}", true),
+            AppointmentStatus.Confirmed => (NotificationKind.AppointmentConfirmed, "Cita confirmada",
+                $"{appointment.ServiceName}: el negocio confirmó tu cita."),
+            AppointmentStatus.Rejected => (NotificationKind.AppointmentRejected, "Novedad en tu cita",
+                "El negocio no pudo confirmar la solicitud. Revisa el seguimiento."),
+            AppointmentStatus.Cancelled => (NotificationKind.AppointmentCancelled, "Cita cancelada",
+                "La cita fue cancelada. Revisa el seguimiento para ver su estado."),
+            AppointmentStatus.Completed => (NotificationKind.AppointmentCompleted, "Cita completada",
+                $"{appointment.ServiceName}: el negocio marcó tu cita como atendida."),
+            AppointmentStatus.NoShow => (NotificationKind.AppointmentNoShow, "Cita no asistida",
+                "El negocio registró que no se presentó nadie a esta cita."),
             _ => null
         };
-        if (clientMessage is not null)
-            await push.NotifyClientAsync(PushAudience.Appointment, record.Appointment.Id,
-                clientMessage, cancellationToken);
+        if (announcement is { } news)
+            await notifications.PublishAsync(new(appointment.BusinessId, NotificationAudience.Customer,
+                news.Kind, news.Title, news.Body, null, TrackedEntities.Appointment, appointment.Id,
+                Notification.Key(NotificationAudience.Customer, news.Kind, appointment.Id),
+                PushAudience.Appointment, Renotify: true), cancellationToken);
         return ToAdmin(record);
     }
 
     public async Task<ServiceDto> UpdateServiceAsync(Guid userId, Guid businessId, Guid serviceId,
         UpdateServiceRequest request, CancellationToken cancellationToken = default)
     {
-        await DemandConfigurationAccess(userId, businessId, cancellationToken);
+        await DemandConfigurationAccess(userId, businessId, cancellationToken,
+            BusinessModuleKind.Services);
         var service = await store.GetServiceAsync(businessId, serviceId, cancellationToken)
             ?? throw new ApiException("SERVICE_NOT_FOUND", "No encontramos el servicio.", 404);
         var policy = ToPolicy(request, request.ReferencePrice);
@@ -397,14 +410,16 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
     public async Task<IReadOnlyList<ServiceDto>> GetServicesAsync(Guid userId, Guid businessId,
         CancellationToken cancellationToken = default)
     {
-        await DemandConfigurationAccess(userId, businessId, cancellationToken);
+        await DemandConfigurationAccess(userId, businessId, cancellationToken,
+            BusinessModuleKind.Services);
         return await store.GetServicesAsync(businessId, timeProvider.GetUtcNow(), cancellationToken);
     }
 
     public async Task<ServiceDto> CreateServiceAsync(Guid userId, Guid businessId, CreateServiceRequest request,
         CancellationToken cancellationToken = default)
     {
-        await DemandConfigurationAccess(userId, businessId, cancellationToken);
+        await DemandConfigurationAccess(userId, businessId, cancellationToken,
+            BusinessModuleKind.Services);
         Service service;
         try
         {
@@ -421,7 +436,8 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
     public async Task DeactivateServiceAsync(Guid userId, Guid businessId, Guid serviceId,
         CancellationToken cancellationToken = default)
     {
-        await DemandConfigurationAccess(userId, businessId, cancellationToken);
+        await DemandConfigurationAccess(userId, businessId, cancellationToken,
+            BusinessModuleKind.Services);
         var service = await store.GetServiceAsync(businessId, serviceId, cancellationToken)
             ?? throw new ApiException("SERVICE_NOT_FOUND", "No encontramos el servicio.", 404);
         service.Update(service.Name, service.DurationMinutes, service.ReferencePrice, false,
@@ -432,14 +448,16 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
     public async Task<IReadOnlyList<StaffMemberDto>> GetStaffAsync(Guid userId, Guid businessId,
         CancellationToken cancellationToken = default)
     {
-        await DemandConfigurationAccess(userId, businessId, cancellationToken);
+        await DemandConfigurationAccess(userId, businessId, cancellationToken,
+            BusinessModuleKind.Staff);
         return await store.GetStaffAsync(businessId, cancellationToken);
     }
 
     public async Task<StaffMemberDto> CreateStaffAsync(Guid userId, Guid businessId, SaveStaffMemberRequest request,
         CancellationToken cancellationToken = default)
     {
-        await DemandConfigurationAccess(userId, businessId, cancellationToken);
+        await DemandConfigurationAccess(userId, businessId, cancellationToken,
+            BusinessModuleKind.Staff);
         var staff = new StaffMember(Guid.NewGuid(), businessId, request.DisplayName.Trim());
         staff.Update(request.DisplayName, request.IsActive, request.ParticipatesInAvailability);
         store.AddStaffMember(staff);
@@ -453,7 +471,8 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
     public async Task<StaffMemberDto> UpdateStaffAsync(Guid userId, Guid businessId, Guid staffId,
         SaveStaffMemberRequest request, CancellationToken cancellationToken = default)
     {
-        await DemandConfigurationAccess(userId, businessId, cancellationToken);
+        await DemandConfigurationAccess(userId, businessId, cancellationToken,
+            BusinessModuleKind.Staff);
         var staff = await store.GetStaffMemberAsync(businessId, staffId, cancellationToken)
             ?? throw new ApiException("STAFF_NOT_FOUND", "No encontramos al trabajador.", 404);
         TryDomain(() => staff.Update(request.DisplayName, request.IsActive, request.ParticipatesInAvailability,
@@ -602,13 +621,23 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
             throw new ApiException("MODULE_DISABLED", "Este establecimiento no tiene citas habilitadas.", 403);
     }
 
-    private async Task DemandConfigurationAccess(Guid userId, Guid businessId, CancellationToken cancellationToken)
+    /// <summary>
+    /// <paramref name="capability"/> exige además que el negocio tenga esa capacidad. Ocultar la
+    /// tarjeta no basta: una dirección escrita a mano llegaba igual a administrar servicios en un
+    /// negocio que sólo despacha pedidos.
+    /// </summary>
+    private async Task DemandConfigurationAccess(Guid userId, Guid businessId,
+        CancellationToken cancellationToken, BusinessModuleKind? capability = null)
     {
         if (userId == Guid.Empty) throw new ApiException("UNAUTHENTICATED", "Debe iniciar sesión.", 401);
         if (!await store.IsMemberAsync(userId, businessId, cancellationToken))
             throw new ApiException("BUSINESS_ACCESS_DENIED", "No tiene acceso a este establecimiento.", 403);
         if (!await store.CanManageConfigurationAsync(userId, businessId, cancellationToken))
             throw new ApiException("CONFIGURATION_FORBIDDEN", "No tiene permiso para cambiar la configuración.", 403);
+        if (capability is { } required &&
+            !await store.HasCapabilityAsync(businessId, required, cancellationToken))
+            throw new ApiException("CAPABILITY_DISABLED",
+                "Este establecimiento no tiene esa función habilitada.", 403);
     }
 
     private void ValidateContact(CreateAppointmentRequest request)

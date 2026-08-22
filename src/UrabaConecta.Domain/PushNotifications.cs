@@ -61,10 +61,22 @@ public sealed class WebPushSubscription : IBusinessOwned
         LastSuccessfulAtUtc = now; FailureCount = 0; Touch(now);
     }
 
+    /// <summary>
+    /// Un fallo de entrega. Sólo el endpoint caducado —404 o 410 del servicio Push— apaga el
+    /// dispositivo: eso sí es el navegador diciendo que esa suscripción ya no existe.
+    ///
+    /// Antes bastaban tres fallos cualesquiera, y con eso una caída de veinte minutos del proveedor
+    /// dejaba a la persona sin avisos para siempre sin que nadie se enterara. Los fallos pasajeros
+    /// se cuentan, se reintentan en <see cref="NotificationDelivery"/> y no cuestan el dispositivo.
+    /// El techo existe sólo contra un endpoint que responde error indefinidamente sin llegar nunca
+    /// a caducar; con la espera creciente de los reintentos, alcanzarlo lleva semanas de fallos.
+    /// </summary>
+    public const int ConsecutiveFailureCeiling = 50;
+
     public void MarkFailed(DateTimeOffset now, bool expired)
     {
         FailureCount++;
-        if (expired || FailureCount >= 3) IsActive = false;
+        if (expired || FailureCount >= ConsecutiveFailureCeiling) IsActive = false;
         Touch(now);
     }
 

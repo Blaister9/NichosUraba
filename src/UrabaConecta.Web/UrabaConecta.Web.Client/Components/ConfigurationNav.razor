@@ -1,22 +1,69 @@
+@inject BusinessAccess Access
+
+@* La navegación la gobiernan las capacidades del negocio, no la categoría.
+
+   Ofrecer "Servicios" a una droguería que sólo despacha pedidos, o "Turnos" a una odontología que
+   sólo agenda, es prometer pantallas que no le sirven de nada a ese negocio —y en varios casos el
+   servidor las rechaza igual, así que el enlace llevaba a una puerta cerrada—. Aquí sólo aparece lo
+   que el negocio tiene habilitado Y esta persona puede administrar. *@
 <nav class="config-nav" aria-label="Configuración del negocio">
     <a href="/panel/@BusinessId/configuracion">Resumen</a>
     @* Perfil e imágenes viven aquí y no en "Administración": son del negocio, no de la plataforma.
        Sólo para la propietaria: a un trabajador el enlace le llevaría a una pantalla que le niega
        el paso, y ofrecer una puerta cerrada es peor que no ofrecerla. *@
-    @if (ShowOwnerSections)
+    @if (Owner)
     {
         <a href="/panel/@BusinessId/configuracion/perfil">Perfil</a>
         <a href="/panel/@BusinessId/configuracion/imagenes">Imágenes</a>
         <a href="/panel/@BusinessId/promociones">Promociones</a>
     }
-    <a href="/panel/@BusinessId/configuracion/servicios">Servicios</a>
-    <a href="/panel/@BusinessId/configuracion/personal">Personal</a>
-    <a href="/panel/@BusinessId/configuracion/horarios">Horarios</a>
-    <a href="/panel/@BusinessId/configuracion/excepciones">Excepciones</a>
+    @if (business is null || business.ShowServices)
+    {
+        <a href="/panel/@BusinessId/configuracion/servicios">Servicios</a>
+    }
+    @if (business is null || business.ShowStaff)
+    {
+        <a href="/panel/@BusinessId/configuracion/personal">Personal</a>
+    }
+    @if (business is null || business.ShowSchedule)
+    {
+        <a href="/panel/@BusinessId/configuracion/horarios">Horarios</a>
+        <a href="/panel/@BusinessId/configuracion/excepciones">Excepciones</a>
+    }
+    @if (business is { ShowQueues: true })
+    {
+        <a href="/panel/@BusinessId/configuracion/turnos">Turnos</a>
+    }
+    @if (business is { ShowProducts: true })
+    {
+        <a href="/panel/@BusinessId/configuracion/pedidos">Catálogo</a>
+    }
+    <a href="/panel/@BusinessId/avisos">Avisos</a>
     <a href="/panel/@BusinessId/equipo">Equipo y permisos</a>
 </nav>
 
 @code {
     [Parameter, EditorRequired] public Guid BusinessId { get; set; }
+
+    /// <summary>
+    /// Se conserva para que una pantalla pueda afirmar la propiedad sin esperar a la consulta —el
+    /// perfil y las imágenes ya saben que quien entró es propietario—. Si no llega, manda lo que
+    /// diga la membresía.
+    /// </summary>
     [Parameter] public bool ShowOwnerSections { get; set; }
+
+    private MyBusinessDto? business;
+
+    private bool Owner => ShowOwnerSections || business is { IsOwner: true };
+
+    /// <summary>
+    /// Mientras no se sepa, se enseña el conjunto conservador de siempre en vez de una barra vacía:
+    /// una navegación que aparece a trozos desorienta más que una que llega completa un instante
+    /// después. Lo específico de cada capacidad —turnos, catálogo— sí espera a saberlo.
+    /// </summary>
+    protected override async Task OnParametersSetAsync()
+    {
+        try { business = await Access.ForAsync(BusinessId); }
+        catch (ApiException) { business = null; }
+    }
 }

@@ -1,7 +1,7 @@
 @page "/panel/{BusinessId:guid}/configuracion"
 @rendermode InteractiveServer
 @attribute [Authorize]
-@inject IUrabaConectaApi Api
+@inject BusinessAccess Access
 
 <PageTitle>Configuración del negocio | UrabáConecta</PageTitle>
 <a class="back-link" href="/panel">← Mis negocios</a>
@@ -23,27 +23,28 @@ else if (business is not null)
 {
     <div class="config-business"><span class="tag">Negocio</span><strong>@business.Name</strong></div>
     <ConfigurationNav BusinessId="BusinessId" ShowOwnerSections="business.IsOwner" />
+    @* Las tarjetas salen de las capacidades del negocio, no de la categoría ni de una lista fija.
+       Antes esta rejilla ofrecía Servicios, Personal, Horarios y Excepciones a todo el mundo: una
+       droguería que sólo despacha pedidos veía cuatro pantallas que no le sirven, y el número de
+       orden mentía sobre cuántos pasos le faltaban de verdad. *@
     <div class="config-grid">
-        @* El perfil y las imágenes abren la lista porque son lo primero que ve un cliente, y porque
-           hasta V6.5a el propietario sólo podía tocarlos entrando por "Administración". *@
-        @if (business.IsOwner)
+        @{ var paso = 0; }
+        @foreach (var card in Cards(business))
         {
-            <a class="config-card" href="/panel/@BusinessId/configuracion/perfil" data-testid="config-perfil"><span>01</span><h2>Perfil</h2><p>Descripciones, contacto y ubicación que ven tus clientes.</p></a>
-            <a class="config-card" href="/panel/@BusinessId/configuracion/imagenes" data-testid="config-imagenes"><span>02</span><h2>Imágenes</h2><p>Logo, portada y galería de tu ficha pública.</p></a>
-        }
-        <a class="config-card" href="/panel/@BusinessId/configuracion/servicios"><span>03</span><h2>Servicios</h2><p>Oferta, duración, precio y publicación.</p></a>
-        <a class="config-card" href="/panel/@BusinessId/configuracion/personal"><span>04</span><h2>Personal</h2><p>Perfiles operativos y servicios que prestan.</p></a>
-        <a class="config-card" href="/panel/@BusinessId/configuracion/horarios"><span>05</span><h2>Horarios</h2><p>Apertura habitual por día, hora de Colombia.</p></a>
-        <a class="config-card" href="/panel/@BusinessId/configuracion/excepciones"><span>06</span><h2>Excepciones</h2><p>Cierres y aperturas para fechas concretas.</p></a>
-        @if (business.CanManageQueues)
-        {
-            <a class="config-card" href="/panel/@BusinessId/configuracion/turnos"><span>07</span><h2>Turnos</h2><p>Nombre, capacidad, duración y publicación de la fila.</p></a>
-        }
-        @if (business.SupportsPickupOrdering)
-        {
-            <a class="config-card" href="/panel/@BusinessId/configuracion/pedidos"><span>08</span><h2>Pedidos</h2><p>Catálogo, precios, franjas y capacidad.</p></a>
+            paso++;
+            <a class="config-card" href="@card.Href" data-testid="@card.TestId">
+                <span>@paso.ToString("00")</span><h2>@card.Title</h2><p>@card.Description</p>
+            </a>
         }
     </div>
+    @if (!business.Capabilities.HasAnyOperation)
+    {
+        <div class="empty" data-testid="config-sin-capacidades">
+            <h2>Este negocio todavía no tiene funciones activas</h2>
+            <p>Citas, turnos y pedidos se habilitan desde la administración de la plataforma.</p>
+            <p class="meta">Escribe a quien te dio de alta para que active lo que necesitas.</p>
+        </div>
+    }
 }
 
 @code {
@@ -52,12 +53,50 @@ else if (business is not null)
     private bool loading = true;
     private string? error;
 
+    private sealed record ConfigCard(string Href, string Title, string Description, string TestId);
+
+    /// <summary>
+    /// Una sección aparece cuando el negocio tiene la capacidad Y la persona el permiso. El orden es
+    /// el del recorrido real: primero lo que ve el cliente, después lo que sostiene la operación.
+    /// </summary>
+    private IEnumerable<ConfigCard> Cards(MyBusinessDto b)
+    {
+        if (b.IsOwner)
+        {
+            yield return new($"/panel/{BusinessId}/configuracion/perfil", "Perfil",
+                "Descripciones, contacto y ubicación que ven tus clientes.", "config-perfil");
+            yield return new($"/panel/{BusinessId}/configuracion/imagenes", "Imágenes",
+                "Logo, portada y galería de tu ficha pública.", "config-imagenes");
+        }
+        if (b.ShowServices)
+            yield return new($"/panel/{BusinessId}/configuracion/servicios", "Servicios",
+                "Oferta, duración, precio y publicación.", "config-servicios");
+        if (b.ShowProducts)
+            yield return new($"/panel/{BusinessId}/configuracion/pedidos", "Catálogo y pedidos",
+                "Productos, precios, franjas y capacidad.", "config-pedidos");
+        if (b.ShowStaff)
+            yield return new($"/panel/{BusinessId}/configuracion/personal", "Personal",
+                "Perfiles operativos y servicios que prestan.", "config-personal");
+        if (b.ShowSchedule)
+        {
+            yield return new($"/panel/{BusinessId}/configuracion/horarios", "Horarios",
+                "Apertura habitual por día, hora de Colombia.", "config-horarios");
+            yield return new($"/panel/{BusinessId}/configuracion/excepciones", "Excepciones",
+                "Cierres y aperturas para fechas concretas.", "config-excepciones");
+        }
+        if (b.ShowQueues)
+            yield return new($"/panel/{BusinessId}/configuracion/turnos", "Turnos",
+                "Nombre, capacidad, duración y publicación de la fila.", "config-turnos");
+        yield return new($"/panel/{BusinessId}/avisos", "Avisos",
+            "Lo que pasó en tu negocio, aunque el aviso del teléfono no llegara.", "config-avisos");
+    }
+
     protected override async Task OnParametersSetAsync()
     {
         loading = true; error = null;
         try
         {
-            business = (await Api.GetMyBusinessesAsync()).SingleOrDefault(x => x.Id == BusinessId);
+            business = await Access.ForAsync(BusinessId);
             if (business is null) error = "No tiene acceso a este establecimiento.";
             else if (!business.CanManageConfiguration) error = "No tiene permiso para cambiar la configuración.";
         }

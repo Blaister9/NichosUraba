@@ -474,30 +474,71 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
         => db.BusinessModules.AsNoTracking()
             .AnyAsync(x => x.BusinessId == businessId && x.Module == module && x.IsEnabled, cancellationToken);
 
+    /// <summary>
+    /// Se leen las filas del negocio —seis como mucho— y se resuelve en memoria. Preguntar por una
+    /// sola fila daría "no" para un negocio anterior a las capacidades derivadas, que sí tiene
+    /// servicios y personal porque agenda citas.
+    /// </summary>
+    public async Task<bool> HasCapabilityAsync(Guid businessId, BusinessModuleKind capability,
+        CancellationToken cancellationToken)
+    {
+        var rows = await db.BusinessModules.AsNoTracking()
+            .Where(x => x.BusinessId == businessId).ToListAsync(cancellationToken);
+        return BusinessCapabilities.Resolve(rows).Contains(capability);
+    }
+
+    /// <summary>
+    /// Un negocio archivado ya no se opera: listarlo en "Mis establecimientos" ofrecía accesos que no
+    /// conducen a nada. Se excluye aquí y no en la vista, para que ninguna otra pantalla lo herede.
+    ///
+    /// Las tres capacidades derivadas se traen como booleano anulable —nulo significa "nadie lo
+    /// decidió"— y se resuelven al salir de la base. Traerlas como EXISTS habría confundido "apagado
+    /// a mano" con "todavía sin decidir", que son cosas distintas.
+    /// </summary>
     public async Task<IReadOnlyList<MyBusinessDto>> GetMembershipsAsync(Guid userId, CancellationToken cancellationToken)
-        // Un negocio archivado ya no se opera: listarlo en "Mis establecimientos" ofrecía accesos
-        // que no conducen a nada. Se excluye aquí y no en la vista, para que ninguna otra pantalla
-        // lo herede.
-        => await (from membership in db.BusinessMemberships.AsNoTracking()
+    {
+        var rows = await (from membership in db.BusinessMemberships.AsNoTracking()
                   join business in db.Businesses.AsNoTracking() on membership.BusinessId equals business.Id
                   where membership.UserId == userId && membership.IsActive &&
                         business.Status != BusinessStatus.Archived
                   orderby business.Name
-                  select new MyBusinessDto(business.Id, business.Name, business.Slug, membership.Role.ToString(),
-                      membership.Role == MembershipRole.Owner || membership.CanManageConfiguration,
-                      membership.Role == MembershipRole.Owner || membership.CanManageAppointments,
-                      membership.Role == MembershipRole.Owner || membership.CanManageMembers,
-                      membership.Role == MembershipRole.Owner || membership.CanManageQueues,
-                      membership.Role == MembershipRole.Owner || membership.CanManageOrders,
-                      db.PickupOrderSettings.Any(s => s.BusinessId == business.Id),
-                      business.Status.ToString(),
-                      db.BusinessModules.Any(m => m.BusinessId == business.Id &&
+                  select new
+                  {
+                      business.Id, business.Name, business.Slug,
+                      Role = membership.Role,
+                      Configuration = membership.Role == MembershipRole.Owner || membership.CanManageConfiguration,
+                      Appointments = membership.Role == MembershipRole.Owner || membership.CanManageAppointments,
+                      Members = membership.Role == MembershipRole.Owner || membership.CanManageMembers,
+                      Queues = membership.Role == MembershipRole.Owner || membership.CanManageQueues,
+                      Orders = membership.Role == MembershipRole.Owner || membership.CanManageOrders,
+                      HasPickupSettings = db.PickupOrderSettings.Any(s => s.BusinessId == business.Id),
+                      Status = business.Status,
+                      HasAppointments = db.BusinessModules.Any(m => m.BusinessId == business.Id &&
                           m.Module == BusinessModuleKind.Appointments && m.IsEnabled),
-                      db.BusinessModules.Any(m => m.BusinessId == business.Id &&
+                      HasQueues = db.BusinessModules.Any(m => m.BusinessId == business.Id &&
                           m.Module == BusinessModuleKind.VirtualQueues && m.IsEnabled),
-                      db.BusinessModules.Any(m => m.BusinessId == business.Id &&
-                          m.Module == BusinessModuleKind.PickupOrders && m.IsEnabled)))
-            .ToListAsync(cancellationToken);
+                      HasOrders = db.BusinessModules.Any(m => m.BusinessId == business.Id &&
+                          m.Module == BusinessModuleKind.PickupOrders && m.IsEnabled),
+                      StatedServices = db.BusinessModules.Where(m => m.BusinessId == business.Id &&
+                          m.Module == BusinessModuleKind.Services).Select(m => (bool?)m.IsEnabled).FirstOrDefault(),
+                      StatedProducts = db.BusinessModules.Where(m => m.BusinessId == business.Id &&
+                          m.Module == BusinessModuleKind.Products).Select(m => (bool?)m.IsEnabled).FirstOrDefault(),
+                      StatedStaff = db.BusinessModules.Where(m => m.BusinessId == business.Id &&
+                          m.Module == BusinessModuleKind.Staff).Select(m => (bool?)m.IsEnabled).FirstOrDefault()
+                  }).ToListAsync(cancellationToken);
+        return rows.Select(x =>
+        {
+            var capabilities = BusinessCapabilities.Resolve(x.HasAppointments, x.HasQueues, x.HasOrders,
+                x.StatedServices, x.StatedProducts, x.StatedStaff);
+            return new MyBusinessDto(x.Id, x.Name, x.Slug, x.Role.ToString(),
+                x.Configuration, x.Appointments, x.Members, x.Queues, x.Orders,
+                x.HasPickupSettings, x.Status.ToString(),
+                x.HasAppointments, x.HasQueues, x.HasOrders,
+                capabilities.Contains(BusinessModuleKind.Services),
+                capabilities.Contains(BusinessModuleKind.Products),
+                capabilities.Contains(BusinessModuleKind.Staff));
+        }).ToList();
+    }
 
     public async Task<AppointmentBoardRecord> GetAppointmentsAsync(Guid businessId, DateOnly? date,
         AppointmentStatus? status, CancellationToken cancellationToken)
