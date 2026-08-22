@@ -281,9 +281,16 @@ public sealed class NotificationDispatcher(AppDbContext db, IWebPushTransport tr
     {
         if (!push.IsConfigured) return NotificationDispatchReport.Empty;
         var now = clock.GetUtcNow();
-        var claimed = await ClaimAsync(now, cancellationToken);
+        var until = now.AddSeconds(settings.LeaseSeconds);
+        var claimed = await ClaimAsync(now, until, cancellationToken);
         if (claimed.Count == 0) return NotificationDispatchReport.Empty;
 
+        // La reserva se escribió con SQL directo. Si la entrega nació en el reparto de esta misma
+        // pasada, EF devolvería la instancia que ya tiene en seguimiento —sin reserva— y al
+        // soltarla no vería ningún cambio: la reserva se quedaría escrita en la base y el
+        // reintento no volvería a salir hasta que caducara. Vaciar el seguimiento obliga a releer
+        // el estado real, que es el único que puede compararse con lo que se va a escribir.
+        db.ChangeTracker.Clear();
         var deliveries = await db.NotificationDeliveries
             .Where(x => claimed.Contains(x.Id)).ToListAsync(cancellationToken);
         var notificationIds = deliveries.Select(x => x.NotificationId).Distinct().ToList();
@@ -367,9 +374,9 @@ public sealed class NotificationDispatcher(AppDbContext db, IWebPushTransport tr
     /// Reserva un lote con FOR UPDATE SKIP LOCKED. Es lo que impide que dos instancias envíen la
     /// misma entrega: la que no consigue el bloqueo se salta la fila en vez de esperarla.
     /// </summary>
-    private async Task<List<Guid>> ClaimAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    private async Task<List<Guid>> ClaimAsync(DateTimeOffset now, DateTimeOffset until,
+        CancellationToken cancellationToken)
     {
-        var until = now.AddSeconds(settings.LeaseSeconds);
         const string sql = """
             UPDATE notification_deliveries AS d
             SET "LeaseOwner" = @owner, "LeasedUntilUtc" = @until
