@@ -224,8 +224,14 @@ else
         catch (ApiException ex) { error = ex.Message; }
         finally { saving = false; }
     }
-    private static string Friendly(ApiException ex) => ex.StatusCode is 401 or 403 or 404
-        ? "No tiene acceso a este establecimiento." : ex.Message;
+    /// <summary>
+    /// "No tiene acceso" y "este negocio no hace eso" son cosas distintas, y confundirlas manda a la
+    /// persona a pedir permisos que ya tiene. Un 403 por capacidad se dice tal cual.
+    /// </summary>
+    private static string Friendly(ApiException ex) => ex.Code == "CAPABILITY_DISABLED"
+        ? "Este establecimiento no tiene esa función habilitada."
+        : ex.StatusCode is 401 or 403 or 404
+            ? "No tiene acceso a este establecimiento." : ex.Message;
 
     private sealed class ServiceForm
     {

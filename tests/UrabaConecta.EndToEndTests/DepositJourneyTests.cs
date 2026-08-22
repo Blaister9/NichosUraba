@@ -122,7 +122,9 @@ public sealed class DepositJourneyTests(BrowserFixture fixture) : IClassFixture<
 
         // 15. Y la clienta ve el resultado en su seguimiento, leído de nuevo desde PostgreSQL.
         await publica.GotoAsync($"{fixture.BaseUrl}/seguimiento/citas/{codigo}");
-        await Expect(publica.GetByText("Confirmada")).ToBeVisibleAsync();
+        // Exact: la pantalla de seguimiento lleva ahora las novedades guardadas, y "Cita confirmada"
+        // contiene esta misma palabra. Lo que se afirma aquí es el estado, no el historial.
+        await Expect(publica.GetByText("Confirmada", new() { Exact = true })).ToBeVisibleAsync();
         await Expect(publica.GetByTestId("deposit-status")).ToHaveTextAsync("Adelanto verificado");
         await Expect(publica.GetByText("El negocio verificó su adelanto. No tiene que enviar nada más."))
             .ToBeVisibleAsync();

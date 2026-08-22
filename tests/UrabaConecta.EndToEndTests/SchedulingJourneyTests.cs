@@ -42,12 +42,13 @@ public sealed class SchedulingJourneyTests(BrowserFixture fixture) : IClassFixtu
         await ClickUntilStatus(card, "Confirmar", "Confirmada");
 
         await page.GotoAsync($"{fixture.BaseUrl}/seguimiento/citas/{code}");
-        await Expect(page.GetByText("Confirmada")).ToBeVisibleAsync();
+        // Exact: el seguimiento lista también las novedades, y "Cita confirmada" contiene la palabra.
+        await Expect(page.GetByText("Confirmada", new() { Exact = true })).ToBeVisibleAsync();
         await page.GotoAsync($"{fixture.BaseUrl}/panel/{DevelopmentSeeder.BellaBusinessId}/citas");
         card = page.Locator("[data-testid=appointment-card]").Filter(new() { HasTextString = "E2E Ana" });
         await ClickUntilStatus(card, "Completar", "Completada");
         await page.GotoAsync($"{fixture.BaseUrl}/seguimiento/citas/{code}");
-        await Expect(page.GetByText("Completada")).ToBeVisibleAsync();
+        await Expect(page.GetByText("Completada", new() { Exact = true })).ToBeVisibleAsync();
     }
 
     [Fact]
