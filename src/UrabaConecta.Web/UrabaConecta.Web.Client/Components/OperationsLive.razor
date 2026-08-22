@@ -26,8 +26,26 @@
     private HubConnection? hub;
     private Guid? connectedBusiness;
     private string? connectedChannel, connectedCode;
+    private bool interactive;
+
+    /// <summary>
+    /// Nada de conectar durante el prerenderizado. Ahí no hay circuito que mantener, y el intento
+    /// de negociación se cobra en el tiempo de respuesta del documento: la página tarda más en
+    /// llegar por una conexión que se va a tirar en cuanto termine de pintarse.
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        interactive = true;
+        await ConnectAsync();
+    }
 
     protected override async Task OnParametersSetAsync()
+    {
+        if (interactive) await ConnectAsync();
+    }
+
+    private async Task ConnectAsync()
     {
         // Una navegación entre dos negocios reutiliza el componente: sin esta comparación se
         // volvería a conectar en cada render y se acumularían suscripciones al mismo grupo.

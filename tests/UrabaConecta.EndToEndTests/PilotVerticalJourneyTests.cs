@@ -255,6 +255,50 @@ public sealed class PilotVerticalJourneyTests(BrowserFixture fixture) : IClassFi
         }
     }
 
+    // =======================================================================================
+    // Composición: se usa desde un teléfono, y desde uno estrecho
+    // =======================================================================================
+
+    /// <summary>
+    /// La bandeja en 360, en 390 y en escritorio. Se comprueban tres cosas que se rompen solas al
+    /// añadir contenido: que la página no se pueda desplazar en horizontal, que las acciones
+    /// principales sigan siendo tocables —44 px es el mínimo del sistema visual— y que ninguna
+    /// quede fuera de la pantalla.
+    /// </summary>
+    [Theory]
+    [InlineData(360, 740)]
+    [InlineData(390, 844)]
+    [InlineData(1366, 768)]
+    public async Task The_inbox_composes_without_overflow_and_keeps_its_actions_reachable(int width, int height)
+    {
+        var vertical = PilotVerticalFixtures.Spa;
+        await using var context = await fixture.Browser.NewContextAsync(new()
+        { ViewportSize = new() { Width = width, Height = height } });
+        var page = await context.NewPageAsync();
+        await PlaceOrder(page, vertical.Slug, $"E2E Composición {width}");
+        await Login(page, PilotVerticalFixtures.OwnerEmail);
+        await page.GotoAsync($"{fixture.BaseUrl}/panel/{vertical.BusinessId}/avisos");
+        await Expect(page.Locator("[data-testid=aviso]").First).ToBeVisibleAsync(new() { Timeout = 20_000 });
+
+        Assert.False(await Overflows(page), $"la bandeja se desborda a {width} px");
+
+        // Se espera a la acción y no sólo a la fila: al conectar el circuito, Blazor reemplaza los
+        // nodos y medir el anterior devuelve nulo. Es la pantalla la que se mide, no la carrera.
+        var action = page.Locator("[data-testid=aviso]").First
+            .GetByRole(AriaRole.Button, new() { Name = "Ver" });
+        await Expect(action).ToBeVisibleAsync(new() { Timeout = 20_000 });
+        var box = await action.BoundingBoxAsync();
+        Assert.NotNull(box);
+        Assert.True(box!.Height >= 44, $"la acción mide {box.Height} px de alto a {width} px");
+        Assert.True(box.X >= 0 && box.X + box.Width <= width + 1,
+            $"la acción se sale de la pantalla a {width} px");
+
+        // El filtro también se toca: en 360 px es donde una fila de botones se sale primero.
+        var filter = page.GetByTestId("avisos-filtro-no-leidos");
+        await Expect(filter).ToBeVisibleAsync(new() { Timeout = 20_000 });
+        Assert.True((await filter.BoundingBoxAsync())!.Height >= 44);
+    }
+
     // ------------------------------------------------------------------ apoyos
 
     private async Task<string> BookAppointment(IPage page, string slug, string alias)

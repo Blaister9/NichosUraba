@@ -108,6 +108,11 @@ public sealed record NotificationDispatchReport(int FannedOut, int Attempted, in
 /// Una pasada del buzón: materializa entregas pendientes y las intenta. Se expone como método
 /// porque las pruebas necesitan ejecutarla de forma determinista, sin competir con el servicio de
 /// fondo que en producción la llama en bucle.
+///
+/// Se ejecuta SIEMPRE en un ámbito propio —el servicio de fondo crea uno por pasada—. No se debe
+/// llamar desde el camino de una petición: por dentro vacía el seguimiento de su contexto de datos
+/// para leer el estado real de las reservas, y eso se llevaría por delante lo que la petición
+/// tuviera a medio guardar.
 /// </summary>
 public interface INotificationDispatcher
 {

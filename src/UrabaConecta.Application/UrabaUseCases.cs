@@ -264,15 +264,36 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
             throw new ApiException("SLOT_UNAVAILABLE", "Ese horario acaba de ocuparse. Elija otro.", 409);
         // El aviso se guarda; sacarlo hacia los dispositivos es trabajo del buzón. Si el servicio
         // Push está caído, la cita queda creada igual y el negocio la encuentra en su bandeja.
+        // La hora entra en el texto porque cuatro avisos de "Nueva cita" seguidos son indistinguibles
+        // en una bandeja, y quien atiende necesita saber cuál es cuál sin abrir cada uno. Se escribe
+        // en la hora del negocio: la UTC obliga a hacer la resta de cabeza.
         await notifications.PublishAsync(new(appointment.BusinessId, NotificationAudience.Business,
             NotificationKind.AppointmentRequested, "Nueva cita",
-            $"Solicitud para {appointment.ServiceName}.",
+            // Sin punto final: "9:30 a. m." ya trae el suyo y se veían dos seguidos.
+            $"{appointment.ServiceName} · {LocalMoment(appointment.StartAtUtc, context.Business.TimeZoneId)}",
             $"/panel/{appointment.BusinessId}/citas#appointment-{appointment.Id}",
             TrackedEntities.Appointment, appointment.Id,
             Notification.Key(NotificationAudience.Business, NotificationKind.AppointmentRequested, appointment.Id),
             PushAudience.Owner), cancellationToken);
         return new(code.PlainText, appointment.Status.ToString(), appointment.ServiceName, appointment.StartAtUtc,
             appointment.DepositStatus.ToString(), appointment.DepositAmount);
+    }
+
+    /// <summary>
+    /// Fecha y hora en el reloj del negocio. Si la zona guardada no se reconoce se cae a Bogotá, que
+    /// es la de todos los negocios del piloto: un aviso sin hora es peor que uno con la hora de la
+    /// única zona que aquí tiene sentido.
+    /// </summary>
+    private static string LocalMoment(DateTimeOffset instant, string? timeZoneId)
+    {
+        TimeZoneInfo zone;
+        try { zone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId ?? "America/Bogota"); }
+        catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
+        {
+            zone = TimeZoneInfo.FindSystemTimeZoneById("America/Bogota");
+        }
+        return TimeZoneInfo.ConvertTime(instant, zone)
+            .ToString("d MMM, h:mm tt", CultureInfo.GetCultureInfo("es-CO"));
     }
 
     public async Task<AppointmentTrackingDto?> GetTrackingAsync(string code, CancellationToken cancellationToken = default)

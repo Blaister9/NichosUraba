@@ -157,18 +157,17 @@ else if (inbox is not null)
     /// El botón se habilita al haber circuito. En el prerenderizado no hay a quién mandar el clic,
     /// y un botón que parece vivo y no responde es peor que uno que se anuncia deshabilitado.
     /// </summary>
-    protected override void OnAfterRender(bool firstRender)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
         interactiveReady = true;
         StateHasChanged();
-    }
-
-    protected override async Task OnParametersSetAsync()
-    {
-        await LoadAsync(true);
+        // La conexión en vivo se abre cuando ya hay circuito. Abrirla durante el prerenderizado
+        // sólo añade una negociación que se descarta al terminar de pintar.
         await ConnectAsync();
     }
+
+    protected override Task OnParametersSetAsync() => LoadAsync(true);
 
     /// <summary>
     /// El circuito en vivo es un acelerador: cuando llega la señal se vuelve a preguntar a la API,

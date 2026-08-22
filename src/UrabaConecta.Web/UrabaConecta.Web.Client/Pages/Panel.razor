@@ -186,6 +186,7 @@ else
     /// tenga delante, ni identificadores de sesión, ni datos de clientes.
     /// </summary>
     private const string DashboardStateKey = "panel.resumen-operativo";
+    private const string UnreadStateKey = "panel.avisos-sin-leer";
     private PersistingComponentStateSubscription persistence;
 
     private OwnerDashboardSummaryDto? SummaryOf(Guid businessId)
@@ -233,6 +234,11 @@ else
             && prerenderizado is not null)
         {
             summaries = prerenderizado.ToDictionary(x => x.BusinessId);
+            // El contador viaja con el resumen. Sin esto, el circuito reemplazaba la pintura del
+            // prerender por una sin contador y el punto de avisos sin leer desaparecía solo.
+            if (PanelState.TryTakeFromJson<NotificationCountDto[]>(UnreadStateKey, out var contadores)
+                && contadores is not null)
+                unread = contadores.ToDictionary(x => x.BusinessId, x => x.UnreadCount);
             dashboard = DashboardState.Loaded;
             return;
         }
@@ -248,7 +254,11 @@ else
     private Task PersistDashboard()
     {
         if (dashboard == DashboardState.Loaded)
+        {
             PanelState.PersistAsJson(DashboardStateKey, summaries.Values.ToArray());
+            PanelState.PersistAsJson(UnreadStateKey, unread
+                .Select(x => new NotificationCountDto(x.Key, "", x.Value)).ToArray());
+        }
         return Task.CompletedTask;
     }
 

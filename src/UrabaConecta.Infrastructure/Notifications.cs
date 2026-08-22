@@ -331,13 +331,13 @@ public sealed class NotificationDispatcher(AppDbContext db, IWebPushTransport tr
                 var moment = clock.GetUtcNow();
                 if (ex.StatusCode is (int)HttpStatusCode.NotFound or (int)HttpStatusCode.Gone)
                 {
-                    delivery.MarkExpired(moment, ex.StatusCode, ex.InnerException?.Message);
+                    delivery.MarkExpired(moment, ex.StatusCode, Reason(ex));
                     subscription.MarkFailed(moment, expired: true);
                     expired++;
                 }
                 else
                 {
-                    delivery.MarkTransientFailure(moment, ex.StatusCode, ex.InnerException?.Message);
+                    delivery.MarkTransientFailure(moment, ex.StatusCode, Reason(ex));
                     subscription.MarkFailed(moment, expired: false);
                     if (delivery.Status == NotificationDeliveryStatus.Abandoned) abandoned++; else retried++;
                 }
@@ -347,7 +347,7 @@ public sealed class NotificationDispatcher(AppDbContext db, IWebPushTransport tr
             catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
                 var moment = clock.GetUtcNow();
-                delivery.MarkTransientFailure(moment, null, ex.Message);
+                delivery.MarkTransientFailure(moment, null, ex.GetType().Name);
                 subscription.MarkFailed(moment, expired: false);
                 if (delivery.Status == NotificationDeliveryStatus.Abandoned) abandoned++; else retried++;
                 logger.LogWarning(ex, "Falló la entrega {DeliveryId}.", delivery.Id);
@@ -356,6 +356,17 @@ public sealed class NotificationDispatcher(AppDbContext db, IWebPushTransport tr
         await db.SaveChangesAsync(cancellationToken);
         return new(0, attempted, sent, retried, expired, abandoned, skipped);
     }
+
+    /// <summary>
+    /// El motivo que se guarda: tipo de excepción y código, nunca el mensaje del proveedor. Ese
+    /// mensaje puede llevar dentro el endpoint del dispositivo, que identifica al navegador de una
+    /// persona, y esta fila la lee después la propietaria en su diagnóstico. Es el mismo criterio
+    /// que ya sigue la salud de la instalación con las excepciones de base de datos.
+    /// </summary>
+    private static string Reason(PushDeliveryException exception)
+        => exception.InnerException is { } inner
+            ? $"{inner.GetType().Name} ({exception.StatusCode})"
+            : $"PushDeliveryException ({exception.StatusCode})";
 
     private PushMessage BuildMessage(Notification notification, WebPushSubscription subscription)
     {

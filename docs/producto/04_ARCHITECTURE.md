@@ -15,7 +15,7 @@ No se crean microservicios, procesos auxiliares, buses externos ni bases por est
 - Entity Framework Core y Npgsql;
 - PostgreSQL;
 - ASP.NET Core Identity con claves `Guid`;
-- SignalR únicamente para actualización de turnos;
+- SignalR para las operaciones en vivo del panel y del seguimiento;
 - xUnit para pruebas;
 - Playwright para E2E;
 - contenedor OCI opcional para empaquetar la única aplicación.
@@ -266,19 +266,54 @@ Controles obligatorios:
 
 ## 11. Tiempo real
 
-SignalR se usa solo en `QueueHub`.
+Dos concentradores, no uno por función.
 
-- Grupo: `queue:{businessSlug}`; el slug ya es público y el grupo nunca contiene datos sensibles.
-- Eventos:
-  - `QueueStateChanged`;
-  - `TicketStateChanged` para la conexión que presentó el código, sin nombre/teléfono;
-  - `QueueClosed`.
-- El evento contiene versión de estado y datos públicos mínimos.
-- HTTP es fuente de verdad.
-- Al conectar o reconectar, el cliente ejecuta `GET` del estado.
-- Si SignalR falla, el flujo sigue funcionando con actualización manual o sondeo moderado.
+`QueueHub` en `/hubs/queue` conserva el vocabulario de la fila —jornada, turno, llamado— y no se
+tocó. `OperationsHub` en `/hubs/operations` cubre lo demás: pedidos, citas y la bandeja de avisos.
 
-Citas y pedidos no requieren tiempo real en la demo; se consultan por código y el panel actualiza bajo acción del usuario.
+- Grupos del negocio: `ops:{businessId:N}:{canal}`, con canal en `appointments`, `orders` o
+  `notifications`. Unirse exige membresía activa Y el permiso del canal, comprobado por
+  `IRealtimeAccessGuard`: un grupo es una autorización, porque saber *cuándo* entra un pedido en un
+  negocio ajeno ya es saber algo.
+- Grupos del cliente: `track:{tipo}:{entidad:N}`, a los que se llega presentando el mismo código de
+  seguimiento con el que ya consulta su estado. No hace falta cuenta.
+- **Lo que viaja es una señal, nunca datos.** Quien la recibe vuelve a pedir el estado por la API,
+  que es donde vive la autorización. Un mensaje mal dirigido no puede filtrar contenido.
+- HTTP sigue siendo la fuente de verdad. Al conectar o reconectar, el cliente ejecuta `GET`.
+- Si SignalR falla, todo sigue funcionando: sólo se pierde inmediatez.
+
+## 11 bis. Avisos: el hecho primero, la entrega después
+
+Web Push dejó de ser el aviso para volver a ser un canal de entrega.
+
+```
+hecho de negocio
+   -> Notification            (fila durable: la bandeja)
+   -> señal SignalR           (acelerador)
+   -> NotificationDelivery    (una por dispositivo: el buzón)
+        -> trabajador de fondo, reintentos con espera creciente, diagnóstico
+```
+
+- `INotificationPublisher` guarda el hecho y no habla con nadie de fuera: **ninguna operación de
+  negocio puede caerse porque el proveedor Push esté caído**.
+- La clave de deduplicación es única en la base, así que un doble clic produce un solo aviso.
+- El trabajador reparte y entrega. Reclama lotes con `FOR UPDATE SKIP LOCKED`, así que dos
+  instancias no envían lo mismo dos veces.
+- **404 y 410 retiran la suscripción**; cualquier otro fallo se reintenta —0 s, 30 s, 2 min, 10 min,
+  30 min, 2 h— y nunca cuesta el dispositivo. Antes bastaban tres errores del proveedor para dejar a
+  una persona sin avisos sin que nadie se enterara.
+- La bandeja del negocio y las novedades del seguimiento leen esas filas, así que el aviso se ve
+  aunque no se haya entregado nunca.
+
+## 11 ter. Capacidades
+
+`BusinessModuleKind` tiene seis valores. `Appointments`, `VirtualQueues` y `PickupOrders` son las
+operaciones que el negocio abre al público; `Services`, `Products` y `Staff` son el material que
+esas operaciones consumen y se derivan de ellas mientras nadie las fije a mano
+(`BusinessCapabilities`).
+
+La categoría propone una combinación al dar de alta y sirve para encontrar el negocio. No decide
+funciones: eso habría convertido cada vertical nueva en un condicional más.
 
 ## 12. Contratos y API
 
@@ -382,9 +417,11 @@ No se crea infraestructura cloud en esta fase.
 
 Reutiliza `/api/v1`; no accede a base ni a componentes internos.
 
-### WhatsApp y notificaciones
+### WhatsApp y otros canales
 
-Agregar adaptadores detrás de `INotificationSender` y procesamiento durable. No existe implementación en el MVP.
+El procesamiento durable ya existe: `Notification` guarda el hecho y `NotificationDelivery` cada
+intento hacia un destino. Un canal nuevo entra como otro tipo de destino del mismo buzón, con sus
+reintentos y su diagnóstico; no como otro camino que envíe por su cuenta.
 
 ### Pagos
 
@@ -412,6 +449,6 @@ Primero escalar verticalmente el monolito y optimizar consultas. Solo se conside
 2. Tres agregados operativos distintos: cita, turno y pedido.
 3. `BusinessId` obligatorio y autorización por recurso.
 4. Código público aleatorio con hash almacenado.
-5. SignalR solo para turnos.
+5. Tiempo real como acelerador, nunca como fuente de verdad: la API manda.
 6. Pedido sin pago y con precios históricos.
 7. Primera vertical funcional: cita completa.
