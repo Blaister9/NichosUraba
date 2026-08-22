@@ -61,18 +61,19 @@ Comprobado pantalla por pantalla el 22 de agosto de 2026. La guía general está
 
 El catálogo y las franjas se administran en `/panel/{negocio}/configuracion/pedidos`.
 
-## Dos cosas que conviene arreglar
+## Dos cosas que el alta destapó, ya corregidas
 
-**Un negocio de sólo pedidos nace sin horario.** El alta crea el horario de atención únicamente
-cuando el negocio abre citas. Pero las franjas para recoger se calculan cruzando el horario del
-negocio con la ventana de pedidos, así que un negocio de pedidos sin horario ofrece cero franjas
-—y aun así el checklist lo da por completo al 100 % y lo deja publicar—. Pasó con Delicadas y se
-resolvió registrando la jornada a mano. El checklist debería exigir horario también cuando hay
-pedidos; hoy lo marca «no aplica».
+**Un negocio de sólo pedidos nacía sin horario.** El alta creaba el horario únicamente cuando el
+negocio abría citas, pero las franjas para recoger se calculan cruzando el horario del negocio con
+la ventana de pedidos: Delicadas quedó publicada al 100 % del checklist ofreciendo cero franjas.
+Ahora el alta crea el horario también con pedidos, y el checklist lo exige cuando hay citas **o**
+pedidos. La fila sigue sin pedirlo: se atiende por orden de llegada. El horario de Delicadas —el
+que se registró a mano el mismo día— no se tocó.
 
-**El pie de página sigue diciendo que todo es ficticio.** `MainLayout.razor` pinta
-«Demostración con negocios y datos ficticios.» en todas las pantallas. Ya no es cierto: el
-ambiente aloja tres negocios reales, y ese texto lo leen los clientes de esos negocios.
+**El pie de página decía que los negocios eran ficticios.** Ahora dice «UrabáConecta · Piloto
+controlado», y la marca que enciende esa línea dejó de llevar el nombre del ambiente en el HTML
+público: era `data-ambiente="Demo"` en el `body` de cualquier ficha y ahora es una bandera sin
+nombre que en la operación real ni se escribe.
 
 ## Lo que no se hizo, y por qué
 
