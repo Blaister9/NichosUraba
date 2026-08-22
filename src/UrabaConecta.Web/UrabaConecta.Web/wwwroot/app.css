@@ -241,11 +241,10 @@ footer {
 }
 footer nav { display: flex; flex-wrap: wrap; gap: .4rem 1rem; justify-content: center; margin-top: .6rem }
 footer a { color: var(--texto-suave) }
-/* El aviso de demostración se oculta por omisión y sólo reaparece donde los datos son ficticios.
-   Al depender del ambiente que marca el servidor, olvidarlo en Production es imposible. */
-.aviso-demostracion { display: none }
-body[data-ambiente="Demo"] .aviso-demostracion,
-body[data-ambiente="Development"] .aviso-demostracion { display: block }
+/* La línea del piloto se oculta por omisión y sólo reaparece donde el servidor marcó el piloto.
+   Al depender de esa marca, olvidarla en la operación real es imposible. */
+.aviso-piloto { display: none }
+body[data-piloto] .aviso-piloto { display: block }
 
 /* --- Tipografía -----------------------------------------------------------------------------
    Titulares en Archivo 800, apretados: -.03em y 1.02 de interlínea. Interfaz en la sans del

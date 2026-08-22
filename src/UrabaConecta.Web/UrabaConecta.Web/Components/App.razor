@@ -18,7 +18,9 @@
     <HeadOutlet @rendermode="PageRenderMode" />
 </head>
 
-<body data-ambiente="@Environment.EnvironmentName">
+@* La marca del piloto es una bandera sin nombre. Antes viajaba el nombre del ambiente y quedaba
+   escrito en el HTML de cualquier ficha pública; el CSS sólo necesita saber si es piloto o no. *@
+<body data-piloto="@(EsPiloto ? "1" : null)">
     <Routes @rendermode="PageRenderMode" />
     <ReconnectModal />
     <script src="@Assets["_framework/blazor.web.js"]"></script>
@@ -40,4 +42,7 @@
     // inmediatamente después de conectar el circuito y evita descartar entradas.
     private IComponentRenderMode? PageRenderMode =>
         HttpContext.AcceptsInteractiveRouting() ? InteractiveServer : null;
+
+    /// <summary>Los ambientes que no son la operación real de los negocios.</summary>
+    private bool EsPiloto => Environment.IsEnvironment("Demo") || Environment.IsDevelopment();
 }

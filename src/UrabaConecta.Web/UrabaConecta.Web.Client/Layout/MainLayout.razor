@@ -46,10 +46,10 @@
 
 <footer class="@(Ruta() == "/" ? "footer-home" : null)">
     <p><strong>UrabáConecta</strong> · Apartadó · Carepa · Chigorodó · Turbo</p>
-    @* El aviso se escribe siempre y lo muestra el CSS sólo en los ambientes de demostración: la
-       marca del ambiente la pone el servidor en <body>, así que la línea no puede quedarse pegada
-       en Production, donde los negocios y las citas son reales. *@
-    <p class="aviso-demostracion">Demostración con negocios y datos ficticios.</p>
+    @* La línea se escribe siempre y la muestra el CSS sólo donde el servidor marcó el piloto, así
+       que no puede quedarse pegada en la operación real. Ya no dice que los negocios sean
+       ficticios: el ambiente aloja negocios de verdad y esa frase la leían sus clientes. *@
+    <p class="aviso-piloto">UrabáConecta · Piloto controlado</p>
     <nav aria-label="Información legal">
         <a href="/legal/politica-de-datos">Política de datos</a>
         <a href="/legal/aviso-de-privacidad">Aviso de privacidad</a>
