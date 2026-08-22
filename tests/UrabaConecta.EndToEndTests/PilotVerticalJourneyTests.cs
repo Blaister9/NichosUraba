@@ -282,21 +282,36 @@ public sealed class PilotVerticalJourneyTests(BrowserFixture fixture) : IClassFi
 
         Assert.False(await Overflows(page), $"la bandeja se desborda a {width} px");
 
-        // Se espera a la acción y no sólo a la fila: al conectar el circuito, Blazor reemplaza los
-        // nodos y medir el anterior devuelve nulo. Es la pantalla la que se mide, no la carrera.
+        // La conexión en vivo puede reconectar una vez al arrancar y disparar una recarga de la
+        // lista justo cuando se mide: la visibilidad ya confirmada no garantiza que el nodo siga
+        // siendo el mismo un instante después. Se reintenta la medición en vez de asumir que un
+        // solo intento alcanza; es la pantalla la que se comprueba, no la carrera con el circuito.
         var action = page.Locator("[data-testid=aviso]").First
             .GetByRole(AriaRole.Button, new() { Name = "Ver" });
-        await Expect(action).ToBeVisibleAsync(new() { Timeout = 20_000 });
-        var box = await action.BoundingBoxAsync();
-        Assert.NotNull(box);
-        Assert.True(box!.Height >= 44, $"la acción mide {box.Height} px de alto a {width} px");
+        var box = await StableBoundingBox(action);
+        Assert.True(box.Height >= 44, $"la acción mide {box.Height} px de alto a {width} px");
         Assert.True(box.X >= 0 && box.X + box.Width <= width + 1,
             $"la acción se sale de la pantalla a {width} px");
 
         // El filtro también se toca: en 360 px es donde una fila de botones se sale primero.
         var filter = page.GetByTestId("avisos-filtro-no-leidos");
-        await Expect(filter).ToBeVisibleAsync(new() { Timeout = 20_000 });
-        Assert.True((await filter.BoundingBoxAsync())!.Height >= 44);
+        Assert.True((await StableBoundingBox(filter)).Height >= 44);
+    }
+
+    /// <summary>
+    /// La primera lectura tras confirmar visibilidad puede caer justo en un repintado del circuito
+    /// y devolver nulo aunque el elemento exista un instante antes y después. Se reintenta un par de
+    /// veces en vez de tratar ese instante como el estado real de la pantalla.
+    /// </summary>
+    private static async Task<LocatorBoundingBoxResult> StableBoundingBox(ILocator locator)
+    {
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            await Expect(locator).ToBeVisibleAsync(new() { Timeout = 20_000 });
+            if (await locator.BoundingBoxAsync() is { } box) return box;
+            await locator.Page.WaitForTimeoutAsync(200);
+        }
+        throw new InvalidOperationException("El elemento nunca dejó de repintarse lo suficiente para medirlo.");
     }
 
     // ------------------------------------------------------------------ apoyos
