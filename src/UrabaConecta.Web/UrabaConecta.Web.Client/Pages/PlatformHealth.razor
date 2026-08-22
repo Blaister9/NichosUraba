@@ -36,8 +36,64 @@ else
     <button class="secondary" @onclick="Load">Actualizar</button>
 }
 
+@* Diagnóstico del buzón de avisos.
+
+   Es lo que faltaba cuando alguien reportaba "no me llegó": no había forma de distinguir un
+   dispositivo que nadie activó, de un endpoint caducado, de un proveedor caído. Cada una de esas
+   tres cosas se arregla de manera distinta. Aquí no hay endpoints ni claves ni datos de clientes:
+   sólo cuántos y cómo terminaron. *@
+@if (notifications is { } buzon)
+{
+    <h2>Buzón de avisos</h2>
+    @if (!buzon.PushConfigured)
+    {
+        <p class="notice" data-testid="buzon-sin-vapid">
+            Web Push no está configurado en este ambiente. Las bandejas siguen completas; lo que no
+            sale es el aviso al teléfono.
+        </p>
+    }
+    <dl class="metric-grid" data-testid="buzon-metricas">
+        <div class="metric"><dt>Entregados (24 h)</dt><dd>@buzon.SentLast24Hours</dd></div>
+        <div class="metric"><dt>En cola</dt><dd>@buzon.PendingDeliveries</dd></div>
+        <div class="metric"><dt>Atrasados</dt><dd>@buzon.OverdueDeliveries</dd></div>
+        <div class="metric"><dt>Abandonados (24 h)</dt><dd>@buzon.AbandonedLast24Hours</dd></div>
+        <div class="metric"><dt>Caducados (24 h)</dt><dd>@buzon.ExpiredLast24Hours</dd></div>
+        <div class="metric"><dt>Dispositivos activos</dt><dd>@buzon.ActiveSubscriptions</dd></div>
+    </dl>
+    @if (buzon.PendingNotifications > 0)
+    {
+        <p class="warning-text" data-testid="buzon-sin-repartir">
+            Hay @buzon.PendingNotifications aviso(s) guardados que el trabajador todavía no repartió.
+            Si el número no baja, revisa que el proceso de fondo esté vivo.
+        </p>
+    }
+    @if (buzon.OldestPendingDeliveryUtc is { } masAntiguo)
+    {
+        <p class="meta">La entrega pendiente más antigua es del @masAntiguo.ToLocalTime().ToString("dd/MM HH:mm").</p>
+    }
+    @if (buzon.Businesses.Count > 0)
+    {
+        <table class="data-table" data-testid="buzon-negocios">
+            <thead><tr><th>Negocio</th><th>Dispositivos</th><th>En cola</th><th>Abandonados</th><th>Sin leer</th></tr></thead>
+            <tbody>
+            @foreach (var negocio in buzon.Businesses)
+            {
+                <tr data-testid="buzon-negocio" data-demo="@(negocio.IsDemo ? "true" : "false")">
+                    <td>@negocio.BusinessName @if (negocio.IsDemo) { <span class="tag">Demo</span> }</td>
+                    <td>@negocio.ActiveSubscriptions</td>
+                    <td>@negocio.PendingDeliveries</td>
+                    <td>@negocio.AbandonedLast24Hours</td>
+                    <td>@negocio.UnreadNotifications</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+}
+
 @code {
     private PlatformHealthDto? health;
+    private NotificationHealthDto? notifications;
     private string? error;
 
     protected override Task OnInitializedAsync() => Load();
@@ -47,5 +103,9 @@ else
         error = null;
         try { health = await Api.GetPlatformHealthAsync(); }
         catch (ApiException ex) { error = ex.Message; }
+        // El buzón se pide aparte: que su diagnóstico falle no puede dejar sin la salud básica a
+        // quien está intentando averiguar por qué algo no funciona.
+        try { notifications = await Api.GetNotificationHealthAsync(); }
+        catch (ApiException) { notifications = null; }
     }
 }

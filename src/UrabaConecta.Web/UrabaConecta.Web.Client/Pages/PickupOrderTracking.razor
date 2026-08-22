@@ -4,6 +4,9 @@
 
 <PageTitle>Seguimiento del pedido | UrabáConecta</PageTitle>
 <a class="back-link" href="/">← Negocios de Urabá</a>
+@* El estado cambia solo cuando el negocio lo mueve. No sustituye a nada: el código sigue siendo
+   la forma de volver aquí y leer lo mismo desde cualquier dispositivo. *@
+<OperationsLive EntityType="PickupOrder" TrackingCode="Code" OnChanged="Load" />
 @if (error is not null) { <div class="error" role="alert">@error</div> }
 else if (order is null) { <p class="notice">Consultando pedido…</p> }
 else
@@ -17,6 +20,7 @@ else
         <p class="meta">Celular: @order.PhoneMasked</p>
         @foreach (var line in order.Lines) { <p>@line.Quantity × @line.ProductName <strong>@line.LineTotal.ToString("C0", Colombia)</strong></p> }
         <p class="total-pedido"><span>Total a pagar en el local</span><strong>@order.Total.ToString("C0", Colombia)</strong></p>
+        <TrackingUpdates Items="updates" />
         <PushPrompt RegistrationPath="@($"/api/v1/public/orders/{Uri.EscapeDataString(Code)}/push-subscriptions")"
                     Title="Te avisamos cuando esté listo"
                     Description="Activa los avisos para no tener que revisar esta pantalla."
@@ -45,9 +49,21 @@ else
         interactiveReady = true;
         StateHasChanged();
     }
+    /// <summary>
+    /// Además del estado, las novedades que quedaron guardadas. Ahí está la respuesta a "no me
+    /// llegó nada": si el aviso al teléfono se perdió, la novedad sigue escrita aquí con su hora.
+    /// </summary>
+    private IReadOnlyList<NotificationDto> updates = [];
+
     private async Task Load()
     {
-        try { order = await Api.GetPickupOrderAsync(Code); if (order is null) error = "No encontramos el pedido."; }
+        try
+        {
+            order = await Api.GetPickupOrderAsync(Code);
+            if (order is null) { error = "No encontramos el pedido."; return; }
+            updates = await Api.GetTrackingNotificationsAsync("pedidos", Code);
+            await InvokeAsync(StateHasChanged);
+        }
         catch (ApiException ex) { error = ex.Message; }
     }
     private async Task Cancel()

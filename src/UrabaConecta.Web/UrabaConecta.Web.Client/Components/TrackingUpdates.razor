@@ -1,0 +1,38 @@
+@* Las novedades de una operación, guardadas.
+
+   El seguimiento decía en qué estado está la cosa AHORA, y eso deja sin respuesta la pregunta que
+   la gente hace de verdad: "¿me avisaron y no me llegó?". Aquí queda la historia con su hora, sin
+   depender de que Web Push funcionara ni de que el teléfono estuviera encendido.
+
+   No pide cuenta: se lee con el mismo código con el que se llegó a esta pantalla. *@
+
+@if (Items.Count > 0)
+{
+    <section class="novedades" data-testid="tracking-updates">
+        <h2>Novedades</h2>
+        <ol class="lista-novedades">
+            @foreach (var item in Items)
+            {
+                <li data-testid="tracking-update" data-kind="@item.Kind">
+                    <p class="novedad-titulo"><strong>@item.Title</strong></p>
+                    <p class="novedad-texto">@item.Body</p>
+                    <p class="meta">
+                        <time datetime="@item.CreatedAtUtc.ToString("o")">
+                            @BusinessDateTimeText.DateAndTime(item.CreatedAtUtc, TimeZoneId)
+                        </time>
+                    </p>
+                </li>
+            }
+        </ol>
+    </section>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<NotificationDto> Items { get; set; } = [];
+
+    /// <summary>
+    /// La zona del negocio cuando la pantalla la conoce. Sin ella se usa la de Colombia, que es la
+    /// de todos los negocios del piloto y la única que una persona de Urabá espera leer.
+    /// </summary>
+    [Parameter] public string? TimeZoneId { get; set; }
+}

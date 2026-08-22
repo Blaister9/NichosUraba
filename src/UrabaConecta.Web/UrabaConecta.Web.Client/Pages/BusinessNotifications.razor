@@ -1,0 +1,256 @@
+@page "/panel/{BusinessId:guid}/avisos"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@implements IAsyncDisposable
+@inject IUrabaConectaApi Api
+@inject NavigationManager Navigation
+
+@* La bandeja del negocio.
+
+   Su razón de existir es que el aviso del teléfono no siempre llega: Chrome puede estar cerrado,
+   Android puede dormir la aplicación, iOS puede no haber concedido el permiso, y el propio servicio
+   Push puede estar caído. Nada de eso puede hacer que una persona se entere tarde de un pedido. Lo
+   que se ve aquí está guardado en la base desde el instante en que ocurrió.
+
+   Lista y no tabla: se lee en un teléfono, de arriba abajo, con el pulgar. *@
+
+<PageTitle>Avisos | UrabáConecta</PageTitle>
+<a class="back-link" href="/panel">← Mis negocios</a>
+<div class="title-actions panel-header">
+    <div>
+        <p class="eyebrow">Panel del negocio</p>
+        <h1>Avisos</h1>
+        @if (inbox is not null)
+        {
+            <p class="meta">@inbox.BusinessName · @(inbox.UnreadCount == 0
+                ? "todo al día" : $"{inbox.UnreadCount} sin leer")</p>
+        }
+    </div>
+    @if (inbox is { UnreadCount: > 0 })
+    {
+        <button type="button" class="secondary" data-testid="avisos-marcar-todo"
+                disabled="@(!interactiveReady || busy)" @onclick="MarkAllRead">
+            Marcar todo como leído
+        </button>
+    }
+</div>
+
+@if (error is not null)
+{
+    <p class="error" role="alert" data-testid="avisos-error">
+        @error
+        <button type="button" class="inline-button" @onclick="() => LoadAsync(true)">Reintentar</button>
+    </p>
+}
+
+@if (loading)
+{
+    <p class="notice" role="status" data-testid="avisos-cargando">Cargando avisos…</p>
+}
+else if (inbox is not null)
+{
+    <div class="filtro-avisos" role="group" aria-label="Filtrar avisos">
+        <button type="button" class="@(unreadOnly ? "secondary" : "primary")"
+                data-testid="avisos-filtro-todos" @onclick="() => Filter(false)">Todos</button>
+        <button type="button" class="@(unreadOnly ? "primary" : "secondary")"
+                data-testid="avisos-filtro-no-leidos" @onclick="() => Filter(true)">
+            Sin leer @(inbox.UnreadCount > 0 ? $"({inbox.UnreadCount})" : "")
+        </button>
+    </div>
+
+    @if (inbox.Items.Count == 0)
+    {
+        <div class="empty" data-testid="avisos-vacio">
+            <h2>@(unreadOnly ? "No tienes avisos sin leer" : "Todavía no hay avisos")</h2>
+            <p>Aquí queda escrito lo que pasa en tu negocio: cada cita, cada turno y cada pedido.</p>
+            <p class="meta">Aparecen aunque el aviso del teléfono no llegue.</p>
+        </div>
+    }
+    else
+    {
+        <ul class="lista-avisos" data-testid="avisos-lista">
+            @foreach (var item in inbox.Items)
+            {
+                <li class="aviso @(item.IsRead ? null : "no-leido")" data-testid="aviso"
+                    data-kind="@item.Kind" data-read="@(item.IsRead ? "true" : "false")">
+                    <div class="aviso-cuerpo">
+                        <p class="aviso-titulo">
+                            @if (!item.IsRead)
+                            {
+                                <span class="punto-nuevo" aria-hidden="true"></span>
+                                <span class="visually-hidden">Sin leer.</span>
+                            }
+                            <strong>@item.Title</strong>
+                        </p>
+                        <p class="aviso-texto">@item.Body</p>
+                        <p class="meta">
+                            <time datetime="@item.CreatedAtUtc.ToString("o")">
+                                @BusinessDateTimeText.DateAndTime(item.CreatedAtUtc, inbox.TimeZoneId)
+                            </time>
+                        </p>
+                    </div>
+                    <div class="aviso-acciones">
+                        @if (item.DeepLink is { Length: > 0 } link)
+                        {
+                            @* Ir al aviso lo marca leído: si alguien abrió la operación, ya se enteró. *@
+                            <button type="button" class="primary" data-testid="aviso-abrir"
+                                    disabled="@(!interactiveReady || busy)" @onclick="() => OpenAsync(item, link)">
+                                Ver
+                            </button>
+                        }
+                        @if (!item.IsRead)
+                        {
+                            <button type="button" class="tertiary" data-testid="aviso-marcar"
+                                    disabled="@(!interactiveReady || busy)" @onclick="() => MarkReadAsync(item)">
+                                Marcar leído
+                            </button>
+                        }
+                    </div>
+                </li>
+            }
+        </ul>
+    }
+
+    @if (diagnostics is { } estado)
+    {
+        <section class="config-form" data-testid="avisos-diagnostico">
+            <h2>Avisos en tus dispositivos</h2>
+            @if (!estado.PushConfigured)
+            {
+                <p class="notice">Los avisos al teléfono no están configurados en este ambiente.
+                    Lo que ves arriba sigue siendo completo.</p>
+            }
+            else
+            {
+                <dl class="metric-grid">
+                    <div class="metric"><dt>Dispositivos activos</dt><dd>@estado.ActiveOwnerDevices</dd></div>
+                    <div class="metric"><dt>Entregados hoy</dt><dd>@estado.SentLast24Hours</dd></div>
+                    <div class="metric"><dt>En cola</dt><dd>@estado.PendingDeliveries</dd></div>
+                </dl>
+                @if (estado.ActiveOwnerDevices == 0)
+                {
+                    <p class="notice">Ningún dispositivo tiene los avisos activos. Actívalos desde
+                        <a href="/panel">Mis negocios</a> para enterarte sin abrir la aplicación.</p>
+                }
+                else if (estado.AbandonedLast24Hours > 0 || estado.ExpiredLast24Hours > 0)
+                {
+                    <p class="warning-text" data-testid="avisos-fallos">
+                        Hoy no pudimos entregar @(estado.AbandonedLast24Hours + estado.ExpiredLast24Hours)
+                        aviso(s) a algún dispositivo. Todo sigue registrado en esta pantalla.
+                    </p>
+                }
+            }
+        </section>
+    }
+}
+
+@code {
+    [Parameter] public Guid BusinessId { get; set; }
+
+    private NotificationPageDto? inbox;
+    private NotificationDiagnosticsDto? diagnostics;
+    private HubConnection? hub;
+    private bool loading = true, unreadOnly, busy, interactiveReady;
+    private string? error;
+
+    /// <summary>
+    /// El botón se habilita al haber circuito. En el prerenderizado no hay a quién mandar el clic,
+    /// y un botón que parece vivo y no responde es peor que uno que se anuncia deshabilitado.
+    /// </summary>
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+        interactiveReady = true;
+        StateHasChanged();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync(true);
+        await ConnectAsync();
+    }
+
+    /// <summary>
+    /// El circuito en vivo es un acelerador: cuando llega la señal se vuelve a preguntar a la API,
+    /// que es la fuente de verdad. Si la conexión falla, la pantalla sigue siendo correcta; sólo
+    /// deja de refrescarse sola.
+    /// </summary>
+    private async Task ConnectAsync()
+    {
+        if (hub is not null) await hub.DisposeAsync();
+        hub = new HubConnectionBuilder()
+            .WithUrl(Navigation.ToAbsoluteUri("/hubs/operations")).WithAutomaticReconnect().Build();
+        hub.On<string>("OperationsChanged", async _ =>
+        {
+            await LoadAsync(false);
+            await InvokeAsync(StateHasChanged);
+        });
+        hub.Reconnected += async _ =>
+        {
+            await Subscribe();
+            await LoadAsync(false);
+            await InvokeAsync(StateHasChanged);
+        };
+        try { await hub.StartAsync(); await Subscribe(); }
+        catch { /* sin tiempo real la bandeja sigue completa al recargar */ }
+    }
+
+    private Task Subscribe() => hub!.InvokeAsync("SubscribeBusiness", BusinessId, "notifications");
+
+    private async Task LoadAsync(bool showSpinner)
+    {
+        if (showSpinner) { loading = true; error = null; }
+        try
+        {
+            inbox = await Api.GetBusinessNotificationsAsync(BusinessId, unreadOnly, 50);
+            // El diagnóstico es del propietario. A un colaborador se le niega, y eso no es un fallo
+            // de la pantalla: simplemente no ve esa sección.
+            try { diagnostics = await Api.GetNotificationDiagnosticsAsync(BusinessId); }
+            catch (ApiException) { diagnostics = null; }
+            error = null;
+        }
+        catch (ApiException ex)
+        {
+            error = ex.StatusCode is 401 or 403
+                ? "No tienes acceso a los avisos de este establecimiento."
+                : "No pudimos cargar los avisos.";
+        }
+        finally { loading = false; }
+    }
+
+    private async Task Filter(bool onlyUnread)
+    {
+        if (unreadOnly == onlyUnread) return;
+        unreadOnly = onlyUnread;
+        await LoadAsync(true);
+    }
+
+    private async Task MarkReadAsync(NotificationDto item)
+    {
+        busy = true;
+        try { inbox = await Api.MarkNotificationsReadAsync(BusinessId, new() { Ids = [item.Id] }); }
+        catch (ApiException) { error = "No pudimos marcar el aviso como leído."; }
+        finally { busy = false; }
+        if (unreadOnly) await LoadAsync(false);
+    }
+
+    private async Task MarkAllRead()
+    {
+        busy = true;
+        try { inbox = await Api.MarkNotificationsReadAsync(BusinessId, new()); }
+        catch (ApiException) { error = "No pudimos marcar los avisos como leídos."; }
+        finally { busy = false; }
+        if (unreadOnly) await LoadAsync(false);
+    }
+
+    private async Task OpenAsync(NotificationDto item, string link)
+    {
+        if (!item.IsRead) await MarkReadAsync(item);
+        Navigation.NavigateTo(link, forceLoad: true);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hub is not null) await hub.DisposeAsync();
+    }
+}

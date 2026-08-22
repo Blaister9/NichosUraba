@@ -1,0 +1,80 @@
+@implements IAsyncDisposable
+@inject NavigationManager Navigation
+
+@* No pinta nada: sólo mantiene la conexión en vivo y avisa a la pantalla de que vuelva a preguntar.
+
+   La fila virtual ya tenía tiempo real; pedidos, citas y la bandeja no, así que quien atendía
+   dependía de acordarse de recargar. Esto lo generaliza sin repetir el cableado en cada pantalla.
+
+   Lo que llega por el cable es una señal, nunca datos. La pantalla responde volviendo a la API, que
+   es donde vive la autorización, así que perder la conexión sólo cuesta inmediatez: al recargar, el
+   estado sigue siendo el correcto. *@
+
+@code {
+    /// <summary>Negocio a escuchar. Se usa junto con <see cref="Channel"/>.</summary>
+    [Parameter] public Guid? BusinessId { get; set; }
+
+    /// <summary>Uno de <c>appointments</c>, <c>orders</c> o <c>notifications</c>.</summary>
+    [Parameter] public string? Channel { get; set; }
+
+    /// <summary>Para el cliente: qué operación sigue y con qué código.</summary>
+    [Parameter] public string? EntityType { get; set; }
+    [Parameter] public string? TrackingCode { get; set; }
+
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private HubConnection? hub;
+    private Guid? connectedBusiness;
+    private string? connectedChannel, connectedCode;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Una navegación entre dos negocios reutiliza el componente: sin esta comparación se
+        // volvería a conectar en cada render y se acumularían suscripciones al mismo grupo.
+        if (hub is not null && connectedBusiness == BusinessId && connectedChannel == Channel &&
+            connectedCode == TrackingCode) return;
+        await DisposeAsync();
+        connectedBusiness = BusinessId; connectedChannel = Channel; connectedCode = TrackingCode;
+        if (!HasTarget) return;
+
+        hub = new HubConnectionBuilder()
+            .WithUrl(Navigation.ToAbsoluteUri("/hubs/operations")).WithAutomaticReconnect().Build();
+        hub.On<string>("OperationsChanged", async _ => await NotifyAsync());
+        hub.On<string>("TrackingChanged", async _ => await NotifyAsync());
+        hub.Reconnected += async _ =>
+        {
+            // Al reconectar se pierde la pertenencia al grupo y también lo que pasó mientras tanto:
+            // hay que volver a suscribirse Y volver a preguntar el estado.
+            await SubscribeAsync();
+            await NotifyAsync();
+        };
+        try { await hub.StartAsync(); await SubscribeAsync(); }
+        catch { /* sin tiempo real la pantalla sigue siendo correcta al recargar */ }
+    }
+
+    private bool HasTarget
+        => (BusinessId is { } id && id != Guid.Empty && !string.IsNullOrEmpty(Channel)) ||
+           (!string.IsNullOrEmpty(EntityType) && !string.IsNullOrEmpty(TrackingCode));
+
+    private async Task SubscribeAsync()
+    {
+        if (hub is null) return;
+        if (BusinessId is { } id && id != Guid.Empty && Channel is { Length: > 0 } channel)
+            await hub.InvokeAsync("SubscribeBusiness", id, channel);
+        else if (EntityType is { Length: > 0 } entityType && TrackingCode is { Length: > 0 } code)
+            await hub.InvokeAsync("SubscribeTracking", entityType, code);
+    }
+
+    private async Task NotifyAsync()
+    {
+        if (OnChanged.HasDelegate) await InvokeAsync(() => OnChanged.InvokeAsync());
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hub is null) return;
+        var closing = hub;
+        hub = null;
+        await closing.DisposeAsync();
+    }
+}

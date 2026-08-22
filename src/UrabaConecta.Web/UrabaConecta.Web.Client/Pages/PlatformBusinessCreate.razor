@@ -72,10 +72,14 @@ else
                 </InputSelect>
             </label>
             <label><span class="field-label">Categoría <span class="field-required" aria-hidden="true">*</span></span>
-                <InputSelect @bind-Value="request.CategoryId" data-testid="campo-categoria" aria-required="true">
+                @* Elegir categoría propone las funciones habituales de esa clase de negocio, y
+                   nada más: son casillas que quien da de alta puede cambiar en el paso siguiente.
+                   La categoría sirve para encontrar el negocio, no para decidir qué puede hacer. *@
+                <select value="@request.CategoryId" data-testid="campo-categoria" aria-required="true"
+                        @onchange="ChooseCategory">
                     <option value="">Selecciona una categoría</option>
                     @foreach (var x in catalog.Categories) { <option value="@x.Id">@x.Name</option> }
-                </InputSelect>
+                </select>
             </label>
             @* La breve alimenta el directorio y el checklist la exige para publicar; se pide aquí
                para que el negocio no nazca reclamando un campo que el alta nunca ofreció. *@
@@ -105,6 +109,12 @@ else
                 <label class="check"><InputCheckbox @bind-Value="request.Appointments" data-testid="modulo-citas" /> Citas con hora reservada</label>
                 <label class="check"><InputCheckbox @bind-Value="request.VirtualQueues" data-testid="modulo-turnos" /> Turnos por orden de llegada</label>
                 <label class="check"><InputCheckbox @bind-Value="request.PickupOrders" data-testid="modulo-pedidos" /> Pedidos para recoger</label>
+                @if (SuggestedFor(request.CategoryId) is not null)
+                {
+                    <p class="field-hint" data-testid="modulo-sugerencia">
+                        Marcamos lo habitual en esta categoría. Ajusta lo que necesite este negocio.
+                    </p>
+                }
             </fieldset>
             @if (request.Appointments)
             {
@@ -194,6 +204,23 @@ else
     private PlatformBusinessListDto? catalog;
     private PlatformBusinessCreatedDto? created;
     private readonly CreatePlatformBusinessRequest request = new() { Appointments = true };
+
+    private BusinessCapabilitiesDto? SuggestedFor(Guid categoryId)
+        => catalog?.Categories.FirstOrDefault(x => x.Id == categoryId)?.SuggestedCapabilities;
+
+    /// <summary>
+    /// Al elegir categoría se preseleccionan sus funciones habituales. Sólo se propone: el paso
+    /// siguiente enseña las tres casillas y quien da de alta decide. Una categoría sin sugerencia
+    /// —una nueva, por ejemplo— deja lo que ya estuviera marcado.
+    /// </summary>
+    private void ChooseCategory(ChangeEventArgs args)
+    {
+        request.CategoryId = Guid.TryParse(args.Value?.ToString(), out var id) ? id : Guid.Empty;
+        if (SuggestedFor(request.CategoryId) is not { } suggested) return;
+        request.Appointments = suggested.Appointments;
+        request.VirtualQueues = suggested.VirtualQueues;
+        request.PickupOrders = suggested.PickupOrders;
+    }
 
     protected override async Task OnInitializedAsync() => catalog = await Api.GetPlatformBusinessesAsync();
 

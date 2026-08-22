@@ -483,7 +483,14 @@ public sealed class PickupOrderCommandRequest
     [StringLength(160)] public string? Reason { get; set; }
 }
 
-public sealed record PlatformOptionDto(Guid Id, string Slug, string Name);
+/// <param name="SuggestedCapabilities">
+/// Lo que se propone marcado al dar de alta un negocio de esta clase. Es una sugerencia y no una
+/// regla: quien crea el negocio puede cambiar cualquier casilla antes de guardar, y la
+/// administración puede cambiarlas después. La categoría sigue sirviendo para encontrar el negocio;
+/// no decide qué puede hacer.
+/// </param>
+public sealed record PlatformOptionDto(Guid Id, string Slug, string Name,
+    BusinessCapabilitiesDto? SuggestedCapabilities = null);
 public sealed record ReadinessItemDto(string Key, string Label, bool IsApplicable, bool IsComplete,
     string? MissingHint = null);
 public sealed record PlatformBusinessDto(Guid Id, string Name, string Slug, string Municipality,

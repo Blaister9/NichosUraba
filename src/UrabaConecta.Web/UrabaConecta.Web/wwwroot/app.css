@@ -1110,6 +1110,57 @@ a.card-media { display: block; color: inherit }
 }
 @keyframes cifra-cambia { from { opacity: .35; transform: translateY(5px) } to { opacity: 1; transform: translateY(0) } }
 
+/* Novedades de una operación en el seguimiento del cliente: una línea de tiempo corta, no una
+   tabla. Lo más reciente arriba, que es lo que se viene a mirar. */
+.novedades { margin: var(--e4) 0 0; padding-top: var(--e3); border-top: 1px solid var(--borde) }
+.novedades h2 { font-size: var(--t-17); margin: 0 0 var(--e2) }
+.lista-novedades { display: grid; gap: var(--e2); margin: 0; padding: 0; list-style: none }
+.lista-novedades li {
+    padding: .6rem .75rem; border-radius: var(--radio-sm); background: var(--superficie-2);
+}
+.novedad-titulo { margin: 0 0 .15rem; font-size: var(--t-15) }
+.novedad-texto { margin: 0 0 .2rem; overflow-wrap: anywhere }
+.lista-novedades .meta { margin: 0 }
+
+/* --- Bandeja de avisos -------------------------------------------------------------------------
+   Lista y no tabla: esto se lee en un teléfono, de arriba abajo y con el pulgar. Una fila tiene
+   tres cosas —qué pasó, cuándo, y qué hacer— y el "sin leer" se ve antes de leer el texto, porque
+   quien entra viene a saber si le falta atender algo. */
+.filtro-avisos { display: flex; gap: var(--e2); margin: 0 0 var(--e3); flex-wrap: wrap }
+.filtro-avisos button { flex: 1 1 auto; min-width: 8rem }
+.lista-avisos { display: grid; gap: var(--e2); margin: 0; padding: 0; list-style: none }
+.aviso {
+    display: flex; flex-wrap: wrap; gap: var(--e2) var(--e3); align-items: flex-start;
+    padding: .8rem .9rem; border: 1px solid var(--borde); border-radius: var(--radio-sm);
+    background: var(--superficie);
+}
+/* El no leído se marca con fondo y borde, no sólo con el punto: el color por sí solo no llega a
+   quien no lo distingue. */
+.aviso.no-leido { background: var(--marca-050); border-color: var(--marca-100) }
+.aviso-cuerpo { flex: 1 1 14rem; min-width: 0 }
+.aviso-titulo { display: flex; align-items: center; gap: .45rem; margin: 0 0 .2rem; font-size: var(--t-15) }
+.aviso-texto { margin: 0 0 .3rem; color: var(--texto); overflow-wrap: anywhere }
+.aviso .meta { margin: 0 }
+.punto-nuevo {
+    flex: none; width: .55rem; height: .55rem; border-radius: 50%; background: var(--uc-live);
+}
+.aviso-acciones { display: flex; flex-wrap: wrap; gap: var(--e2); align-items: center }
+.aviso-acciones button { min-height: var(--alto-tocable) }
+
+/* El punto del contador vive pegado a su enlace y no depende del color para existir: lleva número
+   cuando cabe, y siempre lleva texto para lector de pantalla. */
+.contador-avisos {
+    display: inline-flex; align-items: center; justify-content: center; min-width: 1.25rem;
+    height: 1.25rem; padding: 0 .35rem; margin-left: .35rem; border-radius: var(--radio-pill);
+    background: var(--uc-live); color: var(--uc-paper);
+    font-size: var(--t-11); font-weight: var(--p-titular); font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 400px) {
+    .aviso-acciones { width: 100% }
+    .aviso-acciones .primary { flex: 1 1 auto }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .senal-fila::before, .fila-estado[data-estado="open"]::before,
     .fila-tablero.mi-turno[data-estado-turno="called"], .skeleton { animation: none }

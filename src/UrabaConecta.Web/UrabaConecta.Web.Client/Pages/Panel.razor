@@ -146,7 +146,8 @@ else
                     @* Cada operación exige el módulo habilitado en ESTE negocio y además el permiso
                        de la persona. Antes bastaba el permiso, y una propietaria veía las tres
                        operaciones aunque su negocio sólo tuviera una activa. *@
-                    <BusinessOperationSummary Business="business" Summary="SummaryOf(business.Id)" />
+                    <BusinessOperationSummary Business="business" Summary="SummaryOf(business.Id)"
+                                              UnreadCount="UnreadOf(business.Id)" />
                 }
             </div>
         </section>
@@ -189,6 +190,14 @@ else
 
     private OwnerDashboardSummaryDto? SummaryOf(Guid businessId)
         => summaries.GetValueOrDefault(businessId);
+
+    /// <summary>
+    /// Avisos sin leer por negocio. Se piden en una sola lectura para todos, igual que el resumen:
+    /// un contador que cuesta una consulta por tarjeta se vuelve caro en la pantalla que más se abre.
+    /// </summary>
+    private IReadOnlyDictionary<Guid, int> unread = new Dictionary<Guid, int>();
+
+    private int UnreadOf(Guid businessId) => unread.GetValueOrDefault(businessId);
 
     /// <summary>Cuántos requisitos pendientes se enumeran antes de resumir el resto.</summary>
     private const int MaximumPendingShown = 3;
@@ -256,6 +265,8 @@ else
         try
         {
             summaries = (await Api.GetOwnerDashboardAsync()).ToDictionary(x => x.BusinessId);
+            unread = (await Api.GetUnreadNotificationCountsAsync())
+                .ToDictionary(x => x.BusinessId, x => x.UnreadCount);
             dashboard = DashboardState.Loaded;
         }
         // Se atrapa cualquier excepción a propósito: una que escape de aquí termina el circuito de
@@ -264,6 +275,7 @@ else
         catch (Exception)
         {
             summaries = new Dictionary<Guid, OwnerDashboardSummaryDto>();
+            unread = new Dictionary<Guid, int>();
             dashboard = DashboardState.Error;
         }
     }

@@ -142,6 +142,17 @@
             <a class="button-link primary operation-cta" data-testid="primary-operation-action"
                href="@href">@label</a>
         }
+        @* La bandeja siempre está: es la respuesta a "no me llegó el aviso", y esconderla detrás de
+           Configuración sería esconder justo lo que se busca cuando algo falló. *@
+        <a class="secondary button-link" data-testid="business-notifications-action"
+           href="/panel/@Business.Id/avisos">
+            Avisos
+            @if (UnreadCount > 0)
+            {
+                <span class="contador-avisos" aria-hidden="true">@(UnreadCount > 99 ? "99+" : UnreadCount)</span>
+                <span class="visually-hidden">@UnreadCount sin leer</span>
+            }
+        </a>
         @if (Business.CanManageConfiguration)
         {
             <a class="secondary button-link" data-testid="business-configuration-action"
@@ -155,6 +166,9 @@
 
     /// <summary>Nulo cuando el resumen no pudo resolverse para este negocio.</summary>
     [Parameter] public OwnerDashboardSummaryDto? Summary { get; set; }
+
+    /// <summary>Avisos sin leer de este negocio. Cero mientras el conteo no haya llegado.</summary>
+    [Parameter] public int UnreadCount { get; set; }
 
     /// <summary>
     /// Las operaciones que esta persona puede abrir en este negocio. Salen de las mismas banderas

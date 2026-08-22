@@ -876,6 +876,9 @@ app.MapAdditionalIdentityEndpoints();
 // El esquema primero, en todo ambiente: sembrar o crear cuentas contra una base sin migrar
 // falla de formas que cuesta leer. Un fallo aquí no derriba el proceso, marca la readiness.
 await app.Services.MigrateDatabaseAsync(app.Environment);
+// Taxonomía, no decorado: sin la categoría no se puede dar de alta una odontología ni una óptica.
+// Sólo inserta lo que falta y no toca ninguna categoría existente.
+await app.Services.SeedPilotCategoriesAsync();
 await app.Services.SeedDevelopmentAsync(app.Environment);
 await app.Services.SeedDemoShowcaseAsync(app.Environment);
 await app.Services.SeedCatalogImagesAsync(app.Environment);

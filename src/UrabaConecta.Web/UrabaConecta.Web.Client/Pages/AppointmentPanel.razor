@@ -11,6 +11,9 @@
     @* Quien entra por dirección directa tiene que saber de qué establecimiento es esta agenda. *@
     <p class="operation-business" data-testid="business-name">@businessName</p>
 </div>
+@* Una cita nueva entra en la agenda sin que nadie recargue. El filtro sigue mandando: al
+   refrescar se vuelve a pedir con la fecha y el estado que estén seleccionados. *@
+<OperationsLive BusinessId="BusinessId" Channel="appointments" OnChanged="Load" />
 <fieldset class="search-panel" disabled="@(!interactiveReady)">
     <label>Fecha<InputDate @bind-Value="date" /></label>
     <label>Estado<InputSelect @bind-Value="status" data-testid="status-filter">

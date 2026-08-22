@@ -138,9 +138,28 @@ public sealed class PlatformAdministrationStore(AppDbContext db) : IPlatformAdmi
     public async Task<IReadOnlyList<PlatformOptionDto>> ListMunicipalitiesAsync(CancellationToken cancellationToken)
         => await db.Municipalities.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.Name)
             .Select(x => new PlatformOptionDto(x.Id, x.Slug, x.Name)).ToListAsync(cancellationToken);
+    /// <summary>
+    /// Cada categoría viaja con la combinación de funciones que se propone marcada al dar de alta
+    /// un negocio de esa clase. La sugerencia sale del dominio, no de la pantalla: si mañana una
+    /// veterinaria arranca distinto, cambia en un sitio y no en cada formulario.
+    /// </summary>
     public async Task<IReadOnlyList<PlatformOptionDto>> ListCategoriesAsync(CancellationToken cancellationToken)
-        => await db.Categories.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.Name)
-            .Select(x => new PlatformOptionDto(x.Id, x.Slug, x.Name)).ToListAsync(cancellationToken);
+    {
+        var rows = await db.Categories.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.Name)
+            .Select(x => new { x.Id, x.Slug, x.Name }).ToListAsync(cancellationToken);
+        return rows.Select(x =>
+        {
+            var preset = CategoryCapabilityPresets.For(x.Slug);
+            return new PlatformOptionDto(x.Id, x.Slug, x.Name, preset.Count == 0 ? null
+                : new BusinessCapabilitiesDto(
+                    preset.Contains(BusinessModuleKind.Appointments),
+                    preset.Contains(BusinessModuleKind.VirtualQueues),
+                    preset.Contains(BusinessModuleKind.PickupOrders),
+                    BusinessCapabilities.DerivedDefault(BusinessModuleKind.Services, preset),
+                    BusinessCapabilities.DerivedDefault(BusinessModuleKind.Products, preset),
+                    BusinessCapabilities.DerivedDefault(BusinessModuleKind.Staff, preset)));
+        }).ToList();
+    }
     public Task<BusinessMembership?> GetOwnerAsync(Guid businessId, CancellationToken cancellationToken)
         => db.BusinessMemberships.FirstOrDefaultAsync(x => x.BusinessId == businessId && x.IsActive &&
             x.Role == MembershipRole.Owner, cancellationToken);

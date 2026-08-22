@@ -10,6 +10,9 @@
     @* El nombre del establecimiento, para quien llega por dirección directa. *@
     <p class="operation-business" data-testid="business-name">@businessName</p>
 </div>
+@* Un pedido nuevo aparece solo. El botón de actualizar se queda: es la salida cuando el
+   circuito se cae y también lo que deja comprobar a mano que no falta nada. *@
+<OperationsLive BusinessId="BusinessId" Channel="orders" OnChanged="Load" />
 <div class="actions">
     <button class="secondary" @onclick="Load" disabled="@(!interactiveReady || busy || loading)">@(loading ? "Actualizando…" : "Actualizar")</button>
     <a class="button-link secondary" href="/panel/@BusinessId/configuracion/pedidos">Configurar catálogo</a>

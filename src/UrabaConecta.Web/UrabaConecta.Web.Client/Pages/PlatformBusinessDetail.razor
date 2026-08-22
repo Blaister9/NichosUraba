@@ -75,10 +75,32 @@ else
             <button class="secondary" @onclick="SaveProfile" disabled="@readOnly">Guardar contacto</button>
         </section>
 
-        <section class="panel-card"><h2>Funciones</h2>
-            <label class="check"><input type="checkbox" @bind="appointments" /> Citas</label>
-            <label class="check"><input type="checkbox" @bind="queues" /> Turnos virtuales</label>
-            <label class="check"><input type="checkbox" @bind="orders" /> Pedidos para recoger</label>
+        @* Capacidades, no categoría.
+
+           Arriba, las tres operaciones que el negocio abre al público. Abajo, lo que esas
+           operaciones consumen: por omisión se deduce —citas traen servicios y personal, pedidos
+           traen productos—, y se puede fijar a mano cuando un negocio necesita una combinación que
+           la deducción no acierta: una droguería que quiere publicar catálogo antes de abrir
+           pedidos, por ejemplo. Sin esto, cada vertical nueva habría sido un condicional más. *@
+        <section class="panel-card" data-testid="capacidades"><h2>Funciones</h2>
+            <label class="check"><input type="checkbox" @bind="appointments" data-testid="cap-citas" /> Citas</label>
+            <label class="check"><input type="checkbox" @bind="queues" data-testid="cap-turnos" /> Turnos virtuales</label>
+            <label class="check"><input type="checkbox" @bind="orders" data-testid="cap-pedidos" /> Pedidos para recoger</label>
+
+            <h3>Lo que sostiene esas funciones</h3>
+            <p class="meta">Deducido de lo de arriba. Cámbialo sólo si este negocio necesita algo distinto.</p>
+            @foreach (var derived in Derived)
+            {
+                <label>@derived.Label
+                    <select value="@Value(derived.Key)"
+                            @onchange="e => SetDerived(derived.Key, e.Value?.ToString())"
+                            data-testid="@derived.TestId">
+                        <option value="">Automático (@(DerivedDefault(derived.Key) ? "activo" : "inactivo"))</option>
+                        <option value="true">Siempre activo</option>
+                        <option value="false">Siempre inactivo</option>
+                    </select>
+                </label>
+            }
             <button class="secondary" @onclick="SaveModules" disabled="@readOnly">Guardar funciones</button>
             <p>Desactivar una función conserva su configuración y datos históricos.</p>
         </section>
@@ -238,6 +260,14 @@ else
         appointments = business.Modules.Contains("Appointments");
         queues = business.Modules.Contains("VirtualQueues");
         orders = business.Modules.Contains("PickupOrders");
+        // El servidor devuelve la capacidad ya resuelta. Se guarda como decisión explícita sólo
+        // cuando difiere de lo que la deducción daría: así, cambiar "Citas" vuelve a arrastrar
+        // servicios y personal, que es lo que espera quien nunca tocó estas tres casillas.
+        foreach (var key in new[] { "Services", "Products", "Staff" })
+        {
+            var enabled = business.Modules.Contains(key);
+            derived[key] = enabled == DerivedDefault(key) ? null : enabled;
+        }
         images = business.Images ?? [];
         profile = new()
         {
@@ -286,8 +316,43 @@ else
         await Api.UpdatePlatformModulesAsync(BusinessId, new()
         {
             Appointments = appointments, VirtualQueues = queues, PickupOrders = orders,
+            Services = derived["Services"], Products = derived["Products"], Staff = derived["Staff"],
             Version = business!.Version
         }), "Funciones actualizadas.");
+
+    private sealed record DerivedCapability(string Key, string Label, string TestId);
+
+    private static readonly DerivedCapability[] Derived =
+    [
+        new("Services", "Servicios", "cap-servicios"),
+        new("Products", "Productos", "cap-productos"),
+        new("Staff", "Personal", "cap-personal")
+    ];
+
+    /// <summary>Nulo significa "que lo deduzca la operación", que es lo normal.</summary>
+    private readonly Dictionary<string, bool?> derived = new()
+    {
+        ["Services"] = null, ["Products"] = null, ["Staff"] = null
+    };
+
+    private string Value(string key) => derived[key] switch
+    {
+        true => "true", false => "false", _ => ""
+    };
+
+    private void SetDerived(string key, string? value)
+        => derived[key] = value switch { "true" => true, "false" => false, _ => null };
+
+    /// <summary>
+    /// La misma regla que aplica el servidor. Se repite aquí sólo para poder decir en la etiqueta
+    /// qué haría el modo automático; quien decide de verdad sigue siendo el dominio.
+    /// </summary>
+    private bool DerivedDefault(string key) => key switch
+    {
+        "Services" or "Staff" => appointments,
+        "Products" => orders,
+        _ => false
+    };
 
     private async Task Upload(InputFileChangeEventArgs args)
     {

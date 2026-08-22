@@ -3,6 +3,8 @@
 @inject IUrabaConectaApi Api
 
 <PageTitle>Estado de la cita | UrabáConecta</PageTitle>
+@* Cuando el negocio confirma, cancela o reprograma, esta pantalla se entera sin recargar. *@
+<OperationsLive EntityType="Appointment" TrackingCode="Code" OnChanged="Load" />
 <section class="narrow">
     @if (IsNew)
     {
@@ -24,6 +26,7 @@
             <dt>Teléfono</dt><dd>@appointment.PhoneMasked</dd>
             <dt>Última actualización</dt><dd>@LocalDate(appointment.UpdatedAt)</dd>
         </dl>
+        <TrackingUpdates Items="updates" />
         <PushPrompt RegistrationPath="@($"/api/v1/public/appointments/{Uri.EscapeDataString(Code)}/push-subscriptions")"
                     Title="Recibe novedades de esta cita"
                     Description="Te avisamos en este dispositivo cuando el negocio confirme o cambie la cita."
@@ -100,7 +103,17 @@
         interactiveReady = true;
         StateHasChanged();
     }
-    private async Task Load() { loading = true; appointment = await Api.GetAppointmentTrackingAsync(Code); loading = false; }
+    /// <summary>Las novedades guardadas de esta cita, aunque ningún aviso al teléfono llegara.</summary>
+    private IReadOnlyList<NotificationDto> updates = [];
+
+    private async Task Load()
+    {
+        loading = true;
+        appointment = await Api.GetAppointmentTrackingAsync(Code);
+        if (appointment is not null) updates = await Api.GetTrackingNotificationsAsync("citas", Code);
+        loading = false;
+        await InvokeAsync(StateHasChanged);
+    }
     /// <summary>
     /// El botón se deshabilita durante el envío, así que un segundo clic no dispara un segundo
     /// reporte. Si aun así llegara, el servidor rechaza la transición repetida.
