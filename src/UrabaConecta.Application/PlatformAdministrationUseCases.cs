@@ -492,13 +492,18 @@ public sealed class PlatformAdministrationUseCases(
     private void CreateInitialConfiguration(Guid businessId, CreatePlatformBusinessRequest request,
         IReadOnlyCollection<BusinessModuleKind> modules, DateTimeOffset now)
     {
-        if (modules.Contains(BusinessModuleKind.Appointments))
-        {
+        // El horario sostiene la agenda y también las franjas para recoger, así que lo necesita
+        // cualquiera de las dos operaciones. Se crea una sola vez aunque el negocio abra ambas:
+        // duplicar los tramos partiría cada día en dos jornadas idénticas.
+        if (modules.Contains(BusinessModuleKind.Appointments) || modules.Contains(BusinessModuleKind.PickupOrders))
             foreach (var day in new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday,
                          DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday })
                 // TimeOnly(8) invoca el constructor de ticks, no el de horas: el día quedaba vacío.
                 store.AddHour(new BusinessHour(Guid.NewGuid(), businessId, day,
                     new TimeOnly(8, 0), new TimeOnly(18, 0)));
+
+        if (modules.Contains(BusinessModuleKind.Appointments))
+        {
             if (!string.IsNullOrWhiteSpace(request.InitialServiceName))
             {
                 var service = new Service(Guid.NewGuid(), businessId, request.InitialServiceName,

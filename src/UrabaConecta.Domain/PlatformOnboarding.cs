@@ -373,6 +373,7 @@ public static class BusinessReadinessCalculator
         var appointments = enabledModules.Contains(BusinessModuleKind.Appointments);
         var queues = enabledModules.Contains(BusinessModuleKind.VirtualQueues);
         var orders = enabledModules.Contains(BusinessModuleKind.PickupOrders);
+        var needsHours = appointments || orders;
         return new([
             new("business-name", "Nombre", true, hasName, "Falta el nombre del negocio."),
             new("short-description", "Descripción breve", true, hasShortDescription,
@@ -389,7 +390,10 @@ public static class BusinessReadinessCalculator
             new("modules", "Funciones disponibles", true,
                 enabledModules.Any(BusinessCapabilities.Operations.Contains),
                 "Habilite al menos una función."),
-            new("hours", "Horario", appointments, !appointments || hasHours, "Configure el horario de atención."),
+            // El horario no es sólo de la agenda. Las franjas para recoger salen de cruzar el
+            // horario del negocio con la ventana de pedidos, así que un negocio de sólo pedidos sin
+            // horario se publicaba al 100 % y no ofrecía una sola hora en la que pedirle nada.
+            new("hours", "Horario", needsHours, !needsHours || hasHours, "Configure el horario de atención."),
             new("services", "Servicios", appointments, !appointments || hasService,
                 "Cree al menos un servicio activo."),
             new("queue", "Fila virtual", queues, !queues || hasQueueDefinition, "Configure la fila virtual."),

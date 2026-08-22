@@ -131,4 +131,52 @@ public sealed class PlatformOnboardingTests
         Assert.DoesNotContain(readiness.MissingLabels,
             x => x.Contains(" o la descripción", StringComparison.Ordinal));
     }
+
+    // --------------------------------------------- el horario también sostiene los pedidos
+
+    /// <summary>Checklist de un negocio al que sólo le falta decidir horario y módulos.</summary>
+    private static BusinessReadiness Checklist(BusinessModuleKind operacion, bool hasHours)
+        => BusinessReadinessCalculator.Calculate(true, true, true, true, [operacion], hasHours,
+            hasService: true, hasQueueDefinition: true, hasPickupSettings: true,
+            hasProductCategory: true, hasProduct: true);
+
+    [Fact]
+    public void A_business_that_only_takes_orders_is_still_asked_for_its_opening_hours()
+    {
+        // Las franjas para recoger salen de cruzar el horario del negocio con la ventana de
+        // pedidos. Mientras el horario fue asunto exclusivo de las citas, un negocio de sólo
+        // pedidos llegaba al 100 % del checklist y se publicaba sin una sola hora en la que
+        // pedirle nada: el cliente abría la pantalla de pedido y no había ninguna franja.
+        var sinHorario = Checklist(BusinessModuleKind.PickupOrders, hasHours: false);
+        Assert.Contains(sinHorario.Requirements, x => x.Key == "hours" && x.IsApplicable && !x.IsComplete);
+        Assert.Contains("Configure el horario de atención.", sinHorario.MissingLabels);
+        Assert.False(sinHorario.IsReady);
+    }
+
+    [Fact]
+    public void With_its_hours_registered_the_order_only_business_completes_the_checklist()
+    {
+        var conHorario = Checklist(BusinessModuleKind.PickupOrders, hasHours: true);
+        Assert.Contains(conHorario.Requirements, x => x.Key == "hours" && x.IsApplicable && x.IsComplete);
+        Assert.True(conHorario.IsReady);
+        Assert.Equal(100, conHorario.CompletionPercentage);
+    }
+
+    [Fact]
+    public void A_queue_only_business_is_not_asked_for_opening_hours()
+    {
+        // La fila se atiende por orden de llegada y no calcula franjas de nada, así que exigirle
+        // horario sería inventarle un requisito que no sostiene ninguna operación suya.
+        var readiness = Checklist(BusinessModuleKind.VirtualQueues, hasHours: false);
+        Assert.Contains(readiness.Requirements, x => x.Key == "hours" && !x.IsApplicable);
+        Assert.True(readiness.IsReady);
+    }
+
+    [Fact]
+    public void Appointments_keep_demanding_the_hours_they_always_demanded()
+    {
+        var readiness = Checklist(BusinessModuleKind.Appointments, hasHours: false);
+        Assert.Contains(readiness.Requirements, x => x.Key == "hours" && x.IsApplicable && !x.IsComplete);
+        Assert.False(readiness.IsReady);
+    }
 }
