@@ -2978,3 +2978,10 @@ body:has(.ahora-home) footer .meta {
 .business-card > .notice, .business-card > .success, .business-card > .error {
     padding: .5rem .7rem; font-size: var(--t-13); border-radius: var(--radio-sm);
 }
+
+/* --- EN VIVO: tinta oscura sobre coral ---------------------------------------------------------
+   El distintivo llevaba texto papel sobre el coral de la paleta: 3.02:1, por debajo de AA a 11px.
+   El coral no se toca —es lo que significa que algo esta pasando— y lo que cambia es la tinta:
+   selva sobre coral da 6:1. El punto que late se queda claro para que siga leyendose como senal. */
+.live-badge { color: var(--uc-jungle) }
+.live-badge i { background: var(--uc-jungle); box-shadow: 0 0 0 4px rgb(12 22 19 / 22%) }
