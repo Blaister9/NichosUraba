@@ -1,7 +1,16 @@
 ﻿@page "/Account/InvalidUser"
 
-<PageTitle>Invalid user</PageTitle>
+@* Un callejón sin salida sigue siendo una pantalla del producto: en español, con la misma
+   superficie que el resto y con una salida a la vista. *@
+<PageTitle>No encontramos la cuenta | UrabáConecta</PageTitle>
 
-<h3>Invalid user</h3>
-
-<StatusMessage />
+<section class="account-shell cuenta-aviso">
+    <span class="cuenta-aviso-marca" aria-hidden="true"><Icon Name="cuenta" Size="22" /></span>
+    <h1>No encontramos esa cuenta</h1>
+    <p>El enlace apunta a una cuenta que ya no existe o cambió de correo.</p>
+    <StatusMessage />
+    <div class="actions">
+        <a class="button-link" href="/Account/Login">Volver a ingresar</a>
+        <a class="button-link secondary" href="/">Ir al inicio</a>
+    </div>
+</section>

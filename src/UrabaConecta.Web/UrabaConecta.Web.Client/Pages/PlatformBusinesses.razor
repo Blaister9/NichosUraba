@@ -38,9 +38,14 @@ else
         @foreach (var item in data.Items)
         {
             <article class="business-card">
-                <span class="status @BusinessStatusText.CssModifier(item.Status)">@State(item.Status)</span>
-                <h2>@item.Name</h2>
-                <p class="meta">@item.Municipality · @item.Category</p>
+                <div class="card-encabezado">
+                    <BusinessMark Name="@item.Name" />
+                    <div>
+                        <h2>@item.Name</h2>
+                        <p class="meta">@item.Municipality · @item.Category</p>
+                    </div>
+                    <span class="status @BusinessStatusText.CssModifier(item.Status)">@State(item.Status)</span>
+                </div>
                 <p class="meta">Responsable: @(item.OwnerName ?? "Sin asignar")</p>
                 <p class="meta">@string.Join(" · ", item.Modules.Select(Module))</p>
                 <p class="@(item.IsReady ? "success" : "notice")">

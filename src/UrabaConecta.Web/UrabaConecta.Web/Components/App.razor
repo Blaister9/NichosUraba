@@ -5,13 +5,19 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
-    <meta name="theme-color" content="#075d52" />
+    @* El color de la barra del navegador. Aquí queda el del tema claro y theme.js lo reescribe
+       según la preferencia real antes de la primera pintura. Antes era un verde de una marca
+       anterior que ya no existe en la paleta. *@
+    <meta name="theme-color" content="#FFFDF9" />
     <meta name="application-name" content="UrabáConecta" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icons/icon-192.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
+    @* Síncrono y en el <head> a propósito: si el tema se aplicara después de la primera
+       pintura, cada carga en oscuro empezaría con un fogonazo blanco. *@
+    <script src="@Assets["theme.js"]"></script>
     <ResourcePreloader />
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["UrabaConecta.Web.styles.css"]" />

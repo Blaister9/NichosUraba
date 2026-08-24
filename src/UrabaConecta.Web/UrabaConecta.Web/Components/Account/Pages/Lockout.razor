@@ -1,8 +1,15 @@
 ﻿@page "/Account/Lockout"
 
-<PageTitle>Locked out</PageTitle>
+@* Un callejón sin salida sigue siendo una pantalla del producto: en español, con la misma
+   superficie que el resto y con una salida a la vista. *@
+<PageTitle>Cuenta bloqueada | UrabáConecta</PageTitle>
 
-<header>
-    <h1 class="text-danger">Locked out</h1>
-    <p class="text-danger" role="alert">This account has been locked out, please try again later.</p>
-</header>
+<section class="account-shell cuenta-aviso">
+    <span class="cuenta-aviso-marca" aria-hidden="true"><Icon Name="reloj" Size="22" /></span>
+    <h1>Cuenta bloqueada un rato</h1>
+    <p role="alert">Hubo demasiados intentos seguidos. Espera unos minutos y vuelve a entrar; no hace falta hacer nada más.</p>
+    <div class="actions">
+        <a class="button-link" href="/Account/Login">Volver a ingresar</a>
+        <a class="button-link secondary" href="/">Ir al inicio</a>
+    </div>
+</section>

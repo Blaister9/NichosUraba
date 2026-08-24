@@ -1,0 +1,70 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@* Selector de tema: sistema, claro, oscuro.
+
+   Son tres opciones y no un interruptor de dos porque "lo que diga el equipo" es una respuesta
+   legítima y la más común: con un booleano, quien nunca lo toca queda atado a lo que hubiera por
+   omisión y no puede volver. El control segmentado enseña las tres a la vez, así que no hay que
+   tocarlo dos veces para descubrir qué hace.
+
+   Se pinta deshabilitado hasta que el circuito responde. El tema real ya lo aplicó theme.js antes
+   de la primera pintura; esto sólo sirve para cambiarlo. *@
+<div class="tema-selector" role="group" aria-label="Tema de la interfaz">
+    @foreach (var opcion in Opciones)
+    {
+        <button type="button" class="@(preferencia == opcion.Clave ? "activo" : null)"
+                disabled="@(!listo)" aria-pressed="@(preferencia == opcion.Clave)"
+                title="@opcion.Titulo" @onclick="() => Elegir(opcion.Clave)">
+            <Icon Name="@opcion.Icono" Size="16" />
+            <span>@opcion.Etiqueta</span>
+        </button>
+    }
+</div>
+
+@code {
+    private sealed record Opcion(string Clave, string Etiqueta, string Icono, string Titulo);
+
+    private static readonly Opcion[] Opciones =
+    [
+        new("system", "Auto", "dispositivo", "Seguir el tema del dispositivo"),
+        new("light", "Claro", "sol", "Siempre claro"),
+        new("dark", "Oscuro", "luna", "Siempre oscuro"),
+    ];
+
+    private IJSObjectReference? modulo;
+    private string preferencia = "system";
+    private bool listo;
+
+    protected override async Task OnAfterRenderAsync(bool primera)
+    {
+        if (!primera) return;
+        try
+        {
+            // La preferencia se lee del navegador y no del servidor: es una decisión del
+            // dispositivo, no de la cuenta, y quien no ha iniciado sesión también la tiene.
+            preferencia = await JS.InvokeAsync<string>("urabaTema.leer");
+        }
+        catch (JSException) { }
+        catch (InvalidOperationException) { /* prerenderizado: todavía no hay navegador */ }
+        finally
+        {
+            listo = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task Elegir(string clave)
+    {
+        var anterior = preferencia;
+        preferencia = clave;
+        try { preferencia = await JS.InvokeAsync<string>("urabaTema.fijar", clave); }
+        catch (JSException) { preferencia = anterior; }
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        modulo = null;
+        return ValueTask.CompletedTask;
+    }
+}

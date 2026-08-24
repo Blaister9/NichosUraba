@@ -38,10 +38,22 @@
         U+2C60-2C7F, U+A720-A7FF;
 }
 
+/* =============================================================================================
+   TOKENS — una sola fuente de verdad, dos temas.
+
+   La marca no cambia con el tema: los seis colores aprobados son los mismos de día y de noche.
+   Lo que cambia es DÓNDE se apoya cada uno. En claro la superficie es papel y los colores de dato
+   necesitan su versión oscurecida para llegar a contraste; en oscuro la superficie es selva y esos
+   mismos datos recuperan el color puro de la paleta, que sobre fondo oscuro ya se lee.
+
+   Por eso el tema no se implementa invirtiendo colores: se implementa redefiniendo qué es "tinta
+   sobre superficie". Las 2.400 líneas escritas antes nombran tokens semánticos, así que cambian
+   de tema sin tocar un selector.
+   ============================================================================================= */
 :root {
-    /* ---------------------------------------------------------------------------------------
-       PALETA — Urabá en Vivo. Seis colores, y cada uno significa una cosa. No hay un séptimo.
-       --------------------------------------------------------------------------------------- */
+    color-scheme: light dark;
+
+    /* PALETA — Urabá en Vivo. Seis colores, cada uno con un significado. Iguales en los dos temas. */
     --uc-green: #0F8A62;   /* acciones de plataforma y marca */
     --uc-jungle: #0C1613;  /* superficies oscuras, velos y profundidad */
     --uc-paper: #FFFDF9;   /* fondo principal, cálido */
@@ -49,53 +61,10 @@
     --uc-amber: #FFCB57;   /* dato operativo: precio, minutos, cupos, hora, disponibilidad */
     --uc-live: #FF5B47;    /* exclusivamente algo que está ocurriendo EN VIVO */
 
-    /* Derivados de contraste, no colores nuevos: el ámbar y el coral puros son ilegibles sobre
-       papel a tamaño de texto, y el verde de marca no llega a 4.5:1 en 13px. Cada uno es su
-       familia oscurecida, y se usa sólo cuando el color de la paleta va sobre superficie clara. */
-    --uc-green-ink: #0A6247;
     --uc-green-lift: #12A375;
-    --uc-green-wash: #E6F2ED;
     --uc-jungle-soft: #16241F;
-    --uc-amber-ink: #7A5310;
-    --uc-amber-wash: #FFF4DC;
-    --uc-live-ink: #C1341F;
-    --uc-live-wash: #FFE8E4;
 
-    /* Alias heredados. Existen para que las 1.900 líneas escritas antes del Design Spec hablen el
-       sistema aprobado sin reescribir cada selector; lo que cambió es el valor, no el nombre. */
-    --marca-900: var(--uc-jungle);
-    --marca-800: var(--uc-green-ink);
-    --marca-700: var(--uc-green);
-    --marca-600: var(--uc-green-lift);
-    --marca-100: #CFE6DC;
-    --marca-050: var(--uc-green-wash);
-    /* El "cálido" heredado era decoración. Ahora es el dato operativo, que es lo único que el
-       Design Spec pinta de ámbar. El coral no se aliasa: se escribe donde algo está pasando. */
-    --calido-700: var(--uc-amber-ink);
-    --calido-600: #96670F;
-    --calido-500: var(--uc-amber);
-    --calido-100: var(--uc-amber-wash);
-
-    --fondo: var(--uc-paper);
-    --superficie: var(--uc-paper);
-    --superficie-2: var(--uc-stone);
-    --texto: var(--uc-jungle);
-    --texto-suave: #55635E;
-    --borde: #E4E2D8;
-    --borde-fuerte: #CFCDC0;
-
-    --peligro-700: #9B2C1B;
-    --peligro-100: var(--uc-live-wash);
-    --exito-700: var(--uc-green-ink);
-    --exito-100: var(--uc-green-wash);
-    --aviso-700: var(--uc-amber-ink);
-    --aviso-100: var(--uc-amber-wash);
-    --info-700: #1B4F6B;
-    --info-100: #DEEAF0;
-
-    /* ---------------------------------------------------------------------------------------
-       TIPOGRAFÍA — dos familias y una escala cerrada.
-       --------------------------------------------------------------------------------------- */
+    /* TIPOGRAFÍA — dos familias y una escala cerrada. No depende del tema. */
     --fuente-titular: Archivo, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
     --fuente-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
@@ -118,24 +87,14 @@
     --p-fuerte: 700;
     --p-titular: 800;
 
-    /* ---------------------------------------------------------------------------------------
-       RADIOS — cuatro valores. La fotografía no lleva radio: es la superficie.
-       --------------------------------------------------------------------------------------- */
+    /* RADIOS — cuatro valores. La fotografía no lleva radio: es la superficie. */
     --radio-0: 0;
     --radio: 14px;       /* miniaturas y productos */
     --radio-sm: 14px;    /* alias heredado, mismo valor: no hay un quinto radio */
     --radio-lg: 20px;    /* paneles superpuestos y sheets */
     --radio-pill: 999px; /* botones y chips */
 
-    /* ---------------------------------------------------------------------------------------
-       SOMBRAS — una sola lógica: sombra sólo para lo que FLOTA sobre otra superficie.
-       Las piezas normales del feed no llevan: no son tarjetas. Los dos tokens planos siguen
-       existiendo porque cientos de reglas los nombran, y valen exactamente nada.
-       --------------------------------------------------------------------------------------- */
-    --sombra-sm: 0 0 #0000;
-    --sombra: 0 0 #0000;
-    --sombra-lg: 0 18px 44px rgb(12 22 19 / 18%);
-
+    /* ESPACIADO Y MEDIDAS */
     --e1: .25rem;
     --e2: .5rem;
     --e3: .75rem;
@@ -145,6 +104,9 @@
     --e7: 3rem;
 
     --ancho: 1120px;
+    /* Ancho de lectura de las pantallas operativas. El panel se estiraba a 1120 para enseñar una
+       tarjeta con cuatro datos: a partir de aquí la columna se comporta como una herramienta. */
+    --ancho-operacion: 960px;
     /* Táctil: 44 es el mínimo, 48 la acción principal, 52 la barra fija. */
     --alto-tocable: 44px;
     --alto-control: 48px;
@@ -153,17 +115,193 @@
        lo consultan todas las superficies flotantes para apoyarse encima y no debajo. */
     --alto-nav: 0px;
 
+    /* MOTION — tres duraciones y una curva. Todo lo que se mueve sale de aquí. */
+    --mov-rapido: .12s;
+    --mov-normal: .18s;
+    --mov-panel: .22s;
+    --curva: cubic-bezier(.2, .8, .2, 1);
+
     font-family: var(--fuente-ui);
-    color: var(--texto);
-    background: var(--fondo);
     line-height: 1.5;
     font-synthesis: none;
     -webkit-text-size-adjust: 100%;
 }
-/* La base va en el body y no en :root a propósito. La escala está escrita en rem, y rem se mide
-   contra el tamaño de la raíz: fijar 15px ahí volvía a escalar la escala entera sobre sí misma y
-   los 34px del titular acababan pintando 31.9. La raíz conserva el tamaño que eligió quien navega
-   —que es lo que hace que el zoom del navegador siga sirviendo— y la interfaz arranca en 15. */
+
+/* =============================================================================================
+   TEMA CLARO — superficie papel.
+   Se escribe en :root pelado para que sea el valor por omisión aunque falle el soporte de la
+   consulta de medios o del atributo. Ningún color vive únicamente dentro de una media query.
+   ============================================================================================= */
+:root {
+    --fondo: var(--uc-paper);
+    --superficie: var(--uc-paper);
+    --superficie-2: var(--uc-stone);
+    /* Tercer nivel: lo que se levanta sobre una tarjeta —hover de fila, celda activa, inset—.
+       Antes no existía y todo lo secundario compartía piedra, así que nada se distinguía. */
+    --superficie-3: #E7E5DB;
+    --superficie-inversa: var(--uc-jungle);
+    --texto-inverso: var(--uc-paper);
+
+    --texto: var(--uc-jungle);
+    --texto-suave: #55635E;
+    --texto-tenue: #66726D;
+    --borde: #E4E2D8;
+    --borde-fuerte: #CFCDC0;
+
+    /* Tintas de color sobre superficie clara: el verde, el ámbar y el coral puros no llegan a
+       4.5:1 en texto pequeño, así que cada uno tiene su familia oscurecida. */
+    --uc-green-ink: #0A6247;
+    --uc-green-wash: #E6F2ED;
+    --uc-amber-ink: #7A5310;
+    --uc-amber-wash: #FFF4DC;
+    --uc-live-ink: #C1341F;
+    --uc-live-wash: #FFE8E4;
+    /* 3% más oscuro que el verde de marca: 4.51:1 con texto papel, contra los 4.28 del verde
+       puro. La diferencia no se ve; el incumplimiento sí se medía. */
+    --uc-green-solid: #0D7C57;
+    --uc-green-solid-hover: var(--uc-green-ink);
+    --texto-sobre-verde: var(--uc-paper);
+
+    --peligro-700: #9B2C1B;
+    --peligro-100: var(--uc-live-wash);
+    --exito-700: var(--uc-green-ink);
+    --exito-100: var(--uc-green-wash);
+    --aviso-700: var(--uc-amber-ink);
+    --aviso-100: var(--uc-amber-wash);
+    --info-700: #1B4F6B;
+    --info-100: #DEEAF0;
+
+    /* Elevación real. Los dos primeros tokens valían literalmente nada —se anularon cuando el feed
+       dejó de ser tarjetas— y con ello se quedó sin profundidad TODA la operación, que sí la
+       necesita para separar una herramienta de su fondo. Vuelven, medidos y suaves. */
+    --sombra-sm: 0 1px 2px rgb(12 22 19 / 5%);
+    --sombra: 0 2px 4px rgb(12 22 19 / 5%), 0 6px 16px rgb(12 22 19 / 6%);
+    --sombra-lg: 0 18px 44px rgb(12 22 19 / 18%);
+    --anillo: 0 0 0 3px rgb(15 138 98 / 22%);
+    /* Velo de las superficies pegajosas: la misma superficie del tema, translúcida. */
+    --velo: rgb(255 253 249 / 92%);
+    /* Resuelto, no declarado: es lo que hace que casillas y barras de desplazamiento acompañen. */
+    color-scheme: light;
+
+    color: var(--texto);
+    background: var(--fondo);
+}
+
+/* =============================================================================================
+   TEMA OSCURO — superficie selva.
+   No es el claro invertido: es el mismo lenguaje que ya usaba el descubrimiento —selva de fondo,
+   fotografía como color, papel como tinta— extendido a la operación. El producto no cambia de
+   personalidad al cambiar de tema; cambia de hora del día.
+
+   Tres estados: el sistema decide por omisión, y el atributo manda sobre el sistema en los dos
+   sentidos, para que elegir "claro" en un equipo configurado en oscuro también funcione.
+   ============================================================================================= */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --fondo: var(--uc-jungle);
+        --superficie: #131F1B;
+        --superficie-2: #1A2925;
+        --superficie-3: #223330;
+        --superficie-inversa: var(--uc-paper);
+        --texto-inverso: var(--uc-jungle);
+
+        --texto: #F2F5F2;
+        --texto-suave: #A2B0AA;
+        --texto-tenue: #93A099;
+        --borde: #26332F;
+        --borde-fuerte: #35443F;
+
+        /* Sobre selva los colores de la paleta ya se leen, así que la tinta recupera el color puro
+           en vez de la familia oscurecida. Es lo que el feed oscuro ya venía haciendo. */
+        --uc-green-ink: #3ED39B;
+        --uc-green-wash: rgb(15 138 98 / 20%);
+        --uc-amber-ink: var(--uc-amber);
+        --uc-amber-wash: rgb(255 203 87 / 15%);
+        --uc-live-ink: #FF7C6C;
+        --uc-live-wash: rgb(255 91 71 / 16%);
+        /* Sobre selva el verde se aclara para despegarse del fondo, y entonces la tinta que
+           contrasta es la oscura: selva sobre #12A375 da 5.72:1. */
+        --uc-green-solid: var(--uc-green-lift);
+        --uc-green-solid-hover: #17BC88;
+        --texto-sobre-verde: var(--uc-jungle);
+
+        --peligro-700: #FF8C7A;
+        --peligro-100: rgb(255 91 71 / 16%);
+        --exito-700: #3ED39B;
+        --exito-100: rgb(15 138 98 / 20%);
+        --aviso-700: var(--uc-amber);
+        --aviso-100: rgb(255 203 87 / 15%);
+        --info-700: #7FC4E8;
+        --info-100: rgb(127 196 232 / 14%);
+
+        /* En oscuro una sombra negra casi no se ve: la profundidad la dan un borde algo más claro
+           y una sombra más profunda y difusa. */
+        --sombra-sm: 0 1px 2px rgb(0 0 0 / 40%);
+        --sombra: 0 2px 6px rgb(0 0 0 / 40%), 0 10px 24px rgb(0 0 0 / 30%);
+        --sombra-lg: 0 20px 52px rgb(0 0 0 / 55%);
+        --anillo: 0 0 0 3px rgb(62 211 155 / 26%);
+        --velo: rgb(19 31 27 / 92%);
+        color-scheme: dark;
+    }
+}
+:root[data-theme="dark"] {
+    --fondo: var(--uc-jungle);
+    --superficie: #131F1B;
+    --superficie-2: #1A2925;
+    --superficie-3: #223330;
+    --superficie-inversa: var(--uc-paper);
+    --texto-inverso: var(--uc-jungle);
+
+    --texto: #F2F5F2;
+    --texto-suave: #A2B0AA;
+    --texto-tenue: #93A099;
+    --borde: #26332F;
+    --borde-fuerte: #35443F;
+
+    --uc-green-ink: #3ED39B;
+    --uc-green-wash: rgb(15 138 98 / 20%);
+    --uc-amber-ink: var(--uc-amber);
+    --uc-amber-wash: rgb(255 203 87 / 15%);
+    --uc-live-ink: #FF7C6C;
+    --uc-live-wash: rgb(255 91 71 / 16%);
+    --uc-green-solid: var(--uc-green-lift);
+    --uc-green-solid-hover: #17BC88;
+    --texto-sobre-verde: var(--uc-jungle);
+
+    --peligro-700: #FF8C7A;
+    --peligro-100: rgb(255 91 71 / 16%);
+    --exito-700: #3ED39B;
+    --exito-100: rgb(15 138 98 / 20%);
+    --aviso-700: var(--uc-amber);
+    --aviso-100: rgb(255 203 87 / 15%);
+    --info-700: #7FC4E8;
+    --info-100: rgb(127 196 232 / 14%);
+
+    --sombra-sm: 0 1px 2px rgb(0 0 0 / 40%);
+    --sombra: 0 2px 6px rgb(0 0 0 / 40%), 0 10px 24px rgb(0 0 0 / 30%);
+    --sombra-lg: 0 20px 52px rgb(0 0 0 / 55%);
+    --anillo: 0 0 0 3px rgb(62 211 155 / 26%);
+    --velo: rgb(19 31 27 / 92%);
+    color-scheme: dark;
+}
+
+/* Alias heredados. Existen para que las líneas escritas antes del sistema de temas hablen los
+   tokens semánticos sin reescribir cada selector; lo que cambia con el tema es el valor. */
+:root {
+    --marca-900: var(--texto);
+    --marca-800: var(--uc-green-ink);
+    --marca-700: var(--uc-green-solid);
+    --marca-600: var(--uc-green-lift);
+    --marca-100: var(--uc-green-wash);
+    --marca-050: var(--uc-green-wash);
+    /* El "cálido" heredado era decoración. Ahora es el dato operativo, que es lo único que el
+       Design Spec pinta de ámbar. El coral no se aliasa: se escribe donde algo está pasando. */
+    --calido-700: var(--uc-amber-ink);
+    --calido-600: var(--uc-amber-ink);
+    --calido-500: var(--uc-amber);
+    --calido-100: var(--uc-amber-wash);
+}
+
 body { font-size: var(--t-15) }
 
 * { box-sizing: border-box; min-width: 0 }
@@ -189,7 +327,7 @@ textarea:focus-visible, summary:focus-visible {
     position: sticky; top: 0; z-index: 20;
     display: flex; justify-content: space-between; align-items: center; gap: var(--e4);
     padding: .7rem max(var(--e4), calc((100% - var(--ancho)) / 2));
-    background: rgb(255 253 249 / 92%);
+    background: var(--velo);
     backdrop-filter: blur(8px);
     border-bottom: 1px solid var(--borde);
 }
@@ -688,9 +826,9 @@ a.card-media { display: block; color: inherit }
    entero se apoya ahora en piedra y verde, y la única variación admitida es la superficie.
    El atributo lo sigue poniendo la interfaz desde el slug, así que una categoría nueva sin
    entrada cae en el mismo sitio que las demás y sigue siendo legible. */
-[data-tono] { --tono-fondo: var(--uc-stone); --tono-texto: var(--uc-green-ink); --tono-borde: var(--uc-green) }
+[data-tono] { --tono-fondo: var(--superficie-2); --tono-texto: var(--uc-green-ink); --tono-borde: var(--uc-green) }
 [data-tono="barberia"], [data-tono="belleza"], [data-tono="salud"], [data-tono="servicios"],
-[data-tono="mascotas"] { --tono-fondo: var(--uc-stone); --tono-texto: var(--uc-green-ink); --tono-borde: var(--uc-green) }
+[data-tono="mascotas"] { --tono-fondo: var(--superficie-2); --tono-texto: var(--uc-green-ink); --tono-borde: var(--uc-green) }
 /* Las dos categorías que venden algo con precio se apoyan en la superficie del dato operativo. */
 [data-tono="producto"], [data-tono="comida"] {
     --tono-fondo: var(--uc-amber-wash); --tono-texto: var(--uc-amber-ink); --tono-borde: var(--uc-amber);
@@ -726,7 +864,7 @@ a.card-media { display: block; color: inherit }
    gris. Un negocio sin foto todavía se ve como parte del producto. */
 .card-media.sin-foto, .cover-vacia {
     display: grid; place-items: center; aspect-ratio: 16 / 10;
-    background: var(--uc-stone); color: var(--uc-green-ink);
+    background: var(--superficie-2); color: var(--uc-green-ink);
 }
 .cover-vacia { aspect-ratio: 16 / 9; border-radius: var(--radio-0) }
 
@@ -1464,7 +1602,7 @@ a.card-media { display: block; color: inherit }
         display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
         position: fixed; inset: auto 0 0; z-index: 30;
         padding: .35rem .25rem calc(.35rem + env(safe-area-inset-bottom));
-        background: var(--uc-paper); backdrop-filter: blur(10px);
+        background: var(--superficie); backdrop-filter: blur(10px);
         border-top: 1px solid var(--borde);
     }
     body:has(.ahora-home) .nav-inferior { border-top: 0 }
@@ -1568,7 +1706,7 @@ a.card-media { display: block; color: inherit }
     .ficha-sticky {
         display: block; position: sticky; bottom: var(--alto-nav); z-index: 15;
         margin: var(--e5) calc(var(--e4) * -1) 0; padding: .6rem var(--e4);
-        background: rgb(255 253 249 / 95%); backdrop-filter: blur(8px);
+        background: var(--velo); backdrop-filter: blur(8px);
         border-top: 1px solid var(--borde);
     }
     .resumen-pedido { bottom: var(--alto-nav) }
@@ -1582,7 +1720,7 @@ a.card-media { display: block; color: inherit }
     .queue-actions.accion-fija {
         position: sticky; bottom: var(--alto-nav); z-index: 16;
         margin-inline: calc(var(--e4) * -1); border-radius: 0; border-inline: 0;
-        background: rgb(255 253 249 / 96%); backdrop-filter: blur(10px);
+        background: var(--velo); backdrop-filter: blur(10px);
         box-shadow: 0 -6px 18px rgb(15 46 37 / 8%);
     }
     .queue-actions.accion-fija .call-next { min-height: 54px; font-size: var(--t-17)}
@@ -1617,7 +1755,7 @@ a.card-media { display: block; color: inherit }
 }
 /* El permiso del navegador sólo se pide desde esta tarjeta contextual, nunca al abrir Home. */
 .push-prompt{display:flex;gap:.85rem;align-items:flex-start;margin:1rem 0;padding:1rem;border:1px solid var(--borde);border-radius:var(--radio);background:var(--uc-green-wash)}.push-prompt-icon{display:grid;place-items:center;flex:0 0 2rem;width:2rem;height:2rem;border-radius:50%;background:var(--uc-green);color:var(--uc-paper)}.push-prompt-copy{min-width:0}.push-prompt-copy p{margin:.25rem 0 .65rem}.push-prompt-copy .error{margin-top:.6rem}
-.catalog-image-editor{display:grid;grid-template-columns:8rem minmax(0,1fr);gap:1rem;align-items:start;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--borde)}.catalog-image-preview{position:relative;aspect-ratio:1;border-radius: 14px;overflow:hidden;background:var(--uc-stone)}.catalog-image-preview img{width:100%;height:100%;object-fit:cover}.catalog-image-preview .tag{position:absolute;left:.4rem;bottom:.4rem}.catalog-image-empty{display:grid;height:100%;place-items:center;align-content:center;gap:.3rem;color:var(--texto-suave)}.catalog-image-controls{min-width:0}.catalog-image-controls input[type=file]{width:100%;font-size: var(--t-13)}.catalog-image-controls .actions{margin-top:.55rem}
+.catalog-image-editor{display:grid;grid-template-columns:8rem minmax(0,1fr);gap:1rem;align-items:start;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--borde)}.catalog-image-preview{position:relative;aspect-ratio:1;border-radius: 14px;overflow:hidden;background:var(--superficie-2)}.catalog-image-preview img{width:100%;height:100%;object-fit:cover}.catalog-image-preview .tag{position:absolute;left:.4rem;bottom:.4rem}.catalog-image-empty{display:grid;height:100%;place-items:center;align-content:center;gap:.3rem;color:var(--texto-suave)}.catalog-image-controls{min-width:0}.catalog-image-controls input[type=file]{width:100%;font-size: var(--t-13)}.catalog-image-controls .actions{margin-top:.55rem}
 .operation-tabs{display:flex;gap:.45rem;margin:1rem 0;padding:.15rem 0 .45rem;overflow-x:auto;scrollbar-width:none}.operation-tabs::-webkit-scrollbar{display:none}.operation-tabs button{display:flex;flex:0 0 auto;gap:.45rem;align-items:center;min-height:44px;padding:.55rem .8rem;border:1px solid var(--borde);border-radius:999px;background:var(--superficie);color:var(--texto-suave)}.operation-tabs button strong{display:grid;place-items:center;min-width:1.5rem;height:1.5rem;border-radius:999px;background:var(--superficie-2);font-size: var(--t-13)}.operation-tabs button.active{border-color:var(--marca-700);background:var(--marca-700);color:var(--uc-paper)}.operation-tabs button.active strong{background:rgb(255 253 249 / 22%)}.appointment-card:target,.queue-row:target{outline:3px solid var(--uc-green);outline-offset:3px;animation:target-pulse 1.5s ease-out}@keyframes target-pulse{from{box-shadow:0 0 0 8px rgb(15 138 98 / 30%)}to{box-shadow:0 0 0 0 rgb(15 138 98 / 0%)}}
 @media(max-width:520px){.catalog-image-editor{grid-template-columns:6.5rem minmax(0,1fr);gap:.75rem}.catalog-image-controls .actions{display:grid;grid-template-columns:1fr}.catalog-image-controls button{min-height:44px}}
 
@@ -1675,7 +1813,7 @@ a.card-media { display: block; color: inherit }
 
 /* Tres capacidades en lenguaje de app, no como explicación. */
 .intent-panel { position: relative; z-index: 3; margin: -2rem var(--e4) 0; padding: var(--e4);
-    border-radius: var(--radio-lg); background: rgb(255 253 249 / 96%); box-shadow: var(--sombra-lg); backdrop-filter: blur(12px) }
+    border-radius: var(--radio-lg); background: var(--velo); box-shadow: var(--sombra-lg); backdrop-filter: blur(12px) }
 .intent-panel.without-banner { margin-top: 0 }
 .intent-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .65rem }
 .intent-action {
@@ -1689,7 +1827,7 @@ a.card-media { display: block; color: inherit }
 .intent-action strong { font-size: var(--t-15); line-height: 1.1 }
 .intent-action small { color: var(--texto-suave); font-size: var(--t-11)}
 .intent-icon { display: grid; place-items: center; width: 3rem; height: 3rem; border-radius: 14px}
-.intent-action .intent-icon { background: var(--uc-stone); color: var(--uc-green-ink) }
+.intent-action .intent-icon { background: var(--superficie-2); color: var(--uc-green-ink) }
 .intent-arrow { color: var(--texto-suave) }
 
 /* Municipios: cuatro destinos con superficie propia, siempre visibles. */
@@ -1697,10 +1835,10 @@ a.card-media { display: block; color: inherit }
 .municipality-grid { gap: .7rem }
 .municipality-card {
     min-height: 88px; padding: .85rem; border: 0; border-radius: 20px; box-shadow: none;
-    background: var(--uc-stone); overflow: hidden;
+    background: var(--superficie-2); overflow: hidden;
 }
 .municipality-card[data-place="1"], .municipality-card[data-place="2"],
-.municipality-card[data-place="3"] { background: var(--uc-stone) }
+.municipality-card[data-place="3"] { background: var(--superficie-2) }
 .municipality-card:hover { border-color: transparent; box-shadow: var(--sombra); transform: translateY(-3px) }
 .municipality-icon { width: 2.65rem; height: 2.65rem; border-radius: var(--radio); background: var(--uc-paper);
     color: var(--marca-700) }
@@ -1714,7 +1852,7 @@ a.card-media { display: block; color: inherit }
     flex-direction: column; justify-content: flex-start; gap: .45rem; background: transparent;
     box-shadow: none; text-align: center;
 }
-a.discovery-category-tile:hover { border-color: transparent; background: var(--uc-stone);
+a.discovery-category-tile:hover { border-color: transparent; background: var(--superficie-2);
     box-shadow: none; transform: translateY(-3px) }
 .discovery-category-tile .marca-icono { width: 3.35rem; height: 3.35rem; border-radius: 14px;
     transition: transform .16s ease }
@@ -1727,7 +1865,7 @@ a.discovery-category-tile:hover .marca-icono { transform: scale(1.06) rotate(-2d
 
 /* Contexto de municipio/categoría con personalidad, sin otra caja administrativa. */
 .discovery-context { position: relative; overflow: hidden; border: 0; padding: clamp(1.25rem, 4vw, 2rem);
-    background: var(--uc-stone); box-shadow: none }
+    background: var(--superficie-2); box-shadow: none }
 .discovery-context::after { content: ""; position: absolute; right: -3rem; bottom: -4rem; width: 12rem; height: 12rem;
     border: 2rem solid color-mix(in srgb, var(--tono-borde, var(--marca-600)) 12%, transparent); border-radius: 50% }
 .discovery-context > * { position: relative; z-index: 1 }
@@ -2295,7 +2433,7 @@ body:has(.ficha-hero) .back-link { color: rgb(255 253 249 / 78%) }
     color: var(--texto); text-decoration: none; transition: transform .13s ease, filter .13s ease;
 }
 .portal-municipality:active { transform: scale(.975); filter: brightness(.96) }
-.portal-municipality[data-place] { background: var(--uc-stone) }
+.portal-municipality[data-place] { background: var(--superficie-2) }
 .place-monogram {
     position: absolute; right: -.05em; bottom: -.35em; z-index: -1; color: rgb(255 253 249 / 58%);
     font-size: 4.8rem; line-height: 1; font-weight: var(--p-titular); letter-spacing: -.09em;
@@ -2327,7 +2465,7 @@ body:has(.ficha-hero) .back-link { color: rgb(255 253 249 / 78%) }
 .portal-preview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem }
 .portal-business { display: grid; gap: .42rem; color: var(--texto); text-decoration: none }
 .portal-business-media { display: grid; place-items: center; aspect-ratio: 16 / 10; overflow: hidden;
-    border-radius: var(--radio); background: var(--uc-stone); color: var(--tono-texto) }
+    border-radius: var(--radio); background: var(--superficie-2); color: var(--tono-texto) }
 .portal-business-media img { width: 100%; height: 100%; object-fit: cover; transition: transform .2s ease }
 .portal-business:active .portal-business-media img { transform: scale(1.03) }
 .portal-business > span:last-child { display: grid }
@@ -2342,7 +2480,7 @@ body:has(.ficha-hero) .back-link { color: rgb(255 253 249 / 78%) }
     position: relative; isolation: isolate; display: flex; align-items: center; gap: .9rem; min-height: 118px;
     overflow: hidden; padding: 1rem; border-radius: 20px;
 }
-.municipality-screen[data-place] .municipality-hero { background: var(--uc-stone) }
+.municipality-screen[data-place] .municipality-hero { background: var(--superficie-2) }
 .municipality-hero-mark { position: absolute; right: -.04em; bottom: -.33em; z-index: -1;
     color: rgb(255 253 249 / 55%); font-size: 8rem; font-weight: var(--p-titular); letter-spacing: -.1em }
 .municipality-hero-icon { display: grid; place-items: center; flex: 0 0 3.8rem; width: 3.8rem; height: 3.8rem;
@@ -2380,7 +2518,7 @@ body:has(.ficha-hero) .back-link { color: rgb(255 253 249 / 78%) }
 .category-place-selector .category-place { display: grid; grid-template-columns: auto minmax(0, 1fr); min-height: 58px;
     gap: .4rem; justify-content: start; text-align: left }
 .category-place > span { display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 50%; background: rgb(255 253 249 / 66%) }
-.category-place[data-place] { background: var(--uc-stone) }
+.category-place[data-place] { background: var(--superficie-2) }
 .category-place strong { font-size: var(--t-13)}
 .category-featured { margin: 0 0 1rem }
 
@@ -2489,4 +2627,354 @@ body:has(.ficha-hero) .back-link { color: rgb(255 253 249 / 78%) }
     .portal-home, .municipality-screen, .category-destination-hero { animation: none }
     .header-search, .portal-municipality, .portal-category, .portal-category-art,
     .portal-business-media img, .destination-category, .category-place-selector a { transition: none }
+}
+
+/* =============================================================================================
+   PULIDO — profundidad, estados y densidad.
+
+   Este bloque va al final a propósito: reafina familias que ya existen sin reescribir sus
+   selectores originales, de modo que el diff se lee como "qué cambió de aspecto" y no como una
+   hoja nueva. Nada de aquí introduce color propio: todo sale de los tokens, así que el tema claro
+   y el oscuro se resuelven solos.
+   ============================================================================================= */
+
+/* --- Selector de tema ------------------------------------------------------------------------
+   Control segmentado de tres estados. Vive en el pie, sobre cualquiera de las dos superficies. */
+.pie-tema {
+    display: flex; align-items: center; justify-content: center; gap: .6rem;
+    margin: var(--e4) 0 var(--e2);
+}
+.pie-tema-etiqueta {
+    font-size: var(--t-11); font-weight: var(--p-fuerte); letter-spacing: .08em;
+    text-transform: uppercase; color: var(--texto-suave);
+}
+.tema-selector {
+    display: inline-flex; gap: 2px; padding: 3px;
+    border: 1px solid var(--borde); border-radius: var(--radio-pill); background: var(--superficie-2);
+}
+.tema-selector button {
+    display: inline-flex; align-items: center; gap: .35rem;
+    min-height: 34px; padding: .3rem .7rem; border: 0; border-radius: var(--radio-pill);
+    background: transparent; color: var(--texto-suave);
+    font-size: var(--t-11); font-weight: var(--p-fuerte); cursor: pointer;
+    transition: background var(--mov-rapido) ease, color var(--mov-rapido) ease;
+}
+.tema-selector button:hover:not(:disabled) { color: var(--texto) }
+.tema-selector button.activo {
+    background: var(--superficie); color: var(--texto); box-shadow: var(--sombra-sm);
+}
+.tema-selector button:disabled { opacity: .55; cursor: default }
+/* En el pie oscuro del descubrimiento el control se apoya en la selva, no en piedra. */
+body:has(.ahora-home) .tema-selector { background: rgb(255 253 249 / 8%); border-color: rgb(255 253 249 / 14%) }
+body:has(.ahora-home) .tema-selector button { color: rgb(255 253 249 / 65%) }
+body:has(.ahora-home) .tema-selector button.activo { background: rgb(255 253 249 / 16%); color: var(--uc-paper) }
+
+/* --- Superficies con profundidad --------------------------------------------------------------
+   La operación había perdido toda la elevación cuando el feed dejó de ser tarjetas: los tokens de
+   sombra se anularon para el descubrimiento y se llevaron por delante el panel, la administración
+   y la configuración, que sí necesitan que una herramienta se despegue de su fondo. */
+.business-card, .panel-card, .review-card, .success-card, .member-card, .appointment-card,
+.config-card, .config-form, .config-row, .hour-row, .queue-row, .queue-toolbar, .queue-actions,
+.filters, .search-panel, .service-options, .permission-set, .capability-grid div, .narrow {
+    background: var(--superficie);
+    border: 1px solid var(--borde);
+    box-shadow: var(--sombra-sm);
+}
+/* Lo que se toca entero se levanta un poco al pasar por encima y se hunde al pulsar. */
+a.config-card, a.business-card {
+    transition: transform var(--mov-rapido) ease, box-shadow var(--mov-rapido) ease,
+        border-color var(--mov-rapido) ease;
+}
+a.config-card:hover, a.business-card:hover {
+    transform: translateY(-1px); box-shadow: var(--sombra); border-color: var(--borde-fuerte);
+}
+a.config-card:active, a.business-card:active { transform: translateY(0) }
+
+/* --- Botones ---------------------------------------------------------------------------------
+   Cuatro pesos, y ahora con estados de verdad: reposo, encima, pulsado y foco. */
+button, .button-link {
+    transition: background-color var(--mov-rapido) ease, border-color var(--mov-rapido) ease,
+        transform var(--mov-rapido) ease, box-shadow var(--mov-rapido) ease;
+}
+.primary, .button-link:not(.secondary):not(.tertiary):not(.danger) {
+    background: var(--uc-green-solid); border-color: var(--uc-green-solid);
+    color: var(--texto-sobre-verde);
+    box-shadow: var(--sombra-sm);
+}
+.primary:hover, .button-link:not(.secondary):not(.tertiary):not(.danger):hover {
+    background: var(--uc-green-solid-hover); border-color: var(--uc-green-solid-hover);
+    box-shadow: var(--sombra);
+}
+.primary:active, .button-link:not(.secondary):not(.tertiary):not(.danger):active {
+    transform: translateY(1px); box-shadow: var(--sombra-sm);
+}
+.secondary:hover, .button-link.secondary:hover { border-color: var(--uc-green-solid) }
+.secondary:active, .button-link.secondary:active, .danger:active { transform: translateY(1px) }
+button:disabled, .button-link[aria-disabled="true"] { box-shadow: none; transform: none }
+/* La acción principal deja de estirarse a lo ancho de un monitor: una acción no mide 800px. */
+.btn-grande { max-width: 22rem }
+.operation-cta, .call-next { max-width: 24rem }
+
+/* --- Formularios ------------------------------------------------------------------------------ */
+input, select, textarea {
+    transition: border-color var(--mov-rapido) ease, box-shadow var(--mov-rapido) ease;
+}
+input:hover:not(:disabled), select:hover:not(:disabled), textarea:hover:not(:disabled) {
+    border-color: var(--borde-fuerte);
+}
+/* El anillo acompaña al borde en vez de sustituirlo: el campo enfocado se reconoce sin depender
+   sólo del color, que es lo que pide la accesibilidad. */
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline: none; border-color: var(--uc-green-solid); box-shadow: var(--anillo);
+}
+::placeholder { color: var(--texto-tenue); opacity: 1 }
+/* El desplegable nativo hereda el tema: sin esto quedaba blanco sobre selva. */
+select { background-color: var(--superficie); color: var(--texto) }
+
+/* --- Distintivos y estados --------------------------------------------------------------------
+   El estado deja de ser sólo color: lleva un punto delante, así que se distingue en escala de
+   grises y por quien no separa verde de ámbar. */
+.status {
+    display: inline-flex; align-items: center; gap: .4rem;
+    border: 1px solid transparent; font-size: var(--t-11); letter-spacing: .01em;
+}
+.status::before {
+    content: ""; width: .45rem; height: .45rem; border-radius: 50%;
+    background: currentColor; flex: 0 0 auto;
+}
+.tag {
+    border: 1px solid var(--borde);
+}
+
+/* --- Estados vacíos ---------------------------------------------------------------------------
+   Eran una franja gris con una frase. Ahora tienen icono, jerarquía y una salida, que es lo que
+   distingue "no hay nada todavía" de "esto está roto". */
+.empty {
+    display: grid; justify-items: center; gap: .35rem;
+    padding: var(--e6) var(--e4);
+    background: var(--superficie); border: 1px dashed var(--borde-fuerte); border-radius: var(--radio-lg);
+    box-shadow: none; text-align: center;
+}
+.empty::before {
+    content: ""; display: block; width: 3rem; height: 3rem; margin-bottom: .35rem;
+    border-radius: 50%; background: var(--superficie-2);
+    /* Un círculo con un trazo dentro, dibujado en el propio CSS: no hace falta pedir un icono
+       para que un vacío deje de parecer un error de maquetación. */
+    background-image: radial-gradient(circle at 50% 42%, var(--texto-tenue) 0 2px, transparent 3px),
+        linear-gradient(var(--texto-tenue), var(--texto-tenue));
+    background-size: 100% 100%, 1.1rem 2px;
+    background-position: center, center 62%;
+    background-repeat: no-repeat;
+    opacity: .55;
+}
+.empty h2 { margin: 0; font-size: var(--t-21) }
+.empty .meta, .empty p { max-width: 38ch; margin: 0; color: var(--texto-suave) }
+.empty .button-link, .empty button { margin-top: var(--e3) }
+/* El resumen vacío del panel comparte lenguaje con el vacío grande, en versión compacta. */
+.summary-empty {
+    display: grid; gap: .1rem; padding: var(--e4);
+    background: var(--superficie-2); border: 1px dashed var(--borde-fuerte); border-radius: var(--radio);
+    color: var(--texto-suave);
+}
+
+/* --- Avisos ----------------------------------------------------------------------------------
+   Un aviso lleva una barra de color a la izquierda: en oscuro los fondos teñidos al 15% se
+   parecen demasiado entre sí, y la barra los separa sin subir la saturación. */
+.notice, .error, .success, .warning-text {
+    border-left: 3px solid currentColor; border-radius: var(--radio);
+}
+.notice { border-left-color: var(--uc-green-solid) }
+.error { border-left-color: var(--peligro-700) }
+.success { border-left-color: var(--exito-700) }
+.warning-text { border-left-color: var(--aviso-700) }
+
+/* --- Operación: densidad y ancho de lectura ---------------------------------------------------
+   El panel se estiraba a 1120px para enseñar una tarjeta con cuatro datos. La operación se lee
+   como una herramienta: columna acotada, y las rejillas dejan de ser de una sola fila infinita. */
+@media (min-width: 901px) {
+    .page-shell:has(.panel-header, .config-nav, .config-grid, .operation-tabs) {
+        width: min(var(--ancho-operacion), 100%);
+    }
+    .config-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)) }
+    /* Las tarjetas de una rejilla se alinean por arriba y por abajo: el borde inferior irregular
+       era lo que más hacía parecer prototipo a la administración. */
+    .card-grid, .config-grid, .member-list, .appointment-list { align-items: stretch }
+    .card-grid > *, .config-grid > *, .member-list > *, .appointment-list > * { height: 100% }
+}
+/* La tarjeta de negocio de la administración reparte su alto: la acción queda abajo del todo y
+   todas las de la fila terminan a la misma altura. */
+.business-card { display: flex; flex-direction: column }
+.business-card > .actions, .business-card > .button-link { margin-top: auto }
+
+/* --- Tablas y listas -------------------------------------------------------------------------- */
+.data-table th {
+    position: sticky; top: 0; z-index: 1;
+    background: var(--superficie-2); color: var(--texto-suave);
+    font-size: var(--t-11); font-weight: var(--p-fuerte); letter-spacing: .06em; text-transform: uppercase;
+}
+.data-table tbody tr { transition: background var(--mov-rapido) ease }
+.data-table tbody tr:hover { background: var(--superficie-2) }
+
+/* --- Pestañas y navegación de configuración --------------------------------------------------- */
+.config-nav a, .operation-tabs button {
+    transition: background var(--mov-rapido) ease, color var(--mov-rapido) ease,
+        border-color var(--mov-rapido) ease;
+}
+.config-nav a[aria-current="page"], .config-nav a.activo {
+    background: var(--uc-green-solid); color: var(--texto-sobre-verde);
+}
+
+/* --- Esqueletos de carga -----------------------------------------------------------------------
+   El brillo se construye con los tokens de superficie, así que en oscuro deja de ser una franja
+   blanca cruzando la pantalla. */
+.skeleton {
+    background: linear-gradient(90deg, var(--superficie-2) 25%, var(--superficie-3) 50%, var(--superficie-2) 75%);
+    background-size: 200% 100%;
+}
+.skeleton-card { background: var(--superficie); border-color: var(--borde) }
+
+/* --- Motion de superficies ---------------------------------------------------------------------
+   Aparición corta y sin rebote para lo que se monta encima: hojas, menús desplegados y avisos.
+   Nada dura más de 220ms y nada se desplaza más de 8px. */
+.acciones-panel { animation: panel-entra var(--mov-normal) var(--curva) both }
+.notice, .error, .success { animation: aviso-entra var(--mov-normal) var(--curva) both }
+@keyframes panel-entra { from { opacity: 0; transform: translateY(-6px) } to { opacity: 1; transform: none } }
+@keyframes aviso-entra { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
+
+/* El cambio de tema no debe repintar la pantalla de golpe: sólo el color acompaña, y sólo en las
+   superficies grandes, para no arrastrar transiciones dentro de listas largas. */
+body, .site-header, .page-shell, footer, .nav-inferior {
+    transition: background-color var(--mov-panel) ease, color var(--mov-panel) ease,
+        border-color var(--mov-panel) ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .acciones-panel, .notice, .error, .success { animation: none }
+    body, .site-header, .page-shell, footer, .nav-inferior,
+    button, .button-link, input, select, textarea,
+    a.config-card, a.business-card, .data-table tbody tr, .tema-selector button { transition: none }
+    a.config-card:hover, a.business-card:hover, .primary:active { transform: none }
+}
+
+/* --- Identidad: las pantallas de cuenta comparten el sistema ---------------------------------- */
+.account-shell { display: grid; gap: var(--e4); max-width: 30rem; margin: var(--e6) auto }
+.account-shell h1 { margin: 0 }
+
+/* --- Imagen: nada se deforma ------------------------------------------------------------------ */
+img { max-width: 100%; height: auto }
+.card-cover, .profile-cover, .gallery-photo, .catalogo-foto { background: var(--superficie-2) }
+
+/* --- Marca del negocio en pantallas operativas -------------------------------------------------
+   Iniciales sobre un tinte estable. Los seis tintes salen de la paleta y de sus lavados, así que
+   la lista gana identidad sin traer un séptimo color al sistema. */
+.marca-negocio {
+    display: grid; place-items: center; flex: 0 0 auto;
+    width: 2.75rem; height: 2.75rem; border-radius: var(--radio);
+    font-family: var(--fuente-titular); font-size: var(--t-15); font-weight: var(--p-titular);
+    letter-spacing: -.02em;
+    background: var(--superficie-2); color: var(--texto-suave);
+}
+.marca-negocio[data-tinte="0"] { background: var(--uc-green-wash); color: var(--uc-green-ink) }
+.marca-negocio[data-tinte="1"] { background: var(--uc-amber-wash); color: var(--uc-amber-ink) }
+.marca-negocio[data-tinte="2"] { background: var(--uc-live-wash); color: var(--uc-live-ink) }
+.marca-negocio[data-tinte="3"] { background: var(--info-100); color: var(--info-700) }
+.marca-negocio[data-tinte="4"] { background: var(--superficie-3); color: var(--texto) }
+.marca-negocio[data-tinte="5"] { background: var(--uc-green-wash); color: var(--uc-green-ink) }
+
+/* Cabecera de tarjeta: quién es, qué es y en qué estado está, en una sola línea de lectura. */
+.card-encabezado {
+    display: grid; grid-template-columns: auto minmax(0, 1fr);
+    align-items: start; gap: .2rem .7rem; width: 100%; margin-bottom: .5rem;
+}
+.card-encabezado h2, .card-encabezado h3 { margin: 0; font-size: var(--t-17); line-height: 1.2 }
+.card-encabezado .meta { margin: .1rem 0 0 }
+/* El estado va debajo del nombre y no a su lado. En una rejilla de tres columnas la tarjeta mide
+   unos 300px, y ahí un distintivo en la misma fila parte el nombre en dos líneas: la anchura de la
+   tarjeta no la conoce ninguna consulta de medios, así que la solución no puede depender de una. */
+.card-encabezado .status { grid-column: 2; justify-self: start; margin-top: .35rem }
+
+/* --- Callejones sin salida de la cuenta -------------------------------------------------------- */
+.cuenta-aviso {
+    justify-items: start; padding: var(--e5);
+    background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio-lg);
+    box-shadow: var(--sombra-sm);
+}
+.cuenta-aviso-marca {
+    display: grid; place-items: center; width: 2.75rem; height: 2.75rem;
+    border-radius: 50%; background: var(--uc-amber-wash); color: var(--uc-amber-ink);
+}
+.cuenta-aviso h1 { font-size: var(--t-21) }
+.cuenta-aviso p { margin: 0; color: var(--texto-suave) }
+.cuenta-aviso .actions { margin-top: var(--e2) }
+
+/* --- Paso 1 del descubrimiento: menos vacío, misma decisión ------------------------------------
+   La pantalla pedía el municipio y después dejaba media pantalla de selva sin nada. La lista se
+   compacta, el destino sin negocios deja de competir con los que sí tienen, y el bloque respira
+   con la marca en vez de con aire muerto. */
+.guided-places { gap: .5rem }
+.guided-place {
+    transition: transform var(--mov-rapido) ease, border-color var(--mov-rapido) ease,
+        background var(--mov-rapido) ease;
+}
+.guided-place:hover { border-color: rgb(255 253 249 / 30%); background: rgb(255 253 249 / 8%) }
+.guided-place:active { transform: scale(.99) }
+/* Un municipio sin negocios no se pinta como un botón apagado: se pinta como una nota. */
+.guided-place[aria-disabled="true"], .guided-place.proximamente {
+    background: transparent; border-style: dashed;
+}
+
+/* --- Fotografía: nada se estira ---------------------------------------------------------------- */
+.card-cover, .profile-cover, .gallery-photo, .catalogo-foto, .feed-media img, .portal-business-media img {
+    object-fit: cover;
+}
+
+/* --- Foco visible sobre superficies oscuras ----------------------------------------------------
+   El anillo verde de marca se pierde sobre selva. En el armazón oscuro el foco se dibuja en papel,
+   que es lo único que contrasta con todo lo que puede haber detrás, incluida una fotografía. */
+body:has(.ahora-home) a:focus-visible,
+body:has(.ahora-home) button:focus-visible,
+.fila-tablero a:focus-visible, .fila-tablero button:focus-visible {
+    outline-color: var(--uc-paper);
+}
+
+/* --- Barra de desplazamiento coherente con el tema --------------------------------------------- */
+* { scrollbar-color: var(--borde-fuerte) transparent }
+
+/* --- Cintas que se desplazan: el corte deja de parecer un error ---------------------------------
+   Una fila con más contenido del que cabe termina en un degradado hacia el fondo, así que se lee
+   como "hay más a la derecha" y no como una tarjeta cortada. */
+.chip-row, .config-nav, .operation-tabs, .category-place-selector, .feed-filters {
+    -webkit-mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 2rem), transparent 100%);
+    mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 2rem), transparent 100%);
+}
+/* Sin desbordamiento no hay nada que insinuar, y el degradado sólo comería el último elemento. */
+@media (min-width: 901px) {
+    .config-nav, .operation-tabs { -webkit-mask-image: none; mask-image: none }
+}
+
+/* --- Grises del armazón oscuro -----------------------------------------------------------------
+   El descubrimiento y sus pies son selva también en tema claro, así que los grises del tema claro
+   —pensados para papel— se quedaban en 2.9:1 encima. Dentro de ese armazón el texto secundario usa
+   la escala del tema oscuro, que es la que corresponde al fondo que realmente tiene detrás. */
+body:has(.ahora-home) .pie-tema-etiqueta,
+body:has(.ahora-home) footer .meta {
+    color: rgb(255 253 249 / 72%);
+}
+/* Un destino sin negocios se anuncia, no se apaga hasta desaparecer. */
+.guided-place[aria-disabled="true"] small,
+.guided-place.proximamente small,
+.guided-place small.proximamente {
+    color: rgb(255 253 249 / 75%);
+}
+
+/* El distintivo de categoría se apoya siempre en papel porque va sobre fotografía, así que su
+   tinta no puede seguir al tema: en oscuro, la tinta del tema es verde claro y sobre ese papel
+   caía a 1.27:1. Aquí manda la superficie real, no el tema de la página. */
+.card-category-overlay { color: #0A6247 }
+
+/* --- Nota de estado dentro de una tarjeta ------------------------------------------------------
+   "Todavía le falta configuración" se pintaba como un aviso de página entera dentro de una tarjeta
+   de 300px: ocupaba más que el nombre del negocio. Dentro de una tarjeta un aviso es una nota. */
+.business-card > .notice, .business-card > .success, .business-card > .error {
+    padding: .5rem .7rem; font-size: var(--t-13); border-radius: var(--radio-sm);
 }

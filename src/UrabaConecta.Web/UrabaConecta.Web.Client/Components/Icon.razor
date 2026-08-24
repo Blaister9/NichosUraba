@@ -26,6 +26,10 @@
     private static string Path(string name) => name switch
     {
         "inicio" => "<path d='M3 10.5 12 3l9 7.5'/><path d='M5.5 9.5V20h13V9.5'/><path d='M9.5 20v-6h5v6'/>",
+        // Tema de la interfaz: los tres estados del selector.
+        "sol" => "<circle cx='12' cy='12' r='4'/><path d='M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4'/>",
+        "luna" => "<path d='M20 13.6A8.2 8.2 0 0 1 10.4 4a8.2 8.2 0 1 0 9.6 9.6z'/>",
+        "dispositivo" => "<rect x='2.5' y='4.5' width='19' height='12' rx='2.5'/><path d='M8.5 20.5h7'/>",
         "explorar" => "<circle cx='11' cy='11' r='7'/><path d='m20 20-3.5-3.5'/>",
         "categorias" => "<rect x='3' y='3' width='7.5' height='7.5' rx='2'/><rect x='13.5' y='3' width='7.5' height='7.5' rx='2'/><rect x='3' y='13.5' width='7.5' height='7.5' rx='2'/><rect x='13.5' y='13.5' width='7.5' height='7.5' rx='2'/>",
         "actividad" => "<path d='M8 3v3M16 3v3'/><rect x='3.5' y='5.5' width='17' height='15' rx='2.5'/><path d='M3.5 10.5h17'/><path d='m9 15 2 2 4-4'/>",

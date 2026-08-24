@@ -49,10 +49,15 @@ else
                     {
                         <article class="business-card" data-testid="negocio-administrado"
                                  data-slug="@business.Slug">
-                            <span class="status @BusinessStatusText.CssModifier(business.Status)"
-                                  data-testid="negocio-estado">@BusinessStatusText.Label(business.Status)</span>
-                            <h3>@business.Name</h3>
-                            <p class="meta">@BusinessStatusText.Description(business.Status)</p>
+                            <div class="card-encabezado">
+                                <BusinessMark Name="@business.Name" />
+                                <div>
+                                    <h3>@business.Name</h3>
+                                    <p class="meta">@BusinessStatusText.Description(business.Status)</p>
+                                </div>
+                                <span class="status @BusinessStatusText.CssModifier(business.Status)"
+                                      data-testid="negocio-estado">@BusinessStatusText.Label(business.Status)</span>
+                            </div>
 
                             @* El porcentaje y la lista de faltantes los calcula el servidor con las
                                mismas reglas que deciden si se puede publicar. Aquí sólo se muestran. *@

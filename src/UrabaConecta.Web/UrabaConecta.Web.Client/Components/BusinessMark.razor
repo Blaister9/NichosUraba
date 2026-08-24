@@ -1,0 +1,51 @@
+@* Marca de un negocio en las pantallas operativas.
+
+   El panel y la administración listan negocios sin ninguna imagen: son tarjetas de texto sobre
+   texto, y por eso se leían como un prototipo. Aquí no se puede tirar de la portada —la lista
+   operativa no la trae, y pedirla añadiría una lectura por negocio a una pantalla que ya se midió—
+   así que la identidad se construye con lo que sí hay: las iniciales del nombre.
+
+   No es un avatar genérico. Cada negocio recibe siempre el mismo tono, derivado de su propio
+   nombre, así que la lista se vuelve reconocible de un vistazo y "Barbería El Corte" tiene el mismo
+   color en el panel, en la administración y mañana. *@
+<span class="marca-negocio" data-tinte="@Tinte" aria-hidden="true">@Iniciales</span>
+
+@code {
+    [Parameter, EditorRequired] public string Name { get; set; } = "";
+
+    /// <summary>
+    /// Dos iniciales como mucho, saltándose las palabras que no identifican: "Salón Bella Urabá"
+    /// da "BU" y no "SB", que es lo que alguien diría para referirse al negocio.
+    /// </summary>
+    private string Iniciales
+    {
+        get
+        {
+            var vacias = new[] { "de", "del", "la", "el", "los", "las", "y", "salon", "salón",
+                "barberia", "barbería", "restaurante", "tienda", "centro" };
+            var palabras = Name.Split([' ', '·', '-'], StringSplitOptions.RemoveEmptyEntries)
+                .Where(x => char.IsLetter(x[0]))
+                .ToArray();
+            var utiles = palabras.Where(x => !vacias.Contains(x.ToLowerInvariant())).ToArray();
+            if (utiles.Length == 0) utiles = palabras;
+            if (utiles.Length == 0) return "?";
+            return utiles.Length == 1
+                ? utiles[0][..Math.Min(2, utiles[0].Length)].ToUpperInvariant()
+                : string.Concat(char.ToUpperInvariant(utiles[0][0]), char.ToUpperInvariant(utiles[1][0]));
+        }
+    }
+
+    /// <summary>
+    /// Uno de seis tintes, elegido por el nombre. Determinista a propósito: si el tono cambiara
+    /// entre pantallas dejaría de servir para reconocer, que es lo único que hace.
+    /// </summary>
+    private int Tinte
+    {
+        get
+        {
+            var suma = 0;
+            foreach (var letra in Name) suma = (suma + letra) % 997;
+            return suma % 6;
+        }
+    }
+}
