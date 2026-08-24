@@ -1179,7 +1179,9 @@ a.card-media { display: block; color: inherit }
 }
 .fila-estado::before { content: ""; width: .5rem; height: .5rem; border-radius: 50%; background: currentColor }
 /* Fila abierta con gente moviéndose: esto sí está ocurriendo ahora, así que es coral. */
-.fila-estado[data-estado="open"] { background: rgb(255 91 71 / 20%); color: var(--uc-live) }
+/* El coral puro sobre este chip daba 3.78:1 a 13px. El fondo del chip es coral translúcido, así
+   que el texto y su fondo se acercan: lo que separa es aclarar la tinta, no subir el relleno. */
+.fila-estado[data-estado="open"] { background: rgb(255 91 71 / 18%); color: #FF9182 }
 .fila-estado[data-estado="open"]::before { animation: latido 2s ease-in-out infinite }
 /* Pausada no está ocurriendo: es un estado operativo, y va en ámbar. */
 .fila-estado[data-estado="paused"] { background: rgb(255 203 87 / 18%); color: var(--uc-amber) }

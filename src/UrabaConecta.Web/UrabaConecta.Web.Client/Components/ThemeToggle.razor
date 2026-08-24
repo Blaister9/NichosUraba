@@ -1,4 +1,3 @@
-@implements IAsyncDisposable
 @inject IJSRuntime JS
 
 @* Selector de tema: sistema, claro, oscuro.
@@ -32,7 +31,6 @@
         new("dark", "Oscuro", "luna", "Siempre oscuro"),
     ];
 
-    private IJSObjectReference? modulo;
     private string preferencia = "system";
     private bool listo;
 
@@ -60,11 +58,5 @@
         preferencia = clave;
         try { preferencia = await JS.InvokeAsync<string>("urabaTema.fijar", clave); }
         catch (JSException) { preferencia = anterior; }
-    }
-
-    public ValueTask DisposeAsync()
-    {
-        modulo = null;
-        return ValueTask.CompletedTask;
     }
 }
