@@ -29,7 +29,11 @@ builder.Logging.AddFilter("Microsoft.AspNetCore.SignalR", LogLevel.Warning);
 // Fuera de Development el registro sale en JSON con sus ámbitos: es lo que hace consultable la
 // correlación desde el visor de Railway. La consola legible se conserva en local.
 if (!builder.Environment.IsDevelopment())
+{
     builder.Logging.AddJsonConsole(options => options.IncludeScopes = true);
+    builder.Services.Configure<Microsoft.Extensions.Logging.Console.ConsoleLoggerOptions>(options =>
+        options.LogToStandardErrorThreshold = LogLevel.Error);
+}
 var deployment = new DeploymentIdentity(builder.Environment.EnvironmentName,
     typeof(Program).Assembly.GetName().Version?.ToString() ?? "desconocida",
     builder.Configuration["Deployment:Commit"] ?? "desconocido");
@@ -156,6 +160,7 @@ builder.Services.AddScoped<IOwnerDashboardStore, OwnerDashboardStore>();
 builder.Services.AddScoped<IBusinessTimeZoneResolver, BusinessTimeZoneResolver>();
 builder.Services.AddSingleton<IOwnerDashboardDiagnostics, OwnerDashboardDiagnostics>();
 builder.Services.AddScoped<IIdentityAccountManager, IdentityAccountManager>();
+builder.Services.AddScoped<IBusinessCapabilityProvisioner, BusinessCapabilityProvisioner>();
 builder.Services.AddScoped<IPublicCodeService, PublicCodeService>();
 builder.Services.AddScoped<UrabaConecta.Application.IPersonalDataProtector, PersonalDataProtector>();
 builder.Services.AddSingleton(TimeProvider.System);
@@ -202,6 +207,7 @@ builder.Services.AddResponseCompression(options =>
 builder.Services.Configure<BrotliCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
 builder.Services.Configure<GzipCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
+builder.Services.AddExceptionHandler<OperationalExceptionHandler>();
 builder.Services.AddProblemDetails();
 builder.Services.AddSingleton<DatabaseMigrationState>();
 builder.Services.AddHealthChecks()

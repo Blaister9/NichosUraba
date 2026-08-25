@@ -1,12 +1,16 @@
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Hosting;
+using Microsoft.EntityFrameworkCore;
 using UrabaConecta.Application;
 using UrabaConecta.Contracts;
+using UrabaConecta.Domain;
+using UrabaConecta.Infrastructure.Persistence;
 
 namespace UrabaConecta.Infrastructure.Identity;
 
-public sealed class IdentityAccountManager(UserManager<ApplicationUser> users, IHostEnvironment environment)
+public sealed class IdentityAccountManager(UserManager<ApplicationUser> users, IHostEnvironment environment,
+    AppDbContext db)
     : IIdentityAccountManager
 {
     public bool DevelopmentAccountCreationEnabled => environment.IsDevelopment() || environment.IsEnvironment("Demo");
@@ -63,6 +67,26 @@ public sealed class IdentityAccountManager(UserManager<ApplicationUser> users, I
             throw new ApiException("ACCOUNT_CREATION_FAILED",
                 string.Join(" ", role.Errors.Select(x => x.Description)), 400);
         return new(ToAccount(user), password);
+    }
+
+    public async Task SynchronizeMembershipRolesAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var user = await users.FindByIdAsync(userId.ToString())
+            ?? throw new ApiException("ACCOUNT_NOT_FOUND", "No encontramos la cuenta.", 404);
+        var activeRoles = await db.BusinessMemberships.AsNoTracking().Where(x => x.UserId == userId && x.IsActive)
+            .Select(x => x.Role).Distinct().ToListAsync(cancellationToken);
+        await SetDerivedRole(user, "BusinessOwner", activeRoles.Contains(MembershipRole.Owner));
+        await SetDerivedRole(user, "BusinessWorker", activeRoles.Contains(MembershipRole.Worker));
+    }
+
+    private async Task SetDerivedRole(ApplicationUser user, string role, bool shouldHave)
+    {
+        var hasRole = await users.IsInRoleAsync(user, role);
+        if (hasRole == shouldHave) return;
+        var result = shouldHave ? await users.AddToRoleAsync(user, role) : await users.RemoveFromRoleAsync(user, role);
+        if (!result.Succeeded)
+            throw new ApiException("ROLE_SYNC_FAILED",
+                string.Join(" ", result.Errors.Select(x => x.Description)), 409);
     }
 
     private static IdentityAccount ToAccount(ApplicationUser user)

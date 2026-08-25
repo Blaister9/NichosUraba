@@ -43,6 +43,7 @@ public sealed partial class UrabaUseCases
         membershipStore.AddMembership(member);
         AddAudit(member, actor.UserId, MembershipAuditAction.MemberLinked, "{}", Snapshot(member), now);
         await membershipStore.SaveMembershipChangesAsync(cancellationToken);
+        await identityAccounts.SynchronizeMembershipRolesAsync(member.UserId, cancellationToken);
         await tx.CommitAsync(cancellationToken);
         return await RequireDto(businessId, member.Id, cancellationToken);
     }
@@ -71,6 +72,7 @@ public sealed partial class UrabaUseCases
         membershipStore.AddMembership(member);
         AddAudit(member, actor.UserId, MembershipAuditAction.MemberLinked, "{}", Snapshot(member), now);
         await membershipStore.SaveMembershipChangesAsync(cancellationToken);
+        await identityAccounts.SynchronizeMembershipRolesAsync(member.UserId, cancellationToken);
         await tx.CommitAsync(cancellationToken);
         return new(await RequireDto(businessId, member.Id, cancellationToken), created.TemporaryPassword);
     }
@@ -155,6 +157,7 @@ public sealed partial class UrabaUseCases
         TryMembershipDomain(() => change(actor, target, now, memberships));
         AddAudit(target, actor.UserId, action, previous, Snapshot(target), now);
         await membershipStore.SaveMembershipChangesAsync(cancellationToken);
+        await identityAccounts.SynchronizeMembershipRolesAsync(target.UserId, cancellationToken);
         await tx.CommitAsync(cancellationToken);
         return await RequireDto(businessId, target.Id, cancellationToken);
     }

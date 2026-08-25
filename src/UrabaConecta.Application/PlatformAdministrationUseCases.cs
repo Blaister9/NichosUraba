@@ -10,6 +10,7 @@ public sealed class PlatformAdministrationUseCases(
     IUrabaStore directory,
     IObjectStorage storage,
     IPublicDirectoryCache publicCache,
+    IBusinessCapabilityProvisioner capabilityProvisioner,
     TimeProvider timeProvider) : IPlatformAdministrationUseCases
 {
     public async Task<PlatformBusinessListDto> ListAsync(PlatformActor actor, string? search, string? municipality,
@@ -44,9 +45,12 @@ public sealed class PlatformAdministrationUseCases(
             throw new ApiException("INVALID_CATALOG", "Seleccione municipio y categoría válidos.");
 
         var now = timeProvider.GetUtcNow();
+        var locationMode = ParseLocationMode(request.LocationMode);
+        var fulfillmentMode = ParseFulfillmentMode(request.OrderFulfillmentMode);
         var business = TryDomain(() => Business.CreateDraft(Guid.NewGuid(), slug, request.Name,
             request.MunicipalityId, request.CategoryId, request.ShortDescription, request.Description,
-            request.Address, request.PublicPhone, request.WhatsAppUrl, request.LocationUrl, now));
+            request.Address, request.PublicPhone, request.WhatsAppUrl, request.LocationUrl, now,
+            locationMode, fulfillmentMode));
         business.AssignCreator(actor.UserId);
         store.AddBusiness(business);
         foreach (var module in modules) store.AddModule(new BusinessModule(business.Id, module, true, now));
@@ -85,6 +89,8 @@ public sealed class PlatformAdministrationUseCases(
         store.AddStatusChange(new BusinessStatusChange(Guid.NewGuid(), business.Id, BusinessStatus.Draft,
             business.Status, actor.UserId, "Alta del negocio.", now));
         await store.SaveChangesAsync(cancellationToken);
+        if (owner is not null)
+            await identity.SynchronizeMembershipRolesAsync(owner.UserId, cancellationToken);
         await tx.CommitAsync(cancellationToken);
         publicCache.Invalidate();
         return new(ToDto((await store.GetAsync(business.Id, cancellationToken))!), temporaryPassword);
@@ -108,7 +114,9 @@ public sealed class PlatformAdministrationUseCases(
             PublicEmail = current.Business.PublicEmail,
             InstagramUrl = current.Business.InstagramUrl,
             FacebookUrl = current.Business.FacebookUrl,
-            CustomerInstructions = current.Business.CustomerInstructions
+            CustomerInstructions = current.Business.CustomerInstructions,
+            LocationMode = request.LocationMode,
+            OrderFulfillmentMode = request.OrderFulfillmentMode
         }, cancellationToken);
     }
 
@@ -138,7 +146,8 @@ public sealed class PlatformAdministrationUseCases(
             PublicPhone = request.PublicPhone, WhatsAppUrl = request.WhatsAppUrl,
             PublicEmail = request.PublicEmail, InstagramUrl = request.InstagramUrl,
             FacebookUrl = request.FacebookUrl, LocationUrl = request.LocationUrl,
-            CustomerInstructions = request.CustomerInstructions, Version = request.Version
+            CustomerInstructions = request.CustomerInstructions, Version = request.Version,
+            LocationMode = request.LocationMode, OrderFulfillmentMode = request.OrderFulfillmentMode
         }, cancellationToken);
     }
 
@@ -164,7 +173,8 @@ public sealed class PlatformAdministrationUseCases(
                 request.MunicipalityId, request.CategoryId, request.ShortDescription, request.Description,
                 request.Address, request.ReferencePoint, request.PublicPhone, request.WhatsAppUrl,
                 request.PublicEmail, request.InstagramUrl, request.FacebookUrl, request.LocationUrl,
-                request.CustomerInstructions), now, request.Version);
+                request.CustomerInstructions, ParseLocationMode(request.LocationMode),
+                ParseFulfillmentMode(request.OrderFulfillmentMode)), now, request.Version);
             return true;
         });
         Audit(businessId, actor, PlatformAuditAction.BusinessUpdated, before, Snapshot(business), now);
@@ -290,6 +300,8 @@ public sealed class PlatformAdministrationUseCases(
         await RequireScopedAsync(actor, businessId, cancellationToken);
         var selected = Selected(request);
         if (selected.Count == 0) throw new ApiException("MODULE_REQUIRED", "Seleccione al menos una función.");
+        TryDomain(() => { BusinessCapabilities.EnsureConsistent(selected, request.Services, request.Products,
+            request.Staff); return true; });
         await using var tx = await store.BeginTransactionAsync(cancellationToken);
         var business = await store.LockBusinessAsync(businessId, cancellationToken)
             ?? throw new ApiException("BUSINESS_NOT_FOUND", "No encontramos el negocio.", 404);
@@ -298,6 +310,8 @@ public sealed class PlatformAdministrationUseCases(
         var record = await store.GetAsync(businessId, cancellationToken)
             ?? throw new ApiException("BUSINESS_NOT_FOUND", "No encontramos el negocio.", 404);
         var now = timeProvider.GetUtcNow();
+        var previouslyEnabled = record.Modules.Where(x => x.IsEnabled &&
+            BusinessCapabilities.Operations.Contains(x.Module)).Select(x => x.Module).ToHashSet();
         // Las operaciones se guardan tal cual llegan. Las capacidades derivadas —servicios,
         // productos, personal— se guardan resueltas: lo que el formulario mandó si dijo algo, y la
         // derivación de la operación si vino en blanco. Así la fila siempre refleja la decisión
@@ -305,15 +319,7 @@ public sealed class PlatformAdministrationUseCases(
         foreach (var kind in BusinessCapabilities.Operations)
             Apply(kind, selected.Contains(kind));
         foreach (var derived in BusinessCapabilities.Derived)
-        {
-            var stated = derived switch
-            {
-                BusinessModuleKind.Services => request.Services,
-                BusinessModuleKind.Products => request.Products,
-                _ => request.Staff
-            };
-            Apply(derived, stated ?? BusinessCapabilities.DerivedDefault(derived, selected));
-        }
+            Apply(derived, BusinessCapabilities.DerivedDefault(derived, selected));
 
         void Apply(BusinessModuleKind kind, bool enabled)
         {
@@ -321,11 +327,9 @@ public sealed class PlatformAdministrationUseCases(
             if (module is null) store.AddModule(new BusinessModule(businessId, kind, enabled, now));
             else module.SetEnabled(enabled, now, module.Version);
         }
-        TryDomain(() =>
-        {
-            business.ConfigurationChanged(now, business.Version);
-            return true;
-        });
+        await capabilityProvisioner.ProvisionAsync(businessId,
+            selected.Where(x => !previouslyEnabled.Contains(x)).ToList(), business.OrderFulfillmentMode,
+            now, cancellationToken);
         Audit(businessId, actor, PlatformAuditAction.ModulesChanged, "{}",
             JsonSerializer.Serialize(selected.Select(x => x.ToString())), now);
         await store.SaveChangesAsync(cancellationToken); await tx.CommitAsync(cancellationToken);
@@ -519,7 +523,8 @@ public sealed class PlatformAdministrationUseCases(
         if (modules.Contains(BusinessModuleKind.PickupOrders))
         {
             store.AddPickupSettings(new PickupOrderSettings(Guid.NewGuid(), businessId, true,
-                "Haz tu pedido y recógelo en el establecimiento.", request.PickupPreparationMinutes,
+                BusinessCapabilityProvisioner.FulfillmentMessage(ParseFulfillmentMode(request.OrderFulfillmentMode)),
+                request.PickupPreparationMinutes,
                 request.PickupSlotMinutes, request.PickupCapacity, new TimeOnly(8, 0), new TimeOnly(18, 0)));
             if (!string.IsNullOrWhiteSpace(request.InitialProductCategory) &&
                 !string.IsNullOrWhiteSpace(request.InitialProductName))
@@ -534,6 +539,7 @@ public sealed class PlatformAdministrationUseCases(
 
     private static BusinessReadiness Readiness(PlatformBusinessRecord r)
     {
+        if (r.OperationalFacts is not null) return BusinessOperationalReadiness.Evaluate(r.OperationalFacts);
         var b = r.Business;
         var signals = new BusinessCompletionSignals(
             HasContact: !string.IsNullOrWhiteSpace(b.PublicPhone) || !string.IsNullOrWhiteSpace(b.WhatsAppUrl)
@@ -553,8 +559,9 @@ public sealed class PlatformAdministrationUseCases(
     {
         var readiness = Readiness(r);
         var b = r.Business;
+        var capabilities = r.OperationalFacts?.Capabilities ?? BusinessCapabilities.Resolve(r.Modules);
         return new(b.Id, b.Name, b.Slug, r.Municipality, r.Category, b.Status.ToString(), b.IsPublished,
-            r.Modules.Where(x => x.IsEnabled).Select(x => x.Module.ToString()).ToList(),
+            capabilities.Select(x => x.ToString()).ToList(),
             r.Owner?.DisplayName, r.Owner?.Email,
             readiness.Requirements
                 .Select(x => new ReadinessItemDto(x.Key, x.Label, x.IsApplicable, x.IsComplete, x.MissingHint))
@@ -565,7 +572,8 @@ public sealed class PlatformAdministrationUseCases(
             b.CustomerInstructions, readiness.CompletionPercentage, readiness.MissingLabels, b.ReviewNotes,
             r.LiveImages.OrderBy(x => x.Kind).ThenBy(x => x.DisplayOrder)
                 .Select(x => new BusinessImageDto(x.Id, x.Kind.ToString(), storage.PublicUrl(x.StorageKey),
-                    x.AltText, x.Width, x.Height, x.DisplayOrder, x.Version)).ToList());
+                    x.AltText, x.Width, x.Height, x.DisplayOrder, x.Version)).ToList(),
+            b.LocationMode.ToString(), b.OrderFulfillmentMode.ToString());
     }
 
     private static List<BusinessModuleKind> Selected(CreatePlatformBusinessRequest r)
@@ -613,6 +621,12 @@ public sealed class PlatformAdministrationUseCases(
         if (actual != expected) throw new ApiException("CONCURRENCY_CONFLICT", message, 409);
     }
     private static object Snapshot(Business b) => new { b.Status, b.IsPublished, b.Version };
+    private static BusinessLocationMode ParseLocationMode(string value)
+        => Enum.TryParse<BusinessLocationMode>(value, true, out var mode) ? mode
+            : throw new ApiException("INVALID_LOCATION_MODE", "La modalidad de ubicación no es válida.");
+    private static OrderFulfillmentMode ParseFulfillmentMode(string value)
+        => Enum.TryParse<OrderFulfillmentMode>(value, true, out var mode) ? mode
+            : throw new ApiException("INVALID_FULFILLMENT_MODE", "La modalidad de entrega no es válida.");
     private static T TryDomain<T>(Func<T> action)
     {
         try { return action(); } catch (DomainException ex) { throw new ApiException(ex.Code, ex.Message, 400); }

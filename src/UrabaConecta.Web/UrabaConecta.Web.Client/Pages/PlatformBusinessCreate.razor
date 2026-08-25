@@ -93,9 +93,23 @@ else
                 <InputTextArea @bind-Value="request.Description" data-testid="campo-descripcion" />
                 <span class="field-hint">Qué hace el negocio y qué lo distingue. Puedes completarla después.</span>
             </label>
+            <label>Tipo de ubicación
+                <InputSelect @bind-Value="request.LocationMode" data-testid="campo-tipo-ubicacion">
+                    <option value="PublicPhysical">Física pública</option>
+                    <option value="PrivatePhysical">Física privada u oculta</option>
+                    <option value="Virtual">Virtual</option>
+                </InputSelect>
+            </label>
+            <label>Modalidad de pedidos
+                <InputSelect @bind-Value="request.OrderFulfillmentMode" data-testid="campo-entrega">
+                    <option value="PickupAtPublicLocation">Recogida en ubicación pública</option>
+                    <option value="Coordinated">Entrega o recogida coordinada</option>
+                    <option value="ExternalDelivery">Entrega externa</option>
+                </InputSelect>
+            </label>
             <label>Dirección
                 <InputText @bind-Value="request.Address" data-testid="campo-direccion" />
-                <span class="field-hint">Dónde queda. Hace falta antes de publicar.</span>
+                <span class="field-hint">Sólo hace falta para una ubicación física pública.</span>
             </label>
             <label>Teléfono público
                 <InputText @bind-Value="request.PublicPhone" data-testid="campo-telefono" />

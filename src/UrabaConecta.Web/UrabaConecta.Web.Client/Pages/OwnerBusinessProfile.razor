@@ -63,9 +63,25 @@ else
                 <ValidationMessage For="() => form.Description" />
             </label>
 
+            <label>Tipo de ubicación
+                <InputSelect @bind-Value="form.LocationMode" data-testid="location-mode">
+                    <option value="PublicPhysical">Ubicación física pública</option>
+                    <option value="PrivatePhysical">Ubicación física privada u oculta</option>
+                    <option value="Virtual">Negocio virtual</option>
+                </InputSelect>
+            </label>
+
+            <label>Modalidad de pedidos
+                <InputSelect @bind-Value="form.OrderFulfillmentMode" data-testid="fulfillment-mode">
+                    <option value="PickupAtPublicLocation">Recogida en ubicación pública</option>
+                    <option value="Coordinated">Entrega o recogida coordinada</option>
+                    <option value="ExternalDelivery">Entrega mediante servicio externo</option>
+                </InputSelect>
+            </label>
+
             <label>Dirección
                 <InputText @bind-Value="form.Address" data-testid="address" />
-                <span class="field-hint">Dónde te encuentran. Hace falta antes de publicar.</span>
+                <span class="field-hint">Sólo es obligatoria y pública para una ubicación física pública.</span>
                 <ValidationMessage For="() => form.Address" />
             </label>
 
@@ -179,7 +195,8 @@ else
         ShortDescription = b.ShortDescription, Description = b.Description, Address = b.Address,
         ReferencePoint = b.ReferencePoint, PublicPhone = b.PublicPhone, PublicEmail = b.PublicEmail,
         WhatsAppUrl = b.WhatsAppUrl, InstagramUrl = b.InstagramUrl, FacebookUrl = b.FacebookUrl,
-        LocationUrl = b.LocationUrl, CustomerInstructions = b.CustomerInstructions, Version = b.Version
+        LocationUrl = b.LocationUrl, CustomerInstructions = b.CustomerInstructions, Version = b.Version,
+        LocationMode = b.LocationMode, OrderFulfillmentMode = b.OrderFulfillmentMode
     };
 
     private static string Friendly(ApiException ex) => ex.StatusCode switch

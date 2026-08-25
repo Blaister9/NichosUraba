@@ -8,6 +8,7 @@ public sealed class AccessInvitationUseCases(
     IInvitationIdentityGateway identity,
     IInvitationTokenService tokens,
     IPlatformAdministrationStore businesses,
+    IIdentityAccountManager membershipRoles,
     TimeProvider timeProvider) : IAccessInvitationUseCases
 {
     public const string PartnerOperatorRole = "PartnerOperator";
@@ -125,15 +126,23 @@ public sealed class AccessInvitationUseCases(
         if (invitation.Purpose == AccessInvitationPurpose.Invitation)
         {
             await identity.EnsureRoleAsync(account.UserId, RoleFor(invitation.Grant), cancellationToken);
-            if (invitation.BusinessId is { } businessId &&
-                await store.GetMembershipByUserAsync(businessId, account.UserId, cancellationToken) is null)
+            if (invitation.BusinessId is { } businessId)
             {
                 var isOwner = invitation.Grant == AccessGrantKind.BusinessOwner;
-                store.AddMembership(new BusinessMembership(Guid.NewGuid(), businessId, account.UserId,
-                    isOwner ? MembershipRole.Owner : MembershipRole.Worker,
-                    canManageConfiguration: isOwner, canManageAppointments: true,
-                    canManageMembers: isOwner, createdAtUtc: now,
-                    canManageQueues: isOwner, canManageOrders: isOwner));
+                var membership = await store.GetMembershipByUserAsync(businessId, account.UserId,
+                    cancellationToken);
+                if (membership is null)
+                    store.AddMembership(new BusinessMembership(Guid.NewGuid(), businessId, account.UserId,
+                        isOwner ? MembershipRole.Owner : MembershipRole.Worker,
+                        canManageConfiguration: isOwner, canManageAppointments: true,
+                        canManageMembers: isOwner, createdAtUtc: now,
+                        canManageQueues: isOwner, canManageOrders: isOwner));
+                else
+                {
+                    if (!membership.IsActive) membership.Activate(now, membership.Version);
+                    if (isOwner && membership.Role != MembershipRole.Owner)
+                        membership.GrantOwnership(now, membership.Version);
+                }
             }
         }
 
@@ -147,6 +156,8 @@ public sealed class AccessInvitationUseCases(
             nameof(AccessInvitation), invitation.Id.ToString(), invitation.BusinessId,
             $"Acceso activado para {invitation.Email} ({invitation.Grant}).", ipAddress, now));
         await store.SaveChangesAsync(cancellationToken);
+        if (invitation.Purpose == AccessInvitationPurpose.Invitation && invitation.BusinessId is not null)
+            await membershipRoles.SynchronizeMembershipRolesAsync(account.UserId, cancellationToken);
         await tx.CommitAsync(cancellationToken);
     }
 

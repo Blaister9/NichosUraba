@@ -101,6 +101,8 @@ public sealed class SaveOwnerProfileRequest
     [Url, StringLength(500)] public string? FacebookUrl { get; set; }
     [Url, StringLength(500)] public string? LocationUrl { get; set; }
     [StringLength(600)] public string? CustomerInstructions { get; set; }
+    public string LocationMode { get; set; } = "PublicPhysical";
+    public string OrderFulfillmentMode { get; set; } = "PickupAtPublicLocation";
     public long Version { get; set; }
 }
 
@@ -121,6 +123,8 @@ public sealed class SaveBusinessProfileRequest
     [Url, StringLength(500)] public string? FacebookUrl { get; set; }
     [Url, StringLength(500)] public string? LocationUrl { get; set; }
     [StringLength(600)] public string? CustomerInstructions { get; set; }
+    public string LocationMode { get; set; } = "PublicPhysical";
+    public string OrderFulfillmentMode { get; set; } = "PickupAtPublicLocation";
     public long Version { get; set; }
 }
 

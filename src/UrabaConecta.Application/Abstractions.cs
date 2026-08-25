@@ -170,12 +170,14 @@ public interface IIdentityAccountManager
         CancellationToken cancellationToken);
     Task<CreatedIdentityAccount> CreatePilotAsync(string displayName, string email,
         CancellationToken cancellationToken);
+    /// <summary>Hace que los roles globales derivados reflejen todas las membresías activas del usuario.</summary>
+    Task SynchronizeMembershipRolesAsync(Guid userId, CancellationToken cancellationToken);
 }
 
 public sealed record PlatformBusinessRecord(Business Business, string Municipality, string Category,
     IReadOnlyList<BusinessModule> Modules, IdentityAccount? Owner, bool HasHours, bool HasService,
     bool HasQueueDefinition, bool HasPickupSettings, bool HasProductCategory, bool HasProduct, int OperationCount,
-    IReadOnlyList<BusinessImage>? Images = null)
+    IReadOnlyList<BusinessImage>? Images = null, BusinessOperationalFacts? OperationalFacts = null)
 {
     public IReadOnlyList<BusinessImage> LiveImages => (Images ?? []).Where(x => !x.IsDeleted).ToList();
     public bool HasLogo => LiveImages.Any(x => x.Kind == BusinessImageKind.Logo);
@@ -201,6 +203,8 @@ public interface IPlatformAdministrationStore
     Task<IReadOnlyList<PlatformOptionDto>> ListCategoriesAsync(CancellationToken cancellationToken);
     Task<BusinessMembership?> GetOwnerAsync(Guid businessId, CancellationToken cancellationToken);
     Task<BusinessMembership?> GetMembershipByUserAsync(Guid businessId, Guid userId, CancellationToken cancellationToken);
+    Task<QueueDefinition?> GetQueueDefinitionAsync(Guid businessId, CancellationToken cancellationToken);
+    Task<PickupOrderSettings?> GetPickupSettingsAsync(Guid businessId, CancellationToken cancellationToken);
     void AddBusiness(Business business);
     void AddModule(BusinessModule module);
     void AddMembership(BusinessMembership membership);
@@ -215,6 +219,12 @@ public interface IPlatformAdministrationStore
     void AddAudit(PlatformAuditEntry audit);
     void RemoveBusiness(Business business);
     Task SaveChangesAsync(CancellationToken cancellationToken);
+}
+
+public interface IBusinessCapabilityProvisioner
+{
+    Task ProvisionAsync(Guid businessId, IReadOnlyCollection<BusinessModuleKind> newlyEnabledOperations,
+        OrderFulfillmentMode fulfillmentMode, DateTimeOffset now, CancellationToken cancellationToken);
 }
 
 public interface IPlatformAdministrationUseCases

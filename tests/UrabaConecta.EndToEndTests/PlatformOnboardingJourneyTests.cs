@@ -68,6 +68,33 @@ public sealed class PlatformOnboardingJourneyTests(BrowserFixture fixture) : ICl
         await admin.GotoAsync($"{fixture.BaseUrl}/negocios/{created.Business.Slug}/pedidos");
         await Expect(admin.GetByText("Bowl piloto", new() { Exact = true })).ToBeVisibleAsync();
         Assert.False(await admin.EvaluateAsync<bool>("document.documentElement.scrollWidth > window.innerWidth"));
+
+        var menuResponse = await Fetch(admin, "GET", $"/api/v1/public/businesses/{created.Business.Slug}/menu");
+        Assert.Equal(200, menuResponse.Status);
+        var menu = JsonSerializer.Deserialize<PickupMenuDto>(menuResponse.Body, Json)!;
+        var slotsResponse = await Fetch(admin, "GET", $"/api/v1/public/businesses/{created.Business.Slug}/pickup-slots");
+        Assert.Equal(200, slotsResponse.Status);
+        var slots = JsonSerializer.Deserialize<PickupSlotListDto>(slotsResponse.Body, Json)!;
+        Assert.NotEmpty(slots.Slots);
+        var orderResponse = await Fetch(admin, "POST", $"/api/v1/public/businesses/{created.Business.Slug}/orders",
+            new
+            {
+                PickupStart = slots.Slots[0].Start.ToOffset(TimeSpan.FromHours(-5)).ToString("O"),
+                CustomerAlias = "Cliente E2E",
+                Phone = "3000000000",
+                ConsentAccepted = true,
+                ConsentNoticeVersion = ConsentPolicyProvider.FallbackVersion,
+                Lines = new[] { new { ProductId = menu.Products.Single().Id, Quantity = 1 } }
+            });
+        Assert.True(orderResponse.Status == 201,
+            $"Crear el pedido devolvió {orderResponse.Status}: {orderResponse.Body}{Environment.NewLine}{fixture.RecentLog}");
+        var order = JsonSerializer.Deserialize<PickupOrderCreatedDto>(orderResponse.Body, Json)!;
+        var trackingResponse = await Fetch(admin, "GET", $"/api/v1/public/orders/{order.TrackingCode}");
+        Assert.Equal(200, trackingResponse.Status);
+        var tracking = JsonSerializer.Deserialize<PickupOrderTrackingDto>(trackingResponse.Body, Json)!;
+        var cancelResponse = await Fetch(admin, "POST", $"/api/v1/public/orders/{order.TrackingCode}/cancel",
+            new PickupOrderCommandRequest { Version = tracking.Version, Reason = "Cancelado por prueba E2E" });
+        Assert.Equal(204, cancelResponse.Status);
     }
 
     [Fact]
@@ -87,6 +114,11 @@ public sealed class PlatformOnboardingJourneyTests(BrowserFixture fixture) : ICl
         var serviceResponse = await Fetch(owner, "POST", $"/api/v1/businesses/{created.Business.Id}/services",
             new CreateServiceRequest { Name = "Servicio completado", DurationMinutes = 30, ReferencePrice = 0 });
         Assert.Equal(201, serviceResponse.Status);
+        var service = JsonSerializer.Deserialize<ServiceDto>(serviceResponse.Body, Json)!;
+        var staffResponse = await Fetch(owner, "POST", $"/api/v1/businesses/{created.Business.Id}/staff",
+            new SaveStaffMemberRequest { DisplayName = "Profesional E2E", IsActive = true,
+                ParticipatesInAvailability = true, ServiceIds = [service.Id] });
+        Assert.Equal(201, staffResponse.Status);
         var refreshed = await Fetch(admin, "GET", $"/api/v1/admin/businesses/{created.Business.Id}");
         var withService = JsonSerializer.Deserialize<PlatformBusinessDto>(refreshed.Body, Json)!;
         // El servicio ya existe, pero la identidad visual sigue faltando: aún no se puede enviar a revisión.
@@ -177,6 +209,50 @@ public sealed class PlatformOnboardingJourneyTests(BrowserFixture fixture) : ICl
         await Expect(old.GetByText("Correo o contraseña incorrectos.")).ToBeVisibleAsync();
     }
 
+    [Theory]
+    [InlineData("spa-y-belleza", false, false, true)]
+    [InlineData("veterinarias", true, true, true)]
+    [InlineData("odontologia", true, false, false)]
+    [InlineData("droguerias", false, false, true)]
+    [InlineData("opticas", true, false, true)]
+    public async Task Supported_onboarding_operates_five_pilot_verticals(string categorySlug,
+        bool appointments, bool queues, bool orders)
+    {
+        await using var adminContext = await fixture.Browser.NewContextAsync();
+        var admin = await adminContext.NewPageAsync();
+        await Login(admin, DevelopmentSeeder.PlatformAdminEmail, DevelopmentSeeder.DemoPassword);
+        var slug = Unique(categorySlug);
+        var created = await Create(admin, slug, appointments, queues, orders,
+            service: appointments ? "Servicio vertical" : null,
+            product: orders ? "Producto vertical" : null,
+            productCategory: orders ? "Catálogo vertical" : null,
+            saveAsDraft: true, categorySlug: categorySlug);
+        var published = await CompleteAndPublish(admin, created.Business);
+        Assert.True(published.IsPublished);
+        Assert.Equal(200, (await Fetch(admin, "GET", $"/api/v1/public/businesses/{slug}")).Status);
+
+        if (appointments) await OperateAppointment(admin, slug);
+        if (orders) await OperateOrder(admin, slug);
+        if (queues)
+        {
+            await using var ownerContext = await fixture.Browser.NewContextAsync();
+            var owner = await ownerContext.NewPageAsync();
+            await Login(owner, DevelopmentSeeder.BellaOwnerEmail, DevelopmentSeeder.DemoPassword);
+            Assert.Equal(200, (await Fetch(owner, "POST",
+                $"/api/v1/businesses/{created.Business.Id}/queue/open")).Status);
+            var joined = await Fetch(admin, "POST", $"/api/v1/public/businesses/{slug}/queue/tickets",
+                new CreateQueueTicketRequest { Alias = "Vertical E2E", ConsentAccepted = true,
+                    ConsentNoticeVersion = ConsentPolicyProvider.FallbackVersion });
+            Assert.Equal(201, joined.Status);
+            var ticket = JsonSerializer.Deserialize<QueueTicketCreatedDto>(joined.Body, Json)!;
+            var tracked = JsonSerializer.Deserialize<QueueTicketTrackingDto>(
+                (await Fetch(admin, "GET", $"/api/v1/public/queue/tickets/{ticket.TrackingCode}")).Body, Json)!;
+            Assert.Equal(204, (await Fetch(admin, "POST",
+                $"/api/v1/public/queue/tickets/{ticket.TrackingCode}/cancel",
+                new QueueSessionCommandRequest { Version = tracked.Version })).Status);
+        }
+    }
+
     /// <summary>
     /// Desde V5 la publicación exige el checklist completo (descripción breve, contacto, ubicación,
     /// logo y portada) y pasar por revisión. Este auxiliar recorre ese camino y devuelve el negocio publicado.
@@ -235,7 +311,8 @@ public sealed class PlatformOnboardingJourneyTests(BrowserFixture fixture) : ICl
 
     private async Task<PlatformBusinessCreatedDto> Create(IPage admin, string slug, bool appointments = false,
         bool queues = false, bool orders = false, string? pilotEmail = null, string? service = null,
-        string? product = null, string? productCategory = null, bool saveAsDraft = true)
+        string? product = null, string? productCategory = null, bool saveAsDraft = true,
+        string? categorySlug = null)
     {
         var catalogResponse = await Fetch(admin, "GET", "/api/v1/admin/businesses");
         var catalog = JsonSerializer.Deserialize<PlatformBusinessListDto>(catalogResponse.Body, Json)!;
@@ -243,7 +320,9 @@ public sealed class PlatformOnboardingJourneyTests(BrowserFixture fixture) : ICl
         {
             Name = $"Piloto {slug}", Slug = slug, MunicipalityId = catalog.Municipalities[0].Id,
             ShortDescription = "Piloto ficticio del recorrido E2E.",
-            CategoryId = catalog.Categories[0].Id, Description = "Negocio piloto E2E",
+            CategoryId = categorySlug is null ? catalog.Categories[0].Id
+                : catalog.Categories.Single(x => x.Slug == categorySlug).Id,
+            Description = "Negocio piloto E2E",
             Appointments = appointments, VirtualQueues = queues, PickupOrders = orders,
             InitialServiceName = service, InitialProductName = product,
             InitialProductCategory = productCategory, InitialProductPrice = 18000,
@@ -254,6 +333,60 @@ public sealed class PlatformOnboardingJourneyTests(BrowserFixture fixture) : ICl
         var response = await Fetch(admin, "POST", "/api/v1/admin/businesses", request);
         Assert.Equal(201, response.Status);
         return JsonSerializer.Deserialize<PlatformBusinessCreatedDto>(response.Body, Json)!;
+    }
+
+    private static async Task OperateAppointment(IPage page, string slug)
+    {
+        var profile = JsonSerializer.Deserialize<BusinessProfileDto>(
+            (await Fetch(page, "GET", $"/api/v1/public/businesses/{slug}")).Body, Json)!;
+        var service = profile.Services.Single();
+        SlotListDto? available = null;
+        var date = DateOnly.FromDateTime(DateTime.UtcNow.Date.AddDays(2));
+        for (var day = 0; day < 8 && (available is null || available.Slots.Count == 0); day++)
+        {
+            var candidate = date.AddDays(day);
+            var response = await Fetch(page, "GET",
+                $"/api/v1/public/businesses/{slug}/appointment-slots?serviceId={service.Id}&date={candidate:yyyy-MM-dd}");
+            Assert.Equal(200, response.Status);
+            available = JsonSerializer.Deserialize<SlotListDto>(response.Body, Json)!;
+        }
+        Assert.NotNull(available);
+        Assert.NotEmpty(available!.Slots);
+        var createdResponse = await Fetch(page, "POST", $"/api/v1/public/businesses/{slug}/appointments",
+            new
+            {
+                ServiceId = service.Id,
+                Start = available.Slots[0].Start.ToOffset(TimeSpan.FromHours(-5)).ToString("O"),
+                CustomerAlias = "Cita vertical E2E", Phone = "3000000000",
+                ConsentNoticeVersion = ConsentPolicyProvider.FallbackVersion, ConsentAccepted = true
+            });
+        Assert.Equal(201, createdResponse.Status);
+        var created = JsonSerializer.Deserialize<AppointmentCreatedDto>(createdResponse.Body, Json)!;
+        Assert.Equal(200, (await Fetch(page, "GET", $"/api/v1/public/appointments/{created.TrackingCode}")).Status);
+        Assert.Equal(204, (await Fetch(page, "POST",
+            $"/api/v1/public/appointments/{created.TrackingCode}/cancel")).Status);
+    }
+
+    private static async Task OperateOrder(IPage page, string slug)
+    {
+        var menu = JsonSerializer.Deserialize<PickupMenuDto>(
+            (await Fetch(page, "GET", $"/api/v1/public/businesses/{slug}/menu")).Body, Json)!;
+        var slots = JsonSerializer.Deserialize<PickupSlotListDto>(
+            (await Fetch(page, "GET", $"/api/v1/public/businesses/{slug}/pickup-slots")).Body, Json)!;
+        Assert.NotEmpty(slots.Slots);
+        var createdResponse = await Fetch(page, "POST", $"/api/v1/public/businesses/{slug}/orders", new
+        {
+            PickupStart = slots.Slots[0].Start.ToOffset(TimeSpan.FromHours(-5)).ToString("O"),
+            CustomerAlias = "Pedido vertical E2E", Phone = "3000000000", ConsentAccepted = true,
+            ConsentNoticeVersion = ConsentPolicyProvider.FallbackVersion,
+            Lines = new[] { new { ProductId = menu.Products.Single().Id, Quantity = 1 } }
+        });
+        Assert.Equal(201, createdResponse.Status);
+        var created = JsonSerializer.Deserialize<PickupOrderCreatedDto>(createdResponse.Body, Json)!;
+        var tracking = JsonSerializer.Deserialize<PickupOrderTrackingDto>(
+            (await Fetch(page, "GET", $"/api/v1/public/orders/{created.TrackingCode}")).Body, Json)!;
+        Assert.Equal(204, (await Fetch(page, "POST", $"/api/v1/public/orders/{created.TrackingCode}/cancel",
+            new PickupOrderCommandRequest { Version = tracking.Version })).Status);
     }
 
     private async Task<PlatformBusinessCreatedDto> CreateWithWizard(IPage admin, string slug, string pilotEmail)

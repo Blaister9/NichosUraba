@@ -72,6 +72,8 @@ public sealed class HomeFeedScalingTests(PostgresWebFactory factory, ITestOutput
         if (cuantos <= 0) return 0;
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        // Fixture sintético de lectura: no pretende validar onboarding (eso tiene su propio E2E).
+        using var readinessGuard = db.SuppressOperationalReadinessGuardForSeeding();
         var municipalityId = await db.Municipalities.Where(x => x.IsActive).Select(x => x.Id).FirstAsync();
         var categoryId = await db.Categories.Where(x => x.IsActive).Select(x => x.Id).FirstAsync();
         var now = DateTimeOffset.UtcNow;

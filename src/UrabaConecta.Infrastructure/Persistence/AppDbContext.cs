@@ -1,14 +1,17 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
+using UrabaConecta.Application;
 using UrabaConecta.Domain;
 using UrabaConecta.Infrastructure.Identity;
 
 namespace UrabaConecta.Infrastructure.Persistence;
 
-public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
+public sealed class AppDbContext(DbContextOptions<AppDbContext> options, IPublicDirectoryCache? publicCache = null)
     : IdentityDbContext<ApplicationUser, IdentityRole<Guid>, Guid>(options)
 {
+    private int operationalReadinessGuardSuppressions;
     public DbSet<Municipality> Municipalities => Set<Municipality>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Business> Businesses => Set<Business>();
@@ -41,6 +44,81 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<BusinessStatusChange> BusinessStatusChanges => Set<BusinessStatusChange>();
     public DbSet<PlatformAccessAudit> PlatformAccessAudits => Set<PlatformAccessAudit>();
 
+    /// <summary>
+    /// Última barrera de consistencia: cualquier mutación que pueda romper la operabilidad se
+    /// guarda y se revalida dentro de la misma transacción. Si un negocio publicado deja de estar
+    /// listo, su estado cambia a configuración pendiente antes de que la transacción sea visible.
+    /// </summary>
+    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        if (operationalReadinessGuardSuppressions > 0)
+            return await base.SaveChangesAsync(cancellationToken);
+        var affected = ChangeTracker.Entries().Where(x => x.State is EntityState.Added or
+                EntityState.Modified or EntityState.Deleted)
+            .Select(BusinessIdForReadiness).Where(x => x.HasValue).Select(x => x!.Value)
+            .Distinct().ToArray();
+        if (affected.Length == 0) return await base.SaveChangesAsync(cancellationToken);
+
+        await using var ownedTransaction = Database.CurrentTransaction is null
+            ? await Database.BeginTransactionAsync(cancellationToken) : null;
+        var written = await base.SaveChangesAsync(cancellationToken);
+        var facts = await BusinessOperationalReadinessQuery.LoadAsync(this, affected, cancellationToken);
+        var invalidated = 0;
+        foreach (var (businessId, operationalFacts) in facts)
+        {
+            var business = await Businesses.SingleAsync(x => x.Id == businessId, cancellationToken);
+            if (business.Status is not (BusinessStatus.Active or BusinessStatus.PendingReview) ||
+                BusinessOperationalReadiness.Evaluate(operationalFacts).IsReady) continue;
+            business.ConfigurationChanged(DateTimeOffset.UtcNow, business.Version);
+            invalidated++;
+        }
+        if (invalidated > 0)
+        {
+            written += await base.SaveChangesAsync(cancellationToken);
+            publicCache?.Invalidate();
+        }
+        if (ownedTransaction is not null) await ownedTransaction.CommitAsync(cancellationToken);
+        return written;
+    }
+
+    /// <summary>
+    /// Sólo para sembradores de Demo que construyen un fixture público en varias escrituras. Las
+    /// mutaciones HTTP nunca reciben esta exclusión; al terminar el sembrado vuelve la barrera.
+    /// </summary>
+    public IDisposable SuppressOperationalReadinessGuardForSeeding()
+    {
+        operationalReadinessGuardSuppressions++;
+        return new GuardSuppression(this);
+    }
+
+    private sealed class GuardSuppression(AppDbContext db) : IDisposable
+    {
+        private bool disposed;
+        public void Dispose()
+        {
+            if (disposed) return;
+            db.operationalReadinessGuardSuppressions--;
+            disposed = true;
+        }
+    }
+
+    private static Guid? BusinessIdForReadiness(EntityEntry entry) => entry.Entity switch
+    {
+        Business business => business.Id,
+        BusinessModule item => item.BusinessId,
+        BusinessHour item => item.BusinessId,
+        Service item => item.BusinessId,
+        StaffMember item => item.BusinessId,
+        StaffService item => item.BusinessId,
+        QueueDefinition item => item.BusinessId,
+        PickupOrderSettings item => item.BusinessId,
+        ProductCategory item => item.BusinessId,
+        Product item => item.BusinessId,
+        BusinessImage item when item.Kind is BusinessImageKind.Logo or BusinessImageKind.Cover => item.BusinessId,
+        BusinessMembership item => item.BusinessId,
+        _ => null
+    };
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -64,6 +142,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             x.Property(e => e.Description).HasMaxLength(600); x.Property(e => e.Address).HasMaxLength(240);
             x.Property(e => e.PublicPhone).HasMaxLength(30); x.Property(e => e.TimeZoneId).HasMaxLength(80);
             x.Property(e => e.Status).HasConversion<string>().HasMaxLength(20);
+            x.Property(e => e.LocationMode).HasConversion<string>().HasMaxLength(24)
+                .HasDefaultValue(BusinessLocationMode.PublicPhysical);
+            x.Property(e => e.OrderFulfillmentMode).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(OrderFulfillmentMode.PickupAtPublicLocation);
             x.Property(e => e.WhatsAppUrl).HasMaxLength(500); x.Property(e => e.LocationUrl).HasMaxLength(500);
             x.Property(e => e.SuspensionReason).HasMaxLength(240); x.Property(e => e.Version).IsConcurrencyToken();
             x.Property(e => e.ShortDescription).HasMaxLength(160).HasDefaultValue("");

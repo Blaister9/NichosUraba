@@ -10,6 +10,8 @@ namespace UrabaConecta.Domain;
 /// responder una sola pregunta.
 /// </summary>
 public enum BusinessModuleKind { Appointments, VirtualQueues, PickupOrders, Services, Products, Staff }
+public enum BusinessLocationMode { PublicPhysical, PrivatePhysical, Virtual }
+public enum OrderFulfillmentMode { PickupAtPublicLocation, Coordinated, ExternalDelivery }
 public enum PlatformAuditAction
 {
     BusinessCreated, BusinessUpdated, ModulesChanged, OwnerAssigned, OwnerChanged,
@@ -25,7 +27,9 @@ public sealed record BusinessProfileEdit(
     string Slug, string Name, Guid MunicipalityId, Guid CategoryId,
     string ShortDescription, string Description, string? Address, string? ReferencePoint,
     string? PublicPhone, string? WhatsAppUrl, string? PublicEmail,
-    string? InstagramUrl, string? FacebookUrl, string? LocationUrl, string? CustomerInstructions);
+    string? InstagramUrl, string? FacebookUrl, string? LocationUrl, string? CustomerInstructions,
+    BusinessLocationMode LocationMode = BusinessLocationMode.PublicPhysical,
+    OrderFulfillmentMode OrderFulfillmentMode = OrderFulfillmentMode.PickupAtPublicLocation);
 
 public sealed partial class Business
 {
@@ -42,6 +46,8 @@ public sealed partial class Business
     public string? InstagramUrl { get; private set; }
     public string? FacebookUrl { get; private set; }
     public string? CustomerInstructions { get; private set; }
+    public BusinessLocationMode LocationMode { get; private set; } = BusinessLocationMode.PublicPhysical;
+    public OrderFulfillmentMode OrderFulfillmentMode { get; private set; } = OrderFulfillmentMode.PickupAtPublicLocation;
     public string? ReviewNotes { get; private set; }
     public DateTimeOffset? SubmittedForReviewAtUtc { get; private set; }
     public DateTimeOffset? PublishedAtUtc { get; private set; }
@@ -73,6 +79,7 @@ public sealed partial class Business
         PublicEmail = Clean(edit.PublicEmail)?.ToLowerInvariant();
         InstagramUrl = CleanUrl(edit.InstagramUrl); FacebookUrl = CleanUrl(edit.FacebookUrl);
         LocationUrl = CleanUrl(edit.LocationUrl); CustomerInstructions = Clean(edit.CustomerInstructions);
+        LocationMode = edit.LocationMode; OrderFulfillmentMode = edit.OrderFulfillmentMode;
         Touch(now);
     }
 
@@ -106,7 +113,9 @@ public sealed partial class Business
     /// </summary>
     public static Business CreateDraft(Guid id, string slug, string name, Guid municipalityId, Guid categoryId,
         string shortDescription, string description, string? address, string? publicPhone, string? whatsAppUrl,
-        string? locationUrl, DateTimeOffset now)
+        string? locationUrl, DateTimeOffset now,
+        BusinessLocationMode locationMode = BusinessLocationMode.PublicPhysical,
+        OrderFulfillmentMode orderFulfillmentMode = OrderFulfillmentMode.PickupAtPublicLocation)
     {
         ValidateProfile(slug, name, description, address, publicPhone, whatsAppUrl, locationUrl);
         ValidateShortDescription(shortDescription);
@@ -115,7 +124,8 @@ public sealed partial class Business
         {
             Status = BusinessStatus.Draft, IsPublished = false, ShortDescription = shortDescription.Trim(),
             WhatsAppUrl = CleanUrl(whatsAppUrl),
-            LocationUrl = CleanUrl(locationUrl), CreatedAtUtc = now, UpdatedAtUtc = now
+            LocationUrl = CleanUrl(locationUrl), CreatedAtUtc = now, UpdatedAtUtc = now,
+            LocationMode = locationMode, OrderFulfillmentMode = orderFulfillmentMode
         };
         return business;
     }
@@ -356,6 +366,72 @@ public sealed record BusinessReadiness(IReadOnlyList<ReadinessRequirement> Requi
 public sealed record BusinessCompletionSignals(bool HasContact = true, bool HasLocation = true,
     bool HasLogo = true, bool HasCover = true);
 
+/// <summary>
+/// Hechos operacionales ya observados en persistencia. Esta estructura es la frontera única entre
+/// consultas y política: checklist, publicación y revalidación posterior evalúan exactamente los
+/// mismos hechos.
+/// </summary>
+public sealed record BusinessOperationalFacts(
+    bool HasName, bool HasShortDescription, bool HasDescription, bool HasContact,
+    BusinessLocationMode LocationMode, OrderFulfillmentMode OrderFulfillmentMode, bool HasLocation,
+    bool HasLogo, bool HasCover, bool HasActiveOwner,
+    IReadOnlySet<BusinessModuleKind> Capabilities,
+    bool HasHours, bool HasActiveService, bool HasEligibleStaff,
+    bool HasBookableAppointmentConfiguration, bool HasQueueDefinition,
+    bool HasPickupSettings, bool HasProductCategory, bool HasAvailableProduct,
+    bool HasCompatiblePickupWindow);
+
+public static class BusinessOperationalReadiness
+{
+    public static BusinessReadiness Evaluate(BusinessOperationalFacts f)
+    {
+        var appointments = f.Capabilities.Contains(BusinessModuleKind.Appointments);
+        var queues = f.Capabilities.Contains(BusinessModuleKind.VirtualQueues);
+        var orders = f.Capabilities.Contains(BusinessModuleKind.PickupOrders);
+        var needsHours = appointments || orders;
+        var publicLocation = f.LocationMode == BusinessLocationMode.PublicPhysical;
+        var fulfillmentValid = !orders || f.OrderFulfillmentMode != OrderFulfillmentMode.PickupAtPublicLocation ||
+                               publicLocation;
+        return new([
+            new("business-name", "Nombre", true, f.HasName, "Falta el nombre del negocio."),
+            new("short-description", "Descripción breve", true, f.HasShortDescription, "Falta la descripción breve."),
+            new("full-description", "Descripción completa", true, f.HasDescription, "Falta la descripción completa."),
+            new("contact", "Contacto", true, f.HasContact,
+                "Registre al menos un teléfono, un WhatsApp o un correo público."),
+            new("location", "Ubicación pública", publicLocation, !publicLocation || f.HasLocation,
+                "Falta la dirección del establecimiento."),
+            new("fulfillment", "Modalidad de entrega", orders, fulfillmentValid,
+                "La recogida en establecimiento exige una ubicación física pública."),
+            new("logo", "Logo", true, f.HasLogo, "Cargue el logo del negocio."),
+            new("cover", "Imagen de portada", true, f.HasCover, "Cargue la imagen de portada."),
+            new("modules", "Funciones disponibles", true,
+                f.Capabilities.Any(BusinessCapabilities.Operations.Contains), "Habilite al menos una función."),
+            new("hours", "Horario", needsHours, !needsHours || f.HasHours, "Configure el horario de atención."),
+            new("services", "Servicios", appointments, !appointments || f.HasActiveService,
+                "Cree al menos un servicio activo."),
+            new("eligible-staff", "Personal elegible", appointments, !appointments || f.HasEligibleStaff,
+                "Vincule personal activo y disponible a un servicio activo."),
+            new("appointment-availability", "Disponibilidad de citas", appointments,
+                !appointments || f.HasBookableAppointmentConfiguration,
+                "Configure un horario que admita la duración de un servicio con personal elegible."),
+            new("queue", "Fila virtual", queues, !queues || f.HasQueueDefinition, "Configure la fila virtual."),
+            new("pickup-settings", "Configuración de pedidos", orders, !orders || f.HasPickupSettings,
+                "Configure la recepción de pedidos."),
+            new("catalog-category", "Categoría del menú", orders, !orders || f.HasProductCategory,
+                "Cree al menos una categoría activa del menú."),
+            new("catalog-product", "Producto disponible", orders, !orders || f.HasAvailableProduct,
+                "Cree al menos un producto activo y disponible."),
+            new("pickup-availability", "Disponibilidad de pedidos", orders,
+                !orders || f.HasCompatiblePickupWindow,
+                "El horario y la ventana de pedidos no producen una franja válida."),
+            new("active-owner", "Propietario", true, f.HasActiveOwner,
+                "Invite o asigne a la persona propietaria."),
+            new("permissions", "Permisos del propietario", true, f.HasActiveOwner,
+                "La persona propietaria debe tener membresía activa.")
+        ]);
+    }
+}
+
 public static class BusinessReadinessCalculator
 {
     /// <summary>
@@ -370,43 +446,14 @@ public static class BusinessReadinessCalculator
         BusinessCompletionSignals? signals = null)
     {
         var s = signals ?? new BusinessCompletionSignals();
-        var appointments = enabledModules.Contains(BusinessModuleKind.Appointments);
-        var queues = enabledModules.Contains(BusinessModuleKind.VirtualQueues);
-        var orders = enabledModules.Contains(BusinessModuleKind.PickupOrders);
-        var needsHours = appointments || orders;
-        return new([
-            new("business-name", "Nombre", true, hasName, "Falta el nombre del negocio."),
-            new("short-description", "Descripción breve", true, hasShortDescription,
-                "Falta la descripción breve."),
-            new("full-description", "Descripción completa", true, hasDescription,
-                "Falta la descripción completa."),
-            new("contact", "Contacto", true, s.HasContact,
-                "Registre al menos un teléfono, un WhatsApp o un correo público."),
-            new("location", "Ubicación", true, s.HasLocation, "Falta la dirección del establecimiento."),
-            new("logo", "Logo", true, s.HasLogo, "Cargue el logo del negocio."),
-            new("cover", "Imagen de portada", true, s.HasCover, "Cargue la imagen de portada."),
-            // Se cuentan sólo las operaciones que se abren al público: un negocio con "productos"
-            // encendido pero sin pedidos, citas ni fila no tiene nada que ofrecer todavía.
-            new("modules", "Funciones disponibles", true,
-                enabledModules.Any(BusinessCapabilities.Operations.Contains),
-                "Habilite al menos una función."),
-            // El horario no es sólo de la agenda. Las franjas para recoger salen de cruzar el
-            // horario del negocio con la ventana de pedidos, así que un negocio de sólo pedidos sin
-            // horario se publicaba al 100 % y no ofrecía una sola hora en la que pedirle nada.
-            new("hours", "Horario", needsHours, !needsHours || hasHours, "Configure el horario de atención."),
-            new("services", "Servicios", appointments, !appointments || hasService,
-                "Cree al menos un servicio activo."),
-            new("queue", "Fila virtual", queues, !queues || hasQueueDefinition, "Configure la fila virtual."),
-            new("pickup-settings", "Franjas para recoger", orders, !orders || hasPickupSettings,
-                "Configure las franjas de recogida."),
-            new("catalog-category", "Categoría del menú", orders, !orders || hasProductCategory,
-                "Cree al menos una categoría del menú."),
-            new("catalog-product", "Producto activo", orders, !orders || hasProduct,
-                "Cree al menos un producto activo."),
-            new("active-owner", "Propietario", true, activeOwner,
-                "Invite o asigne a la persona propietaria."),
-            new("permissions", "Permisos del propietario", true, activeOwner,
-                "La persona propietaria debe tener membresía activa.")
-        ]);
+        var capabilities = BusinessCapabilities.Resolve(
+            enabledModules.Contains(BusinessModuleKind.Appointments),
+            enabledModules.Contains(BusinessModuleKind.VirtualQueues),
+            enabledModules.Contains(BusinessModuleKind.PickupOrders));
+        return BusinessOperationalReadiness.Evaluate(new(hasName, hasShortDescription, hasDescription,
+            s.HasContact, BusinessLocationMode.PublicPhysical, OrderFulfillmentMode.PickupAtPublicLocation,
+            s.HasLocation, s.HasLogo, s.HasCover, activeOwner, capabilities, hasHours, hasService,
+            hasService, hasService && hasHours, hasQueueDefinition, hasPickupSettings,
+            hasProductCategory, hasProduct, hasPickupSettings && hasHours));
     }
 }

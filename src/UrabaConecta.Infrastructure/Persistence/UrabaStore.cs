@@ -44,7 +44,7 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
         if (!string.IsNullOrWhiteSpace(category)) query = query.Where(x => x.c.Slug == category);
         var rows = await query.OrderBy(x => x.b.Name).Select(x => new
         {
-            x.b.Id, x.b.Slug, x.b.Name, x.b.Description, x.b.ShortDescription, x.b.Address,
+            x.b.Id, x.b.Slug, x.b.Name, x.b.Description, x.b.ShortDescription, x.b.Address, x.b.LocationMode,
             CategorySlug = x.c.Slug, CategoryName = x.c.Name,
             MunicipalitySlug = x.m.Slug, MunicipalityName = x.m.Name,
             HasQueue = db.BusinessModules.Any(m => m.BusinessId == x.b.Id && m.Module == BusinessModuleKind.VirtualQueues && m.IsEnabled),
@@ -66,7 +66,8 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
         }).ToListAsync(cancellationToken);
         return rows.Select(x => new BusinessCardDto(x.Slug, x.Name,
             new(x.CategorySlug, x.CategoryName), new(x.MunicipalitySlug, x.MunicipalityName),
-            x.Description, x.Address, x.HasQueue, x.HasOrders, x.HasAppointments,
+            x.Description, x.LocationMode == BusinessLocationMode.PublicPhysical ? x.Address : "",
+            x.HasQueue, x.HasOrders, x.HasAppointments,
             x.Logo is null ? null : storage.PublicUrl(x.Logo.StorageKey),
             x.Cover is null ? null : storage.PublicUrl(x.Cover.StorageKey),
             x.Logo?.AltText, x.Cover?.AltText, x.ShortDescription,
@@ -199,17 +200,20 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
             .Where(x => x.Kind is BusinessImageKind.Logo or BusinessImageKind.Cover or BusinessImageKind.Gallery)
             .Select(x => new BusinessImageDto(x.Id, x.Kind.ToString(),
                 storage.PublicUrl(x.StorageKey), x.AltText, x.Width, x.Height, x.DisplayOrder, x.Version)).ToList();
-        return new(data.b.Slug, data.b.Name, data.b.Description, data.b.Address, data.b.PublicPhone,
+        var exposesLocation = data.b.LocationMode == BusinessLocationMode.PublicPhysical;
+        return new(data.b.Slug, data.b.Name, data.b.Description, exposesLocation ? data.b.Address : "",
+            data.b.PublicPhone,
             new(data.CategorySlug, data.CategoryName), new(data.MunicipalitySlug, data.MunicipalityName),
             publicHours, hasAppointments ? services : [],
             data.Modules.Contains(BusinessModuleKind.VirtualQueues),
             data.Modules.Contains(BusinessModuleKind.PickupOrders),
-            data.b.ShortDescription, data.b.ReferencePoint, data.b.WhatsAppUrl, data.b.PublicEmail,
-            data.b.InstagramUrl, data.b.FacebookUrl, data.b.LocationUrl, data.b.CustomerInstructions,
+            data.b.ShortDescription, exposesLocation ? data.b.ReferencePoint : null, data.b.WhatsAppUrl,
+            data.b.PublicEmail, data.b.InstagramUrl, data.b.FacebookUrl,
+            exposesLocation ? data.b.LocationUrl : null, data.b.CustomerInstructions,
             images,
             OpenStatus(data.b.TimeZoneId, publicHours),
             false,
-            productos);
+            productos, data.b.LocationMode.ToString(), data.b.OrderFulfillmentMode.ToString());
     }
 
     /// <summary>

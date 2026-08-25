@@ -29,9 +29,49 @@ public sealed partial class OrderingApiTests(PostgresWebFactory factory) : IClas
         Assert.Equal(created.OrderNumber, tracked!.OrderNumber);
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var stored = await db.PickupOrders.SingleAsync(x => x.PublicOrderNumber == created.OrderNumber);
+        var stored = await db.PickupOrders.SingleAsync(x => x.BusinessId == DevelopmentSeeder.SazonBusinessId &&
+            x.PublicOrderNumber == created.OrderNumber);
         Assert.DoesNotContain("Ana", stored.ProtectedCustomerAlias);
         Assert.NotEqual(created.TrackingCode, stored.PublicCodeHash);
+        Assert.True(await db.ConsentReceipts.AnyAsync(x => x.PickupOrderId == stored.Id));
+        Assert.True(await db.Notifications.AnyAsync(x => x.BusinessId == stored.BusinessId &&
+            x.EntityId == stored.Id && x.Kind == NotificationKind.OrderPlaced));
+    }
+
+    [Fact]
+    public async Task A_rejected_order_leaves_no_partial_rows_or_consumed_number()
+    {
+        using var client = Client();
+        var slot = (await client.GetFromJsonAsync<PickupSlotListDto>(
+            "/api/v1/public/businesses/restaurante-sazon-local/pickup-slots", Json))!.Slots.First().Start;
+        int ordersBefore, consentsBefore, notificationsBefore, nextNumberBefore;
+        await using (var beforeScope = factory.Services.CreateAsyncScope())
+        {
+            var before = beforeScope.ServiceProvider.GetRequiredService<AppDbContext>();
+            ordersBefore = await before.PickupOrders.CountAsync(x => x.BusinessId == DevelopmentSeeder.SazonBusinessId);
+            consentsBefore = await before.ConsentReceipts.CountAsync(x => x.BusinessId == DevelopmentSeeder.SazonBusinessId &&
+                x.PickupOrderId != null);
+            notificationsBefore = await before.Notifications.CountAsync(x => x.BusinessId == DevelopmentSeeder.SazonBusinessId &&
+                x.Kind == NotificationKind.OrderPlaced);
+            nextNumberBefore = (await before.PickupOrderSettings.SingleAsync(
+                x => x.BusinessId == DevelopmentSeeder.SazonBusinessId)).NextOrderNumber;
+        }
+
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/public/businesses/restaurante-sazon-local/orders",
+            Request("Pedido inválido", Guid.NewGuid(), slot), Json);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        await using var afterScope = factory.Services.CreateAsyncScope();
+        var after = afterScope.ServiceProvider.GetRequiredService<AppDbContext>();
+        Assert.Equal(ordersBefore,
+            await after.PickupOrders.CountAsync(x => x.BusinessId == DevelopmentSeeder.SazonBusinessId));
+        Assert.Equal(consentsBefore, await after.ConsentReceipts.CountAsync(
+            x => x.BusinessId == DevelopmentSeeder.SazonBusinessId && x.PickupOrderId != null));
+        Assert.Equal(notificationsBefore, await after.Notifications.CountAsync(
+            x => x.BusinessId == DevelopmentSeeder.SazonBusinessId && x.Kind == NotificationKind.OrderPlaced));
+        Assert.Equal(nextNumberBefore, (await after.PickupOrderSettings.SingleAsync(
+            x => x.BusinessId == DevelopmentSeeder.SazonBusinessId)).NextOrderNumber);
     }
 
     [Fact]
@@ -189,7 +229,10 @@ public sealed partial class OrderingApiTests(PostgresWebFactory factory) : IClas
     }
     private static CreatePickupOrderRequest Request(string alias, Guid productId, DateTimeOffset slot) => new()
     {
-        CustomerAlias = alias, Phone = "3001234567", PickupStart = slot, ConsentAccepted = true,
+        CustomerAlias = alias, Phone = "3001234567",
+        // Es el formato que reprodujo el fallo en Demo: el instante correcto expresado con la hora
+        // local de Colombia. La aplicación debe normalizarlo antes de hablar con PostgreSQL.
+        PickupStart = slot.ToOffset(TimeSpan.FromHours(-5)), ConsentAccepted = true,
         ConsentNoticeVersion = "pilot-1", Lines = [new() { ProductId = productId, Quantity = 1 }]
     };
     private HttpClient Client() => factory.CreateClient(new() { AllowAutoRedirect = false, HandleCookies = true });

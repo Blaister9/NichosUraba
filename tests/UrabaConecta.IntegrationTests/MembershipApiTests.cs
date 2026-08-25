@@ -144,6 +144,8 @@ public sealed partial class MembershipApiTests(PostgresWebFactory factory) : ICl
             new MembershipVersionRequest { Version = successor.Member.Version }, Json);
         Assert.Equal(HttpStatusCode.OK, granted.StatusCode);
         var grantedMember = (await granted.Content.ReadFromJsonAsync<BusinessMemberDto>(Json))!;
+        Assert.True(await HasRole(successor.Member.Email, "BusinessOwner"));
+        Assert.False(await HasRole(successor.Member.Email, "BusinessWorker"));
         var revoke = await owner.PostAsJsonAsync(
             $"/api/v1/businesses/{DevelopmentSeeder.OtherBusinessId}/memberships/{original.Id}/revoke-owner",
             new RevokeOwnershipRequest
@@ -156,9 +158,17 @@ public sealed partial class MembershipApiTests(PostgresWebFactory factory) : ICl
         Assert.False(former.IsOwner);
         Assert.True(former.Permissions.CanManageAppointments);
         Assert.False(former.Permissions.CanManageMembers);
+        Assert.False(await HasRole(DevelopmentSeeder.OtherOwnerEmail, "BusinessOwner"));
+        Assert.True(await HasRole(DevelopmentSeeder.OtherOwnerEmail, "BusinessWorker"));
 
         using var successorClient = Client();
         await Login(successorClient, successor.Member.Email, successor.TemporaryPassword);
+        Assert.Equal(HttpStatusCode.OK, (await successorClient.GetAsync(
+            $"/api/v1/businesses/{DevelopmentSeeder.OtherBusinessId}/profile")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await successorClient.GetAsync(
+            $"/api/v1/businesses/{DevelopmentSeeder.OtherBusinessId}/images")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await successorClient.GetAsync(
+            $"/api/v1/businesses/{DevelopmentSeeder.OtherBusinessId}/hours")).StatusCode);
         var restored = await successorClient.PostAsJsonAsync(
             $"/api/v1/businesses/{DevelopmentSeeder.OtherBusinessId}/memberships/{original.Id}/grant-owner",
             new MembershipVersionRequest { Version = former.Version }, Json);
@@ -166,6 +176,10 @@ public sealed partial class MembershipApiTests(PostgresWebFactory factory) : ICl
         Assert.Equal(HttpStatusCode.OK, (await successorClient.PostAsJsonAsync(
             $"/api/v1/businesses/{DevelopmentSeeder.OtherBusinessId}/memberships/{successor.Member.Id}/deactivate",
             new MembershipVersionRequest { Version = grantedMember.Version }, Json)).StatusCode);
+        Assert.False(await HasRole(successor.Member.Email, "BusinessOwner"));
+        Assert.False(await HasRole(successor.Member.Email, "BusinessWorker"));
+        Assert.Equal(HttpStatusCode.Forbidden, (await successorClient.GetAsync(
+            $"/api/v1/businesses/{DevelopmentSeeder.OtherBusinessId}/profile")).StatusCode);
     }
 
     [Fact]
@@ -263,6 +277,14 @@ public sealed partial class MembershipApiTests(PostgresWebFactory factory) : ICl
             new BusinessMembership(second.MembershipId, businessId, second.UserId, MembershipRole.Owner));
         await db.SaveChangesAsync();
         return (businessId, first, second);
+    }
+
+    private async Task<bool> HasRole(string email, string role)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var account = await users.FindByEmailAsync(email);
+        return account is not null && await users.IsInRoleAsync(account, role);
     }
 
     private static async Task Login(HttpClient client, string email, string? password = null)

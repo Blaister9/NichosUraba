@@ -92,7 +92,8 @@ public sealed record BusinessProfileDto(string Slug, string Name, string Descrip
     /// ficha es el escaparate: mandarlo a otra pantalla para ver el primer artículo es pedirle un
     /// clic antes de haber enseñado nada.
     /// </summary>
-    IReadOnlyList<ProductDto>? Products = null);
+    IReadOnlyList<ProductDto>? Products = null,
+    string LocationMode = "PublicPhysical", string OrderFulfillmentMode = "PickupAtPublicLocation");
 public sealed record SlotDto(DateTimeOffset Start, DateTimeOffset End);
 public sealed record SlotListDto(string BusinessTimeZone, DateOnly Date, IReadOnlyList<SlotDto> Slots);
 
@@ -502,7 +503,8 @@ public sealed record PlatformBusinessDto(Guid Id, string Name, string Slug, stri
     string ShortDescription = "", string? ReferencePoint = null, string? PublicEmail = null,
     string? InstagramUrl = null, string? FacebookUrl = null, string? CustomerInstructions = null,
     int CompletionPercentage = 0, IReadOnlyList<string>? MissingLabels = null, string? ReviewNotes = null,
-    IReadOnlyList<BusinessImageDto>? Images = null);
+    IReadOnlyList<BusinessImageDto>? Images = null,
+    string LocationMode = "PublicPhysical", string OrderFulfillmentMode = "PickupAtPublicLocation");
 public sealed record PlatformBusinessListDto(IReadOnlyList<PlatformBusinessDto> Items,
     IReadOnlyList<PlatformOptionDto> Municipalities, IReadOnlyList<PlatformOptionDto> Categories,
     bool PilotAccountCreationEnabled);
@@ -520,6 +522,8 @@ public sealed class CreatePlatformBusinessRequest
     [StringLength(30)] public string? PublicPhone { get; set; }
     [Url, StringLength(500)] public string? WhatsAppUrl { get; set; }
     [Url, StringLength(500)] public string? LocationUrl { get; set; }
+    public string LocationMode { get; set; } = "PublicPhysical";
+    public string OrderFulfillmentMode { get; set; } = "PickupAtPublicLocation";
     public bool Appointments { get; set; }
     public bool VirtualQueues { get; set; }
     public bool PickupOrders { get; set; }
@@ -551,6 +555,8 @@ public sealed class UpdatePlatformBusinessRequest
     [StringLength(30)] public string? PublicPhone { get; set; }
     [Url, StringLength(500)] public string? WhatsAppUrl { get; set; }
     [Url, StringLength(500)] public string? LocationUrl { get; set; }
+    public string LocationMode { get; set; } = "PublicPhysical";
+    public string OrderFulfillmentMode { get; set; } = "PickupAtPublicLocation";
     public long Version { get; set; }
 }
 public sealed class PlatformBusinessStateRequest

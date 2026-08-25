@@ -36,6 +36,7 @@ public static class DevelopmentSeeder
         if (!environment.IsDevelopment() && !environment.IsEnvironment("Demo")) return;
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        using var readinessGuard = db.SuppressOperationalReadinessGuardForSeeding();
         var codes = scope.ServiceProvider.GetRequiredService<IPublicCodeService>();
         var protector = scope.ServiceProvider.GetRequiredService<UrabaConecta.Application.IPersonalDataProtector>();
         // Las migraciones ya las aplicó DatabaseMigrator, que corre en todo ambiente y antes que
@@ -94,6 +95,7 @@ public static class DevelopmentSeeder
             await EnsureOrderingDemo(db, sazonOwner.Id, ordersWorker.Id, noOrdersPermission.Id);
             await db.SaveChangesAsync();
             await EnrichDemoAsync(db, codes, protector, scope.ServiceProvider);
+            if (environment.IsDevelopment()) await EnsureOperationalImages(db);
             return;
         }
         var apartado = new Municipality(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), "apartado", "Apartadó");
@@ -131,6 +133,7 @@ public static class DevelopmentSeeder
         await EnsureOrderingDemo(db, sazonOwner.Id, ordersWorker.Id, noOrdersPermission.Id);
         await db.SaveChangesAsync();
         await EnrichDemoAsync(db, codes, protector, scope.ServiceProvider);
+        if (environment.IsDevelopment()) await EnsureOperationalImages(db);
     }
 
     /// <summary>
@@ -373,6 +376,27 @@ public static class DevelopmentSeeder
         foreach (var module in expected)
             if (!await db.BusinessModules.AnyAsync(x => x.BusinessId == module.BusinessId && x.Module == module.Module))
                 db.BusinessModules.Add(module);
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Los tres fixtures locales predatan el checklist visual. Metadatos deterministas los hacen
+    /// operacionalmente completos para pruebas; nunca se ejecuta en Demo ni toca negocios reales.
+    /// </summary>
+    private static async Task EnsureOperationalImages(AppDbContext db)
+    {
+        var now = DateTimeOffset.UtcNow;
+        foreach (var businessId in new[] { BellaBusinessId, CorteBusinessId, SazonBusinessId })
+        foreach (var kind in new[] { BusinessImageKind.Logo, BusinessImageKind.Cover })
+        {
+            if (await db.BusinessImages.AnyAsync(x => x.BusinessId == businessId && x.Kind == kind && !x.IsDeleted))
+                continue;
+            var suffix = kind == BusinessImageKind.Logo ? "01" : "02";
+            db.BusinessImages.Add(new BusinessImage(
+                Guid.Parse($"{businessId.ToString()[..34]}{suffix}"), businessId, kind,
+                $"development-fixtures/{businessId:N}/{kind.ToString().ToLowerInvariant()}.png",
+                "image/png", 100, 100, 100, $"{kind} ficticio", 0, now));
+        }
         await db.SaveChangesAsync();
     }
 }

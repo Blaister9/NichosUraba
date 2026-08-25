@@ -64,6 +64,7 @@ public static class DemoShowcaseSeeder
 
         await using var scope = services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        using var readinessGuard = db.SuppressOperationalReadinessGuardForSeeding();
         var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
             .CreateLogger("UrabaConecta.DemoShowcase");
 

@@ -88,6 +88,14 @@ public static class PilotVerticalFixtures
                 db.BusinessMemberships.Add(new BusinessMembership(Guid.NewGuid(), vertical.BusinessId,
                     ownerId, MembershipRole.Owner));
 
+            foreach (var kind in new[] { BusinessImageKind.Logo, BusinessImageKind.Cover })
+                if (!await db.BusinessImages.AnyAsync(x => x.BusinessId == vertical.BusinessId &&
+                        x.Kind == kind && !x.IsDeleted))
+                    db.BusinessImages.Add(new BusinessImage(Deterministic(vertical.BusinessId,
+                        kind == BusinessImageKind.Logo ? (byte)0x41 : (byte)0x42), vertical.BusinessId, kind,
+                        $"e2e-fixtures/{vertical.BusinessId:N}/{kind}.png", "image/png", 100, 100, 100,
+                        $"{kind} de fixture", 0, now));
+
             if (!await db.BusinessHours.AnyAsync(x => x.BusinessId == vertical.BusinessId))
                 for (var day = DayOfWeek.Monday; day <= DayOfWeek.Saturday; day++)
                     db.BusinessHours.Add(new BusinessHour(Guid.NewGuid(), vertical.BusinessId, day,

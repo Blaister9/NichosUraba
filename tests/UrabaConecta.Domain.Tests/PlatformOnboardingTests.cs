@@ -179,4 +179,69 @@ public sealed class PlatformOnboardingTests
         Assert.Contains(readiness.Requirements, x => x.Key == "hours" && x.IsApplicable && !x.IsComplete);
         Assert.False(readiness.IsReady);
     }
+
+    [Theory]
+    [InlineData(false, false, true, true)]
+    [InlineData(true, false, false, true)]
+    [InlineData(true, true, true, false)]
+    [InlineData(true, true, false, true)]
+    public void Appointments_require_eligible_linked_staff_and_duration_compatible_hours(
+        bool hasStaff, bool hasLink, bool compatibleHours, bool expectedMissing)
+    {
+        var readiness = BusinessOperationalReadiness.Evaluate(Facts(
+            BusinessCapabilities.Resolve(true, false, false)) with
+        {
+            HasEligibleStaff = hasStaff && hasLink,
+            HasBookableAppointmentConfiguration = hasStaff && hasLink && compatibleHours
+        });
+        Assert.Equal(expectedMissing, readiness.Requirements.Single(x =>
+            x.Key == "appointment-availability").IsComplete == false);
+        Assert.Equal(!expectedMissing, readiness.IsReady);
+    }
+
+    [Fact]
+    public void Virtual_business_does_not_publish_or_require_a_fake_address()
+    {
+        var readiness = BusinessOperationalReadiness.Evaluate(Facts(
+            BusinessCapabilities.Resolve(false, true, false)) with
+        {
+            LocationMode = BusinessLocationMode.Virtual,
+            OrderFulfillmentMode = OrderFulfillmentMode.Coordinated,
+            HasLocation = false,
+            HasHours = false
+        });
+        Assert.True(readiness.IsReady);
+        Assert.False(readiness.Requirements.Single(x => x.Key == "location").IsApplicable);
+        Assert.False(readiness.Requirements.Single(x => x.Key == "hours").IsApplicable);
+    }
+
+    [Fact]
+    public void Pickup_at_business_requires_a_public_physical_location()
+    {
+        var readiness = BusinessOperationalReadiness.Evaluate(Facts(
+            BusinessCapabilities.Resolve(false, false, true)) with
+        {
+            LocationMode = BusinessLocationMode.PrivatePhysical,
+            OrderFulfillmentMode = OrderFulfillmentMode.PickupAtPublicLocation,
+            HasLocation = false
+        });
+        Assert.False(readiness.IsReady);
+        Assert.Contains(readiness.Requirements, x => x.Key == "fulfillment" && !x.IsComplete);
+    }
+
+    [Fact]
+    public void Capability_graph_rejects_independent_material_switches()
+    {
+        var orders = new[] { BusinessModuleKind.PickupOrders };
+        Assert.Equal("CAPABILITY_DEPENDENCY", Assert.Throws<DomainException>(() =>
+            BusinessCapabilities.EnsureConsistent(orders, null, false, null)).Code);
+        Assert.Equal("CAPABILITY_DEPENDENCY", Assert.Throws<DomainException>(() =>
+            BusinessCapabilities.EnsureConsistent(orders, true, null, null)).Code);
+        BusinessCapabilities.EnsureConsistent(orders, false, true, false);
+    }
+
+    private static BusinessOperationalFacts Facts(IReadOnlySet<BusinessModuleKind> capabilities)
+        => new(true, true, true, true, BusinessLocationMode.PublicPhysical,
+            OrderFulfillmentMode.PickupAtPublicLocation, true, true, true, true, capabilities,
+            true, true, true, true, true, true, true, true, true);
 }

@@ -128,7 +128,9 @@ public sealed class CommercialReadinessTests(BrowserFixture fixture)
         {
             await admin.GotoAsync($"{fixture.BaseUrl}/admin/negocios/{id}");
             await Assertions.Expect(admin.GetByRole(AriaRole.Heading, new() { Name = name })).ToBeVisibleAsync();
-            var expectedImageCount = 0;
+            // Los fixtures locales ya nacen con logo y portada porque el readiness los exige. Al
+            // subir reemplazos no crece el conteo; sólo las dos piezas de galería lo incrementan.
+            var expectedImageCount = await admin.Locator("figure.business-card").CountAsync();
             foreach (var (kind, index) in new[] { ("Logo", 0), ("Cover", 0), ("Gallery", 1), ("Gallery", 2) })
             {
                 await admin.GetByLabel("Tipo de imagen").SelectOptionAsync(kind);
@@ -137,7 +139,7 @@ public sealed class CommercialReadinessTests(BrowserFixture fixture)
                 {
                     Name = $"{slug}-{kind}-{index}.png", MimeType = "image/png", Buffer = TinyPng
                 });
-                expectedImageCount++;
+                if (kind == "Gallery") expectedImageCount++;
                 await Assertions.Expect(admin.Locator("figure.business-card"))
                     .ToHaveCountAsync(expectedImageCount);
             }

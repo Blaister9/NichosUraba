@@ -15,7 +15,11 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
         var categories = await store.GetCategoriesAsync(found.Business.Id, true, ct);
         var products = await store.GetProductsAsync(found.Business.Id, true, ct);
         var photos = await store.GetProductPhotosAsync(found.Business.Id, ct);
-        return new(found.Business.Name, slug, found.Settings.PublicMessage,
+        var publicMessage = found.Business.OrderFulfillmentMode == OrderFulfillmentMode.PickupAtPublicLocation ||
+                            !found.Settings.PublicMessage.Contains("establecimiento", StringComparison.OrdinalIgnoreCase)
+            ? found.Settings.PublicMessage
+            : BusinessCapabilityProvisioner.FulfillmentMessage(found.Business.OrderFulfillmentMode);
+        return new(found.Business.Name, slug, publicMessage,
             categories.Select(CategoryDto).ToList(), products.Select(x => ProductDto(x, photos)).ToList());
     }
 
@@ -68,15 +72,19 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
         if (request.Lines.Count == 0) throw new ApiException("ORDER_LINES_REQUIRED", "Agregue al menos un producto.");
         var context = await store.GetPublicContextAsync(slug, ct)
             ?? throw new ApiException("ORDERING_NOT_AVAILABLE", "Los pedidos para recoger no están disponibles.", 404);
+        // PostgreSQL guarda los instantes como timestamptz y Npgsql sólo acepta offset UTC para
+        // ese tipo. El navegador puede devolver el mismo instante con el offset local del negocio
+        // (-05:00 en Urabá); se normaliza una sola vez antes de usarlo en cualquier consulta o fila.
+        var pickupStartUtc = request.PickupStart.ToUniversalTime();
         await using var tx = await store.BeginTransactionAsync(ct);
         var settings = await store.LockSettingsAsync(context.Business.Id, ct)
             ?? throw new ApiException("ORDERING_NOT_AVAILABLE", "Los pedidos para recoger no están disponibles.", 404);
-        await store.LockSlotAsync(context.Business.Id, request.PickupStart, ct);
+        await store.LockSlotAsync(context.Business.Id, pickupStartUtc, ct);
         var validSlots = await GetSlotsAsync(slug, DateOnly.FromDateTime(
-            TimeZoneInfo.ConvertTime(request.PickupStart, TimeZoneInfo.FindSystemTimeZoneById(context.Business.TimeZoneId)).Date), ct);
-        var slot = validSlots.Slots.SingleOrDefault(x => x.Start == request.PickupStart);
+            TimeZoneInfo.ConvertTime(pickupStartUtc, TimeZoneInfo.FindSystemTimeZoneById(context.Business.TimeZoneId)).Date), ct);
+        var slot = validSlots.Slots.SingleOrDefault(x => x.Start == pickupStartUtc);
         if (slot is null) throw new ApiException("PICKUP_SLOT_UNAVAILABLE", "La franja seleccionada ya no está disponible.", 409);
-        if (await store.CountActiveInSlotAsync(context.Business.Id, request.PickupStart, ct) >= settings.MaximumActivePerSlot)
+        if (await store.CountActiveInSlotAsync(context.Business.Id, pickupStartUtc, ct) >= settings.MaximumActivePerSlot)
             throw new ApiException("PICKUP_SLOT_FULL", "La franja alcanzó su capacidad.", 409);
         var requested = request.Lines.GroupBy(x => x.ProductId)
             .Select(g => new { ProductId = g.Key, Quantity = g.Sum(x => x.Quantity),
@@ -102,18 +110,20 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
             phoneDigits[^4..], string.IsNullOrWhiteSpace(request.Notes) ? null : protector.Protect(request.Notes.Trim()),
             code.Hash, request.ConsentNoticeVersion, now, now, lines));
         var consent = new ConsentReceipt(Guid.NewGuid(), order.BusinessId, request.ConsentNoticeVersion,
-            "Gestionar el pedido para recoger y contactar a la persona solicitante.", now);
+            "Gestionar el pedido y contactar a la persona solicitante.", now);
         consent.LinkPickupOrder(order.Id);
         store.AddOrder(order); store.AddConsent(consent);
-        await store.SaveChangesAsync(ct); await tx.CommitAsync(ct);
+        await store.SaveChangesAsync(ct);
         // Éste es el aviso que Lúmina no recibió. Ahora queda guardado antes de que nadie dependa
-        // del servicio Push: la bandeja del negocio lo tiene aunque el aviso del teléfono no llegue.
+        // del servicio Push. Se persiste dentro de la misma transacción que pedido y consentimiento:
+        // o quedan los tres hechos coherentes o no queda ninguno.
         await notifications.PublishAsync(new(order.BusinessId, NotificationAudience.Business,
             NotificationKind.OrderPlaced, "Nuevo pedido para recoger",
             $"Pedido #{order.PublicOrderNumber} por {order.Total:C0}.",
             $"/panel/{order.BusinessId}/pedidos#order-{order.Id}", TrackedEntities.PickupOrder, order.Id,
             Notification.Key(NotificationAudience.Business, NotificationKind.OrderPlaced, order.Id),
             PushAudience.Owner), ct);
+        await tx.CommitAsync(ct);
         return new(order.PublicOrderNumber, code.PlainText, order.Status.ToString(), order.Total, order.PickupStartUtc);
     }
 

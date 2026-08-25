@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Jpeg;
@@ -10,6 +11,7 @@ using SixLabors.ImageSharp.Metadata.Profiles.Exif;
 using UrabaConecta.Contracts;
 using UrabaConecta.Domain;
 using UrabaConecta.Infrastructure.Persistence;
+using UrabaConecta.Infrastructure.Identity;
 using UrabaConecta.Infrastructure.Security;
 
 namespace UrabaConecta.IntegrationTests;
@@ -171,6 +173,38 @@ public sealed partial class FounderProductionApiTests(PostgresWebFactory factory
         Assert.NotEqual(first.Id, resent.Id);
         Assert.False(await AcceptAsync(TokenFrom(first.AcceptPath), "ClaveConEnlaceViejo!2026"));
         Assert.True(await AcceptAsync(TokenFrom(resent.AcceptPath), "ClaveConEnlaceNuevo!2026"));
+    }
+
+    [Fact]
+    public async Task Owner_invitation_promotes_an_existing_worker_membership_and_synchronizes_identity()
+    {
+        using var owner = Client();
+        await Login(owner, DevelopmentSeeder.BellaOwnerEmail);
+        var email = $"invited-owner-{Guid.NewGuid():N}@demo.local";
+        var memberResponse = await owner.PostAsJsonAsync(
+            $"/api/v1/businesses/{DevelopmentSeeder.BellaBusinessId}/memberships/create-development",
+            new CreateDevelopmentMemberRequest { DisplayName = "Owner invitada", Email = email,
+                CanManageAppointments = true, CanManageConfiguration = true }, Json);
+        Assert.Equal(HttpStatusCode.Created, memberResponse.StatusCode);
+
+        using var admin = Client();
+        await Login(admin, DevelopmentSeeder.PlatformAdminEmail);
+        var invitationResponse = await admin.PostAsJsonAsync("/api/v1/admin/invitations",
+            new CreateInvitationRequest { Email = email, DisplayName = "Owner invitada",
+                Grant = "BusinessOwner", BusinessId = DevelopmentSeeder.BellaBusinessId }, Json);
+        Assert.Equal(HttpStatusCode.Created, invitationResponse.StatusCode);
+        var invitation = (await invitationResponse.Content.ReadFromJsonAsync<InvitationIssuedDto>(Json))!;
+        Assert.True(await AcceptAsync(TokenFrom(invitation.AcceptPath), "ClaveOwnerInvitada!2026"));
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var user = await db.Users.SingleAsync(x => x.Email == email);
+        Assert.Equal(MembershipRole.Owner, await db.BusinessMemberships
+            .Where(x => x.BusinessId == DevelopmentSeeder.BellaBusinessId && x.UserId == user.Id)
+            .Select(x => x.Role).SingleAsync());
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        Assert.True(await users.IsInRoleAsync(user, "BusinessOwner"));
+        Assert.False(await users.IsInRoleAsync(user, "BusinessWorker"));
     }
 
     [Fact]

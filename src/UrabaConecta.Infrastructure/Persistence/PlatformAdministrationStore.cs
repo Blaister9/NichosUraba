@@ -66,10 +66,29 @@ public sealed class PlatformAdministrationStore(AppDbContext db) : IPlatformAdmi
                          user.MustChangePassword)).FirstOrDefault(),
             HasHours = db.BusinessHours.Any(x => x.BusinessId == b.Id),
             HasService = db.Services.Any(x => x.BusinessId == b.Id && x.IsActive),
+            HasEligibleStaff = db.StaffServices.Any(link => link.BusinessId == b.Id &&
+                db.Services.Any(service => service.BusinessId == b.Id && service.Id == link.ServiceId &&
+                    service.IsActive) &&
+                db.StaffMembers.Any(staff => staff.BusinessId == b.Id && staff.Id == link.StaffMemberId &&
+                    staff.IsActive && staff.ParticipatesInAvailability)),
+            HasBookableAppointmentConfiguration = db.StaffServices.Any(link => link.BusinessId == b.Id &&
+                db.StaffMembers.Any(staff => staff.BusinessId == b.Id && staff.Id == link.StaffMemberId &&
+                    staff.IsActive && staff.ParticipatesInAvailability) &&
+                db.Services.Any(service => service.BusinessId == b.Id && service.Id == link.ServiceId &&
+                    service.IsActive && db.BusinessHours.Any(hour => hour.BusinessId == b.Id &&
+                        (hour.ClosesAt - hour.OpensAt).TotalMinutes >= service.DurationMinutes))),
             HasQueueDefinition = db.QueueDefinitions.Any(x => x.BusinessId == b.Id && x.IsActive && x.IsEnabled),
             HasPickupSettings = db.PickupOrderSettings.Any(x => x.BusinessId == b.Id && x.IsEnabled),
             HasProductCategory = db.ProductCategories.Any(x => x.BusinessId == b.Id && x.IsActive),
-            HasProduct = db.Products.Any(x => x.BusinessId == b.Id && x.IsActive),
+            HasProduct = db.Products.Any(x => x.BusinessId == b.Id && x.IsActive && x.IsAvailable &&
+                db.ProductCategories.Any(category => category.BusinessId == b.Id &&
+                    category.Id == x.ProductCategoryId && category.IsActive)),
+            HasCompatiblePickupWindow = db.PickupOrderSettings.Any(settings => settings.BusinessId == b.Id &&
+                settings.IsEnabled && db.BusinessHours.Any(hour => hour.BusinessId == b.Id &&
+                    hour.OpensAt < settings.ReceivesUntil && hour.ClosesAt > settings.ReceivesFrom &&
+                    ((hour.ClosesAt < settings.ReceivesUntil ? hour.ClosesAt : settings.ReceivesUntil) -
+                     (hour.OpensAt > settings.ReceivesFrom ? hour.OpensAt : settings.ReceivesFrom)).TotalMinutes >=
+                        settings.SlotIntervalMinutes)),
             Appointments = db.Appointments.Count(x => x.BusinessId == b.Id),
             QueueSessions = db.QueueSessions.Count(x => x.BusinessId == b.Id),
             QueueTickets = db.QueueTickets.Count(x => x.BusinessId == b.Id),
@@ -77,11 +96,25 @@ public sealed class PlatformAdministrationStore(AppDbContext db) : IPlatformAdmi
         });
 
     private static PlatformBusinessRecord Compose(BusinessSummaryRow row)
-        => new(row.Business, row.Municipality, row.Category, row.Modules, row.Owner,
+    {
+        var b = row.Business;
+        var capabilities = BusinessCapabilities.Resolve(row.Modules);
+        var facts = new BusinessOperationalFacts(!string.IsNullOrWhiteSpace(b.Name),
+            !string.IsNullOrWhiteSpace(b.ShortDescription), !string.IsNullOrWhiteSpace(b.Description),
+            !string.IsNullOrWhiteSpace(b.PublicPhone) || !string.IsNullOrWhiteSpace(b.WhatsAppUrl) ||
+                !string.IsNullOrWhiteSpace(b.PublicEmail),
+            b.LocationMode, b.OrderFulfillmentMode, !string.IsNullOrWhiteSpace(b.Address),
+            row.Images.Any(x => !x.IsDeleted && x.Kind == BusinessImageKind.Logo),
+            row.Images.Any(x => !x.IsDeleted && x.Kind == BusinessImageKind.Cover), row.Owner is not null,
+            capabilities, row.HasHours, row.HasService, row.HasEligibleStaff,
+            row.HasBookableAppointmentConfiguration, row.HasQueueDefinition, row.HasPickupSettings,
+            row.HasProductCategory, row.HasProduct, row.HasCompatiblePickupWindow);
+        return new(row.Business, row.Municipality, row.Category, row.Modules, row.Owner,
             row.HasHours, row.HasService, row.HasQueueDefinition, row.HasPickupSettings,
             row.HasProductCategory, row.HasProduct,
             row.Appointments + row.QueueSessions + row.QueueTickets + row.PickupOrders,
-            row.Images);
+            row.Images, facts);
+    }
 
     private sealed class BusinessSummaryRow
     {
@@ -93,10 +126,13 @@ public sealed class PlatformAdministrationStore(AppDbContext db) : IPlatformAdmi
         public IdentityAccount? Owner { get; init; }
         public bool HasHours { get; init; }
         public bool HasService { get; init; }
+        public bool HasEligibleStaff { get; init; }
+        public bool HasBookableAppointmentConfiguration { get; init; }
         public bool HasQueueDefinition { get; init; }
         public bool HasPickupSettings { get; init; }
         public bool HasProductCategory { get; init; }
         public bool HasProduct { get; init; }
+        public bool HasCompatiblePickupWindow { get; init; }
         public int Appointments { get; init; }
         public int QueueSessions { get; init; }
         public int QueueTickets { get; init; }
@@ -167,6 +203,10 @@ public sealed class PlatformAdministrationStore(AppDbContext db) : IPlatformAdmi
         CancellationToken cancellationToken)
         => db.BusinessMemberships.SingleOrDefaultAsync(x => x.BusinessId == businessId && x.UserId == userId,
             cancellationToken);
+    public Task<QueueDefinition?> GetQueueDefinitionAsync(Guid businessId, CancellationToken cancellationToken)
+        => db.QueueDefinitions.SingleOrDefaultAsync(x => x.BusinessId == businessId, cancellationToken);
+    public Task<PickupOrderSettings?> GetPickupSettingsAsync(Guid businessId, CancellationToken cancellationToken)
+        => db.PickupOrderSettings.SingleOrDefaultAsync(x => x.BusinessId == businessId, cancellationToken);
     public void AddBusiness(Business business) => db.Add(business);
     public void AddModule(BusinessModule module) => db.Add(module);
     public void AddMembership(BusinessMembership membership) => db.Add(membership);
