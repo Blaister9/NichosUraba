@@ -98,7 +98,8 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
                 business.HasScheduling ? business.Services : [],
                 Availability(business, source, today, availabilityDays),
                 business.HasPickupOrdering ? business.Product : null,
-                NextPickup(business, source, now)));
+                NextPickup(business, source, now), business.LocationMode.ToString(),
+                business.OrderFulfillmentMode.ToString()));
         }
         var promotions = await push.GetPublicPromotionsAsync(cancellationToken);
         return new(businesses, promotions);

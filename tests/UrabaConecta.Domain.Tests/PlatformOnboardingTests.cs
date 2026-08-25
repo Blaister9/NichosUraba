@@ -230,6 +230,21 @@ public sealed class PlatformOnboardingTests
     }
 
     [Fact]
+    public void Virtual_business_cannot_publish_physical_pickup()
+    {
+        var readiness = BusinessOperationalReadiness.Evaluate(Facts(
+            BusinessCapabilities.Resolve(false, false, true)) with
+        {
+            LocationMode = BusinessLocationMode.Virtual,
+            OrderFulfillmentMode = OrderFulfillmentMode.PickupAtPublicLocation,
+            HasLocation = false
+        });
+
+        Assert.False(readiness.IsReady);
+        Assert.Contains(readiness.Requirements, x => x.Key == "fulfillment" && !x.IsComplete);
+    }
+
+    [Fact]
     public void Capability_graph_rejects_independent_material_switches()
     {
         var orders = new[] { BusinessModuleKind.PickupOrders };

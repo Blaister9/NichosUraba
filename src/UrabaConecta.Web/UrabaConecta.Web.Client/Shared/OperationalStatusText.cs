@@ -37,7 +37,7 @@ public static class OperationalStatusText
         "Accepted" => "Aceptado",
         "Rejected" => "Rechazado",
         "Preparing" => "En preparación",
-        "ReadyForPickup" => "Listo para recoger",
+        "ReadyForPickup" => "Listo",
         "Delivered" => "Entregado",
         "Cancelled" => "Cancelado",
         _ => Unknown

@@ -67,6 +67,25 @@ public sealed record BusinessStatusChangeDto(string FromStatus, string ToStatus,
 public sealed record PlatformAuditEntryDto(Guid Id, string? ActorEmail, string Action, string PreviousState,
     string NewState, DateTimeOffset OccurredAtUtc);
 
+// ---------------------------------------------------------------------------
+// Reconciliación explícita de readiness heredado
+// ---------------------------------------------------------------------------
+
+public sealed record ReadinessReconciliationItemDto(Guid BusinessId, string Name, string CurrentStatus,
+    bool IsPublished, int ReadinessPercent, IReadOnlyList<string> MissingRequirements,
+    string ProposedAction, long BusinessVersion);
+
+public sealed record ReadinessReconciliationPlanDto(string PlanFingerprint, DateTimeOffset EvaluatedAtUtc,
+    IReadOnlyList<ReadinessReconciliationItemDto> Businesses, int ProposedChangeCount);
+
+public sealed class ApplyReadinessReconciliationRequest
+{
+    [Required, StringLength(64, MinimumLength = 64)] public string PlanFingerprint { get; set; } = "";
+}
+
+public sealed record ReadinessReconciliationApplyResultDto(string AppliedPlanFingerprint,
+    DateTimeOffset AppliedAtUtc, int AppliedCount, IReadOnlyList<Guid> AffectedBusinessIds);
+
 public sealed class SubmitForReviewRequest
 {
     public long Version { get; set; }

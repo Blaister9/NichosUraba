@@ -16,10 +16,13 @@ else
     <section class="narrow" data-testid="order-tracking">
         <p class="eyebrow">@order.BusinessName</p><h1>Pedido #@order.OrderNumber</h1>
         <span class="status @order.Status.ToLowerInvariant()">@order.StatusLabel</span>
-        <p class="lead">Recoges el @Local(order.PickupStart)</p>
+        <p class="lead">@Fulfillment.TrackingTimePrefix: @Local(order.PickupStart)</p>
+        <p>@Fulfillment.FulfillmentSummary</p>
+        @if (!string.IsNullOrWhiteSpace(order.CustomerInstructions))
+        { <p class="notice"><strong>@Fulfillment.CustomerInstructionsHeading:</strong> @order.CustomerInstructions</p> }
         <p class="meta">Celular: @order.PhoneMasked</p>
         @foreach (var line in order.Lines) { <p>@line.Quantity × @line.ProductName <strong>@line.LineTotal.ToString("C0", Colombia)</strong></p> }
-        <p class="total-pedido"><span>Total a pagar en el local</span><strong>@order.Total.ToString("C0", Colombia)</strong></p>
+        <p class="total-pedido"><span>@Fulfillment.TotalLabel</span><strong>@order.Total.ToString("C0", Colombia)</strong></p>
         <TrackingUpdates Items="updates" />
         <PushPrompt RegistrationPath="@($"/api/v1/public/orders/{Uri.EscapeDataString(Code)}/push-subscriptions")"
                     Title="Te avisamos cuando esté listo"
@@ -41,6 +44,8 @@ else
 @code {
     [Parameter] public string Code { get; set; } = "";
     private PickupOrderTrackingDto? order; private string? error; private bool busy, interactiveReady;
+    private PublicOrderFulfillmentCopy Fulfillment => PublicOrderFulfillmentSemantics.For(
+        order?.OrderFulfillmentMode, order?.LocationMode, order?.PublicAddress, order?.Municipality);
     private static readonly System.Globalization.CultureInfo Colombia = new("es-CO");
     protected override async Task OnParametersSetAsync() => await Load();
     protected override void OnAfterRender(bool firstRender)

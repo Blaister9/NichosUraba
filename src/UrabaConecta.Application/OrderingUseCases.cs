@@ -20,7 +20,10 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
             ? found.Settings.PublicMessage
             : BusinessCapabilityProvisioner.FulfillmentMessage(found.Business.OrderFulfillmentMode);
         return new(found.Business.Name, slug, publicMessage,
-            categories.Select(CategoryDto).ToList(), products.Select(x => ProductDto(x, photos)).ToList());
+            categories.Select(CategoryDto).ToList(), products.Select(x => ProductDto(x, photos)).ToList(),
+            found.Business.LocationMode.ToString(), found.Business.OrderFulfillmentMode.ToString(),
+            found.Business.LocationMode == BusinessLocationMode.PublicPhysical ? found.Business.Address : "",
+            "", found.Business.CustomerInstructions);
     }
 
     /// <summary>
@@ -33,7 +36,7 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
     public async Task<PickupSlotListDto> GetSlotsAsync(string slug, DateOnly? date = null, CancellationToken ct = default)
     {
         var context = await store.GetPublicContextAsync(slug, ct)
-            ?? throw new ApiException("ORDERING_NOT_AVAILABLE", "Los pedidos para recoger no están disponibles.", 404);
+            ?? throw new ApiException("ORDERING_NOT_AVAILABLE", "Los pedidos no están disponibles.", 404);
         var business = context.Business;
         var settings = context.Settings;
         var hours = await store.GetHoursAsync(business.Id, ct);
@@ -71,14 +74,14 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
             throw new ApiException("CONSENT_REQUIRED", "Debe aceptar la versión vigente del aviso de tratamiento de datos.");
         if (request.Lines.Count == 0) throw new ApiException("ORDER_LINES_REQUIRED", "Agregue al menos un producto.");
         var context = await store.GetPublicContextAsync(slug, ct)
-            ?? throw new ApiException("ORDERING_NOT_AVAILABLE", "Los pedidos para recoger no están disponibles.", 404);
+            ?? throw new ApiException("ORDERING_NOT_AVAILABLE", "Los pedidos no están disponibles.", 404);
         // PostgreSQL guarda los instantes como timestamptz y Npgsql sólo acepta offset UTC para
         // ese tipo. El navegador puede devolver el mismo instante con el offset local del negocio
         // (-05:00 en Urabá); se normaliza una sola vez antes de usarlo en cualquier consulta o fila.
         var pickupStartUtc = request.PickupStart.ToUniversalTime();
         await using var tx = await store.BeginTransactionAsync(ct);
         var settings = await store.LockSettingsAsync(context.Business.Id, ct)
-            ?? throw new ApiException("ORDERING_NOT_AVAILABLE", "Los pedidos para recoger no están disponibles.", 404);
+            ?? throw new ApiException("ORDERING_NOT_AVAILABLE", "Los pedidos no están disponibles.", 404);
         await store.LockSlotAsync(context.Business.Id, pickupStartUtc, ct);
         var validSlots = await GetSlotsAsync(slug, DateOnly.FromDateTime(
             TimeZoneInfo.ConvertTime(pickupStartUtc, TimeZoneInfo.FindSystemTimeZoneById(context.Business.TimeZoneId)).Date), ct);
@@ -118,7 +121,7 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
         // del servicio Push. Se persiste dentro de la misma transacción que pedido y consentimiento:
         // o quedan los tres hechos coherentes o no queda ninguno.
         await notifications.PublishAsync(new(order.BusinessId, NotificationAudience.Business,
-            NotificationKind.OrderPlaced, "Nuevo pedido para recoger",
+            NotificationKind.OrderPlaced, "Nuevo pedido",
             $"Pedido #{order.PublicOrderNumber} por {order.Total:C0}.",
             $"/panel/{order.BusinessId}/pedidos#order-{order.Id}", TrackedEntities.PickupOrder, order.Id,
             Notification.Key(NotificationAudience.Business, NotificationKind.OrderPlaced, order.Id),
@@ -133,7 +136,7 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
         var order = await store.FindByCodeAsync(codes.Hash(code), ct);
         if (order is null) return null;
         var business = await store.GetBusinessAsync(order.BusinessId, ct);
-        return TrackingDto(order, business!.Name);
+        return TrackingDto(order, business!);
     }
 
     public async Task CancelPublicAsync(string code, long version, CancellationToken ct = default)
@@ -248,7 +251,8 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
         var business = await store.GetBusinessAsync(businessId, ct)
             ?? throw new ApiException("BUSINESS_NOT_FOUND", "No encontramos el establecimiento.", 404);
         var orders = await store.ListOrdersAsync(businessId, status, date, ct);
-        return new(businessId, business.Name, business.TimeZoneId, orders.Select(AdminDto).ToList());
+        return new(businessId, business.Name, business.TimeZoneId, orders.Select(AdminDto).ToList(),
+            business.LocationMode.ToString(), business.OrderFulfillmentMode.ToString());
     }
     public async Task<PickupOrderAdminDto> ChangeStatusAsync(Guid userId, Guid businessId, Guid orderId,
         string action, PickupOrderCommandRequest request, CancellationToken ct = default)
@@ -256,6 +260,8 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
         await DemandOrders(userId, businessId, ct);
         var order = await store.GetOrderAsync(businessId, orderId, ct)
             ?? throw new ApiException("ORDER_NOT_FOUND", "No encontramos el pedido en este establecimiento.", 404);
+        var business = await store.GetBusinessAsync(businessId, ct)
+            ?? throw new ApiException("BUSINESS_NOT_FOUND", "No encontramos el establecimiento.", 404);
         var target = action.ToLowerInvariant() switch
         {
             "accept" => PickupOrderStatus.Accepted, "reject" => PickupOrderStatus.Rejected,
@@ -275,8 +281,12 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
                 $"El negocio no pudo tomar tu pedido #{order.PublicOrderNumber}. Revisa el seguimiento."),
             PickupOrderStatus.Preparing => (NotificationKind.OrderPreparing, "Pedido en preparación",
                 $"Ya están preparando tu pedido #{order.PublicOrderNumber}."),
-            PickupOrderStatus.ReadyForPickup => (NotificationKind.OrderReady, "Pedido listo para recoger",
-                $"Tu pedido #{order.PublicOrderNumber} ya está listo."),
+            PickupOrderStatus.ReadyForPickup when business.OrderFulfillmentMode ==
+                                                  OrderFulfillmentMode.PickupAtPublicLocation
+                => (NotificationKind.OrderReady, "Pedido listo para recoger",
+                    $"Tu pedido #{order.PublicOrderNumber} ya está listo para recoger. Revisa el seguimiento."),
+            PickupOrderStatus.ReadyForPickup => (NotificationKind.OrderReady, "Pedido listo",
+                $"Tu pedido #{order.PublicOrderNumber} ya está listo. Revisa el seguimiento."),
             PickupOrderStatus.Delivered => (NotificationKind.OrderDelivered, "Pedido entregado",
                 $"El negocio registró la entrega de tu pedido #{order.PublicOrderNumber}."),
             _ => (NotificationKind.OrderCancelled, "Pedido cancelado",
@@ -293,18 +303,24 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
         protector.Unprotect(o.ProtectedCustomerAlias), protector.Unprotect(o.ProtectedCustomerPhone),
         o.ProtectedNotes is null ? null : protector.Unprotect(o.ProtectedNotes), o.PickupStartUtc, o.Total,
         o.Lines.Select(LineDto).ToList(), o.CancellationReason, o.CreatedAtUtc, o.UpdatedAtUtc, o.Version);
-    private PickupOrderTrackingDto TrackingDto(PickupOrder o, string businessName) => new(o.PublicOrderNumber,
-        o.Status.ToString(), StatusLabel(o.Status), businessName, o.PickupStartUtc, o.Total, $"***{o.PhoneLast4}",
+    private PickupOrderTrackingDto TrackingDto(PickupOrder o, Business business) => new(o.PublicOrderNumber,
+        o.Status.ToString(), StatusLabel(o.Status, business.OrderFulfillmentMode), business.Name,
+        o.PickupStartUtc, o.Total, $"***{o.PhoneLast4}",
         o.Lines.Select(x => new PickupOrderLineDto(x.ProductId, x.ProductNameSnapshot, x.UnitPriceSnapshot,
-            x.Quantity, x.LineTotal, null)).ToList(), o.CanPublicCancel, o.UpdatedAtUtc, o.Version);
+            x.Quantity, x.LineTotal, null)).ToList(), o.CanPublicCancel, o.UpdatedAtUtc, o.Version,
+        business.LocationMode.ToString(), business.OrderFulfillmentMode.ToString(),
+        business.LocationMode == BusinessLocationMode.PublicPhysical ? business.Address : "", "",
+        business.CustomerInstructions);
     private PickupOrderLineDto LineDto(PickupOrderLine x) => new(x.ProductId, x.ProductNameSnapshot,
         x.UnitPriceSnapshot, x.Quantity, x.LineTotal,
         x.ProtectedNotes is null ? null : protector.Unprotect(x.ProtectedNotes));
-    private static string StatusLabel(PickupOrderStatus s) => s switch
+    private static string StatusLabel(PickupOrderStatus s, OrderFulfillmentMode fulfillment) => s switch
     {
         PickupOrderStatus.Pending => "Pendiente", PickupOrderStatus.Accepted => "Aceptado",
         PickupOrderStatus.Rejected => "Rechazado", PickupOrderStatus.Preparing => "En preparación",
-        PickupOrderStatus.ReadyForPickup => "Listo para recoger", PickupOrderStatus.Delivered => "Entregado",
+        PickupOrderStatus.ReadyForPickup => PublicOrderFulfillmentSemantics.For(
+            fulfillment.ToString(), BusinessLocationMode.PublicPhysical.ToString()).ReadyStatusLabel,
+        PickupOrderStatus.Delivered => "Entregado",
         _ => "Cancelado"
     };
     private async Task DemandOrders(Guid userId, Guid businessId, CancellationToken ct)

@@ -24,7 +24,7 @@ public sealed class PanelNavigationTests(PostgresWebFactory factory) : IClassFix
     }
 
     [Theory]
-    [InlineData("/panel/{0}/pedidos", "Pedidos para recoger")]
+    [InlineData("/panel/{0}/pedidos", "Pedidos")]
     [InlineData("/panel/{0}/configuracion", "Configuración")]
     public async Task The_destination_of_each_action_renders_its_own_page(string ruta, string titulo)
     {

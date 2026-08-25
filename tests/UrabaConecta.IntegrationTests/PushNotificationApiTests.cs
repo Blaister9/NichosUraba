@@ -267,7 +267,7 @@ public sealed class PushNotificationApiTests(PushWebFactory factory) : IClassFix
             x.Message.Title == "Nueva cita" &&
             x.Message.Url.StartsWith($"/panel/{DevelopmentSeeder.BellaBusinessId}/citas#appointment-"));
         Assert.Contains(factory.Transport.Sent, x => x.Audience == PushAudience.Owner &&
-            x.Message.Title == "Nuevo pedido para recoger" &&
+            x.Message.Title == "Nuevo pedido" &&
             x.Message.Url.StartsWith($"/panel/{DevelopmentSeeder.SazonBusinessId}/pedidos#order-"));
 
         factory.Transport.Reset();

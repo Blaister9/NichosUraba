@@ -46,7 +46,7 @@
                     }
                 </p>
                 <h1>@Profile.Name</h1>
-                <p class="meta">@DireccionCompleta</p>
+                <p class="meta">@Fulfillment.PublicPlace</p>
             </div>
         </div>
 
@@ -99,7 +99,7 @@
 
 @if (!string.IsNullOrWhiteSpace(Profile.CustomerInstructions))
 {
-    <section class="notice"><h2>Antes de venir</h2><p>@Profile.CustomerInstructions</p></section>
+    <section class="notice"><h2>@CustomerInstructionsHeading</h2><p>@Profile.CustomerInstructions</p></section>
 }
 
 @* Servicios y productos comparten anatomía: foto, nombre, detalle, precio y una acción. Quien ya
@@ -166,8 +166,8 @@
     <section class="bloque" data-tono="@CategoryLook.Tone(Profile.Category.Slug)">
         <div class="seccion-head">
             <div>
-                <h2>Para recoger</h2>
-                <p>Arma tu pedido, elige a qué hora pasas y paga en el establecimiento.</p>
+                <h2>@Fulfillment.SectionTitle</h2>
+                <p>@Fulfillment.SectionDescription</p>
             </div>
             @if (!Profile.IsPreview && Productos.Count > 0) { <a href="/negocios/@Profile.Slug/pedidos">Ver todo</a> }
         </div>
@@ -252,7 +252,10 @@
 
 <section class="contact-block"><h2>Contacto</h2>
     <ul class="contacto-lista">
-        <li><dfn>Dirección</dfn><span>@DireccionCompleta</span></li>
+        @if (Fulfillment.ShowStreetAddress)
+        { <li><dfn>Dirección</dfn><span>@Fulfillment.PublicPlace</span></li> }
+        else
+        { <li><dfn>Municipio</dfn><span>@Profile.Municipality.Name</span></li> }
         @if (!string.IsNullOrWhiteSpace(Profile.PublicPhone))
         { <li><dfn>Teléfono</dfn><a href="tel:@Profile.PublicPhone">@Profile.PublicPhone</a></li> }
         @if (!string.IsNullOrWhiteSpace(Profile.PublicEmail))
@@ -351,16 +354,11 @@
     /// Muchos negocios escriben el municipio dentro de la dirección. Añadirlo otra vez dejaba
     /// "Calle 100 # 00-00, Apartadó, Apartadó" en la ficha.
     /// </summary>
-    private string DireccionCompleta
-    {
-        get
-        {
-            var direccion = Profile.Address?.Trim() ?? "";
-            var municipio = Profile.Municipality.Name;
-            return direccion.Contains(municipio, StringComparison.OrdinalIgnoreCase)
-                ? direccion : $"{direccion}, {municipio}";
-        }
-    }
+    private PublicOrderFulfillmentCopy Fulfillment => PublicOrderFulfillmentSemantics.For(
+        Profile.OrderFulfillmentMode, Profile.LocationMode, Profile.Address, Profile.Municipality.Name);
+
+    private string CustomerInstructionsHeading => Profile.HasPickupOrdering
+        ? Fulfillment.CustomerInstructionsHeading : "Antes de venir";
 
     /// <summary>El estado ya viene resuelto por el servidor; aquí sólo se decide cómo se pinta.</summary>
     private bool EstaAbierto => Profile.OpenStatus?.StartsWith("Abierto", StringComparison.OrdinalIgnoreCase) == true;
@@ -398,7 +396,7 @@
         : Profile.Services.Count > 0 ? $"/negocios/{Profile.Slug}/citas"
         : $"tel:{Profile.PublicPhone}";
 
-    private string AccionTexto => Profile.HasPickupOrdering ? "Pedir para recoger"
+    private string AccionTexto => Profile.HasPickupOrdering ? Fulfillment.PrimaryAction
         : Profile.HasVirtualQueue ? "Tomar turno"
         : Profile.Services.Count > 0 ? "Reservar cita"
         : "Llamar al negocio";

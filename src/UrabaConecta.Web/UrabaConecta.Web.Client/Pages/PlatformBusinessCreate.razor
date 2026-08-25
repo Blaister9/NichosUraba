@@ -122,7 +122,7 @@ else
                 <p class="form-legend">Elige al menos una. Podrás cambiarlo después.</p>
                 <label class="check"><InputCheckbox @bind-Value="request.Appointments" data-testid="modulo-citas" /> Citas con hora reservada</label>
                 <label class="check"><InputCheckbox @bind-Value="request.VirtualQueues" data-testid="modulo-turnos" /> Turnos por orden de llegada</label>
-                <label class="check"><InputCheckbox @bind-Value="request.PickupOrders" data-testid="modulo-pedidos" /> Pedidos para recoger</label>
+                <label class="check"><InputCheckbox @bind-Value="request.PickupOrders" data-testid="modulo-pedidos" /> Pedidos</label>
                 @if (SuggestedFor(request.CategoryId) is not null)
                 {
                     <p class="field-hint" data-testid="modulo-sugerencia">
@@ -147,7 +147,7 @@ else
                     <span class="field-hint">Opcional. Por ejemplo: Hamburguesas.</span></label>
                 <label>Producto inicial<InputText @bind-Value="request.InitialProductName" /></label>
                 <label>Preparación mínima en minutos<InputNumber @bind-Value="request.PickupPreparationMinutes" /></label>
-                <label>Intervalo de recogida en minutos<InputNumber @bind-Value="request.PickupSlotMinutes" /></label>
+                <label>Intervalo de atención en minutos<InputNumber @bind-Value="request.PickupSlotMinutes" /></label>
                 <label>Cupo por intervalo<InputNumber @bind-Value="request.PickupCapacity" /></label>
             }
         }
@@ -357,7 +357,7 @@ else
         {
             request.Appointments ? "Citas" : null,
             request.VirtualQueues ? "Turnos" : null,
-            request.PickupOrders ? "Pedidos para recoger" : null
+            request.PickupOrders ? "Pedidos" : null
         }.Where(x => x is not null);
         return string.Join(", ", seleccion) is { Length: > 0 } texto ? texto : "sin definir";
     }

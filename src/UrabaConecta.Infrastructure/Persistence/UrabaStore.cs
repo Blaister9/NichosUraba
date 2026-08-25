@@ -45,6 +45,7 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
         var rows = await query.OrderBy(x => x.b.Name).Select(x => new
         {
             x.b.Id, x.b.Slug, x.b.Name, x.b.Description, x.b.ShortDescription, x.b.Address, x.b.LocationMode,
+            x.b.OrderFulfillmentMode,
             CategorySlug = x.c.Slug, CategoryName = x.c.Name,
             MunicipalitySlug = x.m.Slug, MunicipalityName = x.m.Name,
             HasQueue = db.BusinessModules.Any(m => m.BusinessId == x.b.Id && m.Module == BusinessModuleKind.VirtualQueues && m.IsEnabled),
@@ -75,7 +76,7 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
             x.HasQueue && x.QueueIsOpen,
             OpenStatus(x.TimeZoneId, x.Hours
                 .Select(h => new BusinessHourDto(h.Day, h.OpensAt.ToString("HH:mm"), h.ClosesAt.ToString("HH:mm")))
-                .ToList()))).ToList();
+                .ToList()), x.LocationMode.ToString(), x.OrderFulfillmentMode.ToString())).ToList();
     }
 
     /// <summary>
@@ -262,7 +263,7 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
                           orderby b.Name
                           select new
                           {
-                              b.Id, b.Slug, b.Name, b.TimeZoneId,
+                              b.Id, b.Slug, b.Name, b.TimeZoneId, b.LocationMode, b.OrderFulfillmentMode,
                               CategorySlug = c.Slug, CategoryName = c.Name,
                               MunicipalitySlug = m.Slug, MunicipalityName = m.Name,
                               HasQueue = db.BusinessModules.Any(x => x.BusinessId == b.Id &&
@@ -344,7 +345,8 @@ public sealed class UrabaStore(AppDbContext db, IObjectStorage storage, IPublicD
                     x.Product.Photo?.AltText),
                 x.Pickup is null ? null : new HomePickupSettingsSource(x.Pickup.MinimumPreparationMinutes,
                     x.Pickup.SlotIntervalMinutes, x.Pickup.MaximumActivePerSlot,
-                    x.Pickup.ReceivesFrom, x.Pickup.ReceivesUntil));
+                    x.Pickup.ReceivesFrom, x.Pickup.ReceivesUntil),
+                x.LocationMode, x.OrderFulfillmentMode);
         }).ToList();
 
         // Sólo el primer servicio de cada negocio con agenda: es el único cuya disponibilidad se

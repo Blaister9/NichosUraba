@@ -585,7 +585,8 @@
         foreach (var business in businesses.Where(x => x.HasPickupOrdering).OrderBy(ShowcasePriority))
         {
             if (business.Product is not { } product) continue;
-            primaryPieces.Add(ProductPiece(business, product, PickupText(business.NextPickupStart), primary: false));
+            primaryPieces.Add(ProductPiece(business, product,
+                PickupText(business.NextPickupStart, business.OrderFulfillmentMode), primary: false));
             covered.Add(business.Slug);
         }
         pieces.AddRange(primaryPieces.OrderBy(PrimaryPiecePriority));
@@ -704,10 +705,14 @@
     private static readonly System.Globalization.CultureInfo Colombiano = new("es-CO");
     private static string Money(decimal value) => value.ToString("C0", Colombiano);
     private static string Duration(int minutes) => minutes < 60 ? $"{minutes} min" : $"{minutes / 60} h";
-    private static string PickupText(DateTimeOffset? start) => start is null ? "consulta disponibilidad"
-        : TimeZoneInfo.ConvertTime(start.Value, Colombia).Date == TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Colombia).Date
-            ? $"recoges hoy {TimeZoneInfo.ConvertTime(start.Value, Colombia):h:mm tt}"
-            : $"recoges {TimeZoneInfo.ConvertTime(start.Value, Colombia):ddd h:mm tt}";
+    private static string PickupText(DateTimeOffset? start, string fulfillmentMode)
+    {
+        if (start is null) return "consulta disponibilidad";
+        var local = TimeZoneInfo.ConvertTime(start.Value, Colombia);
+        var prefix = PublicOrderFulfillmentSemantics.For(fulfillmentMode, "").AvailabilityPrefix;
+        return local.Date == TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Colombia).Date
+            ? $"{prefix} hoy {local:h:mm tt}" : $"{prefix} {local:ddd h:mm tt}";
+    }
     private static string CalmState(HomeFeedBusinessDto business) => business.OpenStatus is { Length: > 0 } state
         ? state : "Consulta el horario de hoy";
     private static string CleanName(string name) => name.Replace(" · DEMO", "", StringComparison.OrdinalIgnoreCase);

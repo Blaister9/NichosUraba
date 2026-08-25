@@ -156,6 +156,7 @@ builder.Services.AddScoped<IMembershipAdministrationStore, MembershipAdministrat
 builder.Services.AddScoped<IQueueStore, QueueStore>();
 builder.Services.AddScoped<IOrderingStore, OrderingStore>();
 builder.Services.AddScoped<IPlatformAdministrationStore, PlatformAdministrationStore>();
+builder.Services.AddScoped<IBusinessReadinessReconciliation, BusinessReadinessReconciliation>();
 builder.Services.AddScoped<IOwnerDashboardStore, OwnerDashboardStore>();
 builder.Services.AddScoped<IBusinessTimeZoneResolver, BusinessTimeZoneResolver>();
 builder.Services.AddSingleton<IOwnerDashboardDiagnostics, OwnerDashboardDiagnostics>();
@@ -446,6 +447,13 @@ platformApi.MapGet("/businesses",
 platformApi.MapGet("/businesses/{businessId:guid}",
     (Guid businessId, HttpContext http, IPlatformAdministrationUseCases useCases, CancellationToken ct) =>
         useCases.GetAsync(Actor(http), businessId, ct));
+platformApi.MapPost("/readiness-reconciliation/dry-run",
+    (HttpContext http, IBusinessReadinessReconciliation reconciliation, CancellationToken ct) =>
+        reconciliation.DryRunAsync(Actor(http), ct));
+platformApi.MapPost("/readiness-reconciliation/apply",
+    (ApplyReadinessReconciliationRequest request, HttpContext http,
+        IBusinessReadinessReconciliation reconciliation, CancellationToken ct) =>
+        reconciliation.ApplyAsync(Actor(http), request, ct));
 platformApi.MapPost("/businesses",
     async (CreatePlatformBusinessRequest request, HttpContext http,
         IPlatformAdministrationUseCases useCases, CancellationToken ct) =>

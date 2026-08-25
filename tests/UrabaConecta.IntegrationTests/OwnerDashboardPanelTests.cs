@@ -74,7 +74,7 @@ public sealed class OwnerDashboardPanelTests(DashboardWebFactory factory) : ICla
         Assert.Contains("data-testid=\"orders-summary\"", html);
         Assert.DoesNotContain("data-testid=\"appointments-summary\"", html);
         Assert.DoesNotContain("data-testid=\"queues-summary\"", html);
-        Assert.Contains("Listos para recoger", html);
+        Assert.Contains("Listos", html);
         Assert.Contains("Operar pedidos", html);
     }
 

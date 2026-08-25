@@ -26,7 +26,7 @@ public sealed class OperationalStatusTextTests
     [InlineData("Accepted", "Aceptado")]
     [InlineData("Rejected", "Rechazado")]
     [InlineData("Preparing", "En preparación")]
-    [InlineData("ReadyForPickup", "Listo para recoger")]
+    [InlineData("ReadyForPickup", "Listo")]
     [InlineData("Delivered", "Entregado")]
     [InlineData("Cancelled", "Cancelado")]
     public void Every_order_status_has_a_human_name(string status, string esperado)

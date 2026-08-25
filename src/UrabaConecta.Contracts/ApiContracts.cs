@@ -37,7 +37,8 @@ public sealed record BusinessCardDto(string Slug, string Name, OptionDto Categor
     string Description, string Address, bool HasVirtualQueue = false, bool HasPickupOrdering = false,
     bool HasScheduling = false, string? LogoUrl = null, string? CoverUrl = null,
     string? LogoAltText = null, string? CoverAltText = null, string ShortDescription = "",
-    decimal? PriceFrom = null, bool QueueIsOpen = false, string? OpenStatus = null);
+    decimal? PriceFrom = null, bool QueueIsOpen = false, string? OpenStatus = null,
+    string LocationMode = "PublicPhysical", string OrderFulfillmentMode = "PickupAtPublicLocation");
 public sealed record BusinessHourDto(DayOfWeek Day, string OpensAt, string ClosesAt);
 
 // --- Lo que la Home necesita, y nada más ------------------------------------------------------
@@ -67,7 +68,8 @@ public sealed record HomeProductDto(Guid Id, string Name, decimal ReferencePrice
 public sealed record HomeFeedBusinessDto(string Slug, string Name, OptionDto Category, OptionDto Municipality,
     bool HasVirtualQueue, bool HasPickupOrdering, bool HasScheduling, string? CoverUrl, string? CoverAltText,
     decimal? PriceFrom, string? OpenStatus, HomeQueueDto? Queue, IReadOnlyList<HomeServiceDto> Services,
-    HomeAvailabilityDto? Availability, HomeProductDto? Product, DateTimeOffset? NextPickupStart);
+    HomeAvailabilityDto? Availability, HomeProductDto? Product, DateTimeOffset? NextPickupStart,
+    string LocationMode = "PublicPhysical", string OrderFulfillmentMode = "PickupAtPublicLocation");
 
 public sealed record HomeFeedDto(IReadOnlyList<HomeFeedBusinessDto> Businesses,
     IReadOnlyList<BusinessPromotionDto> Promotions);
@@ -379,7 +381,9 @@ public sealed record ProductDto(Guid Id, Guid CategoryId, string Name, string De
     decimal ReferencePrice, int DisplayOrder, bool IsActive, long Version,
     string? ImageUrl = null, string? ImageAltText = null, bool IsAvailable = true);
 public sealed record PickupMenuDto(string BusinessName, string BusinessSlug, string PublicMessage,
-    IReadOnlyList<ProductCategoryDto> Categories, IReadOnlyList<ProductDto> Products);
+    IReadOnlyList<ProductCategoryDto> Categories, IReadOnlyList<ProductDto> Products,
+    string LocationMode = "PublicPhysical", string OrderFulfillmentMode = "PickupAtPublicLocation",
+    string PublicAddress = "", string Municipality = "", string? CustomerInstructions = null);
 public sealed record PickupSlotDto(DateTimeOffset Start, DateTimeOffset End, int RemainingCapacity);
 public sealed record PickupSlotListDto(string BusinessTimeZone, IReadOnlyList<PickupSlotDto> Slots);
 public sealed record PickupOrderSettingsDto(Guid Id, Guid BusinessId, bool IsEnabled, string PublicMessage,
@@ -469,14 +473,17 @@ public sealed record PickupOrderCreatedDto(int OrderNumber, string TrackingCode,
     decimal Total, DateTimeOffset PickupStart);
 public sealed record PickupOrderTrackingDto(int OrderNumber, string Status, string StatusLabel,
     string BusinessName, DateTimeOffset PickupStart, decimal Total, string PhoneMasked,
-    IReadOnlyList<PickupOrderLineDto> Lines, bool CanCancel, DateTimeOffset UpdatedAtUtc, long Version);
+    IReadOnlyList<PickupOrderLineDto> Lines, bool CanCancel, DateTimeOffset UpdatedAtUtc, long Version,
+    string LocationMode = "PublicPhysical", string OrderFulfillmentMode = "PickupAtPublicLocation",
+    string PublicAddress = "", string Municipality = "", string? CustomerInstructions = null);
 public sealed record PickupOrderAdminDto(Guid Id, int OrderNumber, string Status, string CustomerAlias,
     string Phone, string? Notes, DateTimeOffset PickupStart, decimal Total,
     IReadOnlyList<PickupOrderLineDto> Lines, string? CancellationReason,
     DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, long Version);
 /// <summary>Los pedidos junto con el negocio que los atiende, por la misma razón que las citas.</summary>
 public sealed record PickupOrderBoardDto(Guid BusinessId, string BusinessName, string TimeZoneId,
-    IReadOnlyList<PickupOrderAdminDto> Items);
+    IReadOnlyList<PickupOrderAdminDto> Items,
+    string LocationMode = "PublicPhysical", string OrderFulfillmentMode = "PickupAtPublicLocation");
 
 public sealed class PickupOrderCommandRequest
 {

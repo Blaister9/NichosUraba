@@ -3,15 +3,16 @@
 @inject IUrabaConectaApi Api
 @inject NavigationManager Navigation
 
-<PageTitle>Pedidos para recoger | UrabáConecta</PageTitle>
+<PageTitle>@(menu is null ? "Pedidos" : Fulfillment.PageTitle) | UrabáConecta</PageTitle>
 <a class="back-link" href="/negocios/@Slug">← Volver al negocio</a>
 @if (error is not null) { <div class="error" role="alert">@error</div> }
 @if (menu is null && error is null) { <p class="notice">Cargando menú…</p> }
 else if (menu is not null && created is null)
 {
     <div class="panel-header">
-        <p class="eyebrow">@menu.BusinessName</p><h1>Pedido para recoger</h1>
+        <p class="eyebrow">@menu.BusinessName</p><h1>@Fulfillment.PageTitle</h1>
         <p class="meta">@menu.PublicMessage</p>
+        <p class="notice">@Fulfillment.FulfillmentSummary</p>
     </div>
     @* Atajos a cada parte de la carta. Con tres categorías sobra desplazarse a ciegas; con ocho es
        la diferencia entre elegir y rendirse. *@
@@ -113,6 +114,7 @@ else if (menu is not null && created is null)
             <p class="summary-empty">Todavía no has agregado nada. Elige algo del menú de arriba.</p>
         }
         <p class="total-pedido"><span>@CartCount @(CartCount == 1 ? "unidad" : "unidades")</span><strong>@CartTotal.ToString("C0", Colombia)</strong></p>
+        <p class="meta">@Fulfillment.SlotHelp</p>
         @* Al hidratar, el circuito crea una instancia nueva y vuelve a pedir menú y franjas: la
            lista prerenderizada desaparece durante ese segundo. Antes el formulario ya estaba
            habilitado en esa ventana, así que quien llegaba rápido encontraba el selector de hora
@@ -121,7 +123,7 @@ else if (menu is not null && created is null)
         <EditForm Model="request" OnValidSubmit="Submit" FormName="pickup-order">
             <fieldset disabled="@(!Ready)">
             <DataAnnotationsValidator /><ValidationSummary />
-            <label>Hora para recoger
+            <label>@Fulfillment.SlotLabel
                 <InputSelect @bind-Value="selectedSlot">
                     <option value="">Selecciona una franja</option>
                     @foreach (var slot in slots) { <option value="@slot.Start.ToString("O")">@Local(slot.Start)</option> }
@@ -137,7 +139,7 @@ else if (menu is not null && created is null)
                 y el <a href="/legal/aviso-de-privacidad" target="_blank">aviso de privacidad</a>.
                 Guardamos la fecha de tu aceptación y la versión vigente de la política.
             </p>
-            <p class="meta">El pago se realiza directamente en el establecimiento. UrabáConecta no procesa pagos.</p>
+            <p class="meta">@Fulfillment.PaymentNotice</p>
             @if (!Ready) { <p class="notice" role="status">Preparando el formulario…</p> }
             <button class="primary btn-grande" disabled="@(!Ready || busy || CartCount == 0 || string.IsNullOrEmpty(selectedSlot))">@(busy ? "Enviando pedido…" : "Confirmar pedido")</button>
             </fieldset>
@@ -151,8 +153,7 @@ else if (created is not null)
     <section class="narrow" data-testid="order-created">
         <p class="eyebrow">@menu?.BusinessName</p>
         <h1>Recibimos tu pedido #@created.OrderNumber</h1>
-        <p class="lead">Total a pagar: @created.Total.ToString("C0", Colombia). Pagas al recogerlo en el
-            establecimiento.</p>
+        <p class="lead">Total: @created.Total.ToString("C0", Colombia). @Fulfillment.ConfirmationText</p>
         <p>El negocio lo confirma y prepara. Guarda este enlace: con él sigues el estado sin crear cuenta.</p>
         <a class="button-link btn-grande" href="/seguimiento/pedidos/@created.TrackingCode">Seguir mi pedido</a>
     </section>
@@ -165,6 +166,8 @@ else if (created is not null)
     private CreatePickupOrderRequest request = new();
     private PickupOrderCreatedDto? created; private string selectedSlot = ""; private string? error; private bool busy;
     private bool interactiveReady, loadingData = true;
+    private PublicOrderFulfillmentCopy Fulfillment => PublicOrderFulfillmentSemantics.For(
+        menu?.OrderFulfillmentMode, menu?.LocationMode, menu?.PublicAddress, menu?.Municipality);
     /// <summary>El formulario sólo acepta interacción con el circuito vivo y los datos ya cargados.</summary>
     private bool Ready => interactiveReady && !loadingData;
     private static readonly System.Globalization.CultureInfo Colombia = new("es-CO");

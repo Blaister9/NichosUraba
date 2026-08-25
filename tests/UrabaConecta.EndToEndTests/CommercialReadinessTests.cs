@@ -107,8 +107,8 @@ public sealed class CommercialReadinessTests(BrowserFixture fixture)
         await page.Locator("[data-testid=campo-descripcion-breve]").FillAsync("Negocio de comprobación.");
         await page.Locator("[data-testid=continuar]").ClickAsync();
         await Assertions.Expect(page.GetByLabel("Duración del servicio en minutos")).ToBeEnabledAsync();
-        await page.GetByLabel("Pedidos para recoger").CheckAsync();
-        await Assertions.Expect(page.GetByLabel("Intervalo de recogida en minutos")).ToBeEnabledAsync();
+        await page.GetByLabel("Pedidos").CheckAsync();
+        await Assertions.Expect(page.GetByLabel("Intervalo de atención en minutos")).ToBeEnabledAsync();
         await Assertions.Expect(page.GetByLabel("Preparación mínima en minutos")).ToBeEnabledAsync();
         await Assertions.Expect(page.GetByLabel("Cupo por intervalo")).ToBeEnabledAsync();
     }

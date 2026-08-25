@@ -90,7 +90,7 @@ else
         <section class="panel-card" data-testid="capacidades"><h2>Funciones</h2>
             <label class="check"><input type="checkbox" @bind="appointments" data-testid="cap-citas" /> Citas</label>
             <label class="check"><input type="checkbox" @bind="queues" data-testid="cap-turnos" /> Turnos virtuales</label>
-            <label class="check"><input type="checkbox" @bind="orders" data-testid="cap-pedidos" /> Pedidos para recoger</label>
+            <label class="check"><input type="checkbox" @bind="orders" data-testid="cap-pedidos" /> Pedidos</label>
 
             <p class="meta">Citas habilita Servicios y Personal. Pedidos habilita Productos.</p>
             <button class="secondary" @onclick="SaveModules" disabled="@readOnly">Guardar funciones</button>

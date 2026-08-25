@@ -6,7 +6,7 @@
 <PageTitle>Pedidos | UrabáConecta</PageTitle>
 <a class="back-link" href="/panel">← Mis negocios</a>
 <div class="panel-header">
-    <p class="eyebrow">Operación</p><h1>Pedidos para recoger</h1>
+    <p class="eyebrow">Operación</p><h1>Pedidos</h1>
     @* El nombre del establecimiento, para quien llega por dirección directa. *@
     <p class="operation-business" data-testid="business-name">@businessName</p>
 </div>
@@ -38,8 +38,8 @@
     <article class="queue-row order-operation-row" id="order-@order.Id" data-testid="admin-order">
         <div class="ticket-badge">#@order.OrderNumber</div>
         <div><strong>@order.CustomerAlias · @order.Total.ToString("C0", Colombia)</strong>
-            <br /><span class="meta"><span data-testid="order-status">@OperationalStatusText.Order(order.Status)</span>
-                · Recoge @Local(order.PickupStart) · @order.Phone</span>
+            <br /><span class="meta"><span data-testid="order-status">@OrderStatus(order.Status)</span>
+                · @Fulfillment.SlotLabel @Local(order.PickupStart) · @order.Phone</span>
             @foreach (var line in order.Lines) { <div>@line.Quantity × @line.ProductName</div> }
         </div>
         <div class="actions">
@@ -61,6 +61,7 @@
     [Parameter] public Guid BusinessId { get; set; }
     private IReadOnlyList<PickupOrderAdminDto> orders = []; private string? error, message;
     private string businessName = "", timeZoneId = "America/Bogota";
+    private string locationMode = "PublicPhysical", fulfillmentMode = "PickupAtPublicLocation";
     private bool interactiveReady, busy, loading = true;
     private string selectedTab = "all";
     private bool Blocked => !interactiveReady || busy || loading;
@@ -102,6 +103,8 @@
             orders = board.Items;
             businessName = board.BusinessName;
             timeZoneId = board.TimeZoneId;
+            locationMode = board.LocationMode;
+            fulfillmentMode = board.OrderFulfillmentMode;
         }
         catch (ApiException ex) { error = ex.Message; }
         catch (Exception) { error = "No pudimos cargar los pedidos. Intente de nuevo."; }
@@ -127,9 +130,13 @@
     private Task Accept(PickupOrderAdminDto o) => Act(o, "accept", "aceptado.");
     private Task Reject(PickupOrderAdminDto o) => Act(o, "reject", "rechazado.", "No disponible");
     private Task Prepare(PickupOrderAdminDto o) => Act(o, "prepare", "en preparación.");
-    private Task Ready(PickupOrderAdminDto o) => Act(o, "ready", "listo para recoger.");
+    private Task Ready(PickupOrderAdminDto o) => Act(o, "ready", "listo.");
     private Task Deliver(PickupOrderAdminDto o) => Act(o, "deliver", "entregado.");
-    private Task Cancel(PickupOrderAdminDto o) => Act(o, "cancel", "cancelado.", "Cancelado por el establecimiento");
+    private Task Cancel(PickupOrderAdminDto o) => Act(o, "cancel", "cancelado.", "Cancelado por el negocio");
+    private PublicOrderFulfillmentCopy Fulfillment =>
+        PublicOrderFulfillmentSemantics.For(fulfillmentMode, locationMode);
+    private string OrderStatus(string status) => status == "ReadyForPickup"
+        ? Fulfillment.ReadyStatusLabel : OperationalStatusText.Order(status);
     /// <summary>
     /// La hora del establecimiento. Antes se convertía siempre a Bogotá y con formato corto del
     /// sistema; ahora sale de la zona que el servidor dice tener configurada para este negocio.

@@ -17,7 +17,7 @@ public enum PlatformAuditAction
     BusinessCreated, BusinessUpdated, ModulesChanged, OwnerAssigned, OwnerChanged,
     BusinessActivated, BusinessSuspended, BusinessReactivated, BusinessArchived,
     PilotAccountCreated, TemporaryPasswordChanged, BusinessDeleted,
-    BusinessSubmittedForReview, BusinessReviewRejected,
+    BusinessSubmittedForReview, BusinessReviewRejected, BusinessReadinessReconciled,
     ImageUploaded, ImageRemoved, InvitationCreated, InvitationAccepted,
     InvitationRevoked, InvitationResent
 }

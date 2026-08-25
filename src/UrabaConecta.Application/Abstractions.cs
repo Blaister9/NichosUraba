@@ -52,7 +52,8 @@ public sealed record HomeFeedBusinessSource(Guid Id, string Slug, string Name, s
     OptionDto Category, OptionDto Municipality, bool HasVirtualQueue, bool HasPickupOrdering,
     bool HasScheduling, string? CoverUrl, string? CoverAltText, decimal? PriceFrom,
     IReadOnlyList<BusinessHourDto> Hours, HomeQueueDto? Queue, IReadOnlyList<HomeServiceDto> Services,
-    HomeProductDto? Product, HomePickupSettingsSource? Pickup);
+    HomeProductDto? Product, HomePickupSettingsSource? Pickup,
+    BusinessLocationMode LocationMode, OrderFulfillmentMode OrderFulfillmentMode);
 
 public sealed record HomePickupSettingsSource(int MinimumPreparationMinutes, int SlotIntervalMinutes,
     int MaximumActivePerSlot, TimeOnly ReceivesFrom, TimeOnly ReceivesUntil);
@@ -270,6 +271,18 @@ public interface IPlatformAdministrationUseCases
         SaveAvailabilityExceptionRequest request, CancellationToken cancellationToken = default);
     Task DeleteSchedulingExceptionAsync(PlatformActor actor, Guid businessId, Guid exceptionId, long version,
         CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Mantenimiento explícito para negocios publicados antes del guard continuo. Nunca se ejecuta
+/// durante el arranque: primero genera un plan firmado y sólo PlatformAdmin puede aplicarlo.
+/// </summary>
+public interface IBusinessReadinessReconciliation
+{
+    Task<ReadinessReconciliationPlanDto> DryRunAsync(PlatformActor actor,
+        CancellationToken cancellationToken = default);
+    Task<ReadinessReconciliationApplyResultDto> ApplyAsync(PlatformActor actor,
+        ApplyReadinessReconciliationRequest request, CancellationToken cancellationToken = default);
 }
 
 public interface IMembershipAdministrationStore
