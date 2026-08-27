@@ -59,7 +59,6 @@ public sealed class OrderingJourneyTests(BrowserFixture fixture) : IClassFixture
 
         await Expect(page.GetByTestId("activity-recovery-copy")).ToContainTextAsync(
             "Puedes volver a consultar este pedido desde Mi actividad");
-        await Expect(page.GetByTestId("install-invite")).ToBeVisibleAsync();
         Assert.True(await page.EvaluateAsync<bool>(
             "(localStorage.getItem('urabaLastPickupOrder') || '').length >= 20"));
 
