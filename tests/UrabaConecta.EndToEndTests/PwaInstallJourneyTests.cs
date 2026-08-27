@@ -5,26 +5,21 @@ using UrabaConecta.Infrastructure.Persistence;
 namespace UrabaConecta.EndToEndTests;
 
 /// <summary>
-/// La pregunta que estas pruebas contestan no es "¿es instalable?" sino "¿una persona que abre
-/// UrabáConecta en Android descubre cómo instalarla sin conocer el menú del navegador?".
-///
-/// Por eso todo corre con el agente de un Honor real y se comprueba el texto que se lee en
-/// pantalla, no la existencia del manifiesto. Los dos caminos del navegador se provocan a
-/// propósito: con beforeinstallprompt disponible y sin él, que es el caso que motivó el trabajo.
+/// Comprueba la experiencia de instalación que ve una persona en un teléfono: oferta nativa,
+/// alternativa manual mínima, descarte persistente y ausencia de insistencia si ya está instalada.
 /// </summary>
 public sealed class PwaInstallJourneyTests(BrowserFixture fixture) : IClassFixture<BrowserFixture>
 {
-    /// <summary>Un Honor con Chrome, que es el dispositivo donde se detectó el problema.</summary>
-    private const string AgenteAndroid =
-        "Mozilla/5.0 (Linux; Android 13; HONOR X9a) AppleWebKit/537.36 (KHTML, like Gecko) " +
+    private const string AgenteMovil =
+        "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) " +
         "Chrome/120.0.0.0 Mobile Safari/537.36";
 
     /// <summary>
-    /// Chrome Android sin oferta del navegador: el camino manual tiene que estar escrito, y con
-    /// las palabras que aparecen en ESE menú.
+    /// Sin oferta programática no aparece un botón que finja abrir el instalador. Sólo queda la
+    /// instrucción corta del menú que el dispositivo sí permite usar.
     /// </summary>
     [Fact]
-    public async Task Chrome_android_without_native_offer_shows_the_manual_route()
+    public async Task Mobile_browser_without_native_offer_shows_only_the_manual_route()
     {
         await using var context = await AndroidContext();
         var page = await context.NewPageAsync();
@@ -37,9 +32,10 @@ public sealed class PwaInstallJourneyTests(BrowserFixture fixture) : IClassFixtu
         await page.GetByTestId("app-status-install").ClickAsync();
         var pasos = page.GetByTestId("app-status-steps");
         await Expect(pasos).ToBeVisibleAsync();
-        // Las dos palabras que Chrome usa en Android, porque el rótulo cambia según la versión.
+        await Expect(page.GetByTestId("install-native")).ToHaveCountAsync(0);
         await Expect(pasos).ToContainTextAsync("Instalar aplicación");
         await Expect(pasos).ToContainTextAsync("pantalla de inicio");
+        await Expect(pasos.Locator("li")).ToHaveCountAsync(1);
 
         // Nada de esto puede empujar la pantalla a lo ancho en un teléfono.
         Assert.False(await page.EvaluateAsync<bool>(
@@ -57,15 +53,19 @@ public sealed class PwaInstallJourneyTests(BrowserFixture fixture) : IClassFixtu
         await using var context = await AndroidContext();
         await context.AddInitScriptAsync(GuionOfertaNativa);
         var page = await context.NewPageAsync();
-        await page.GotoAsync($"{fixture.BaseUrl}/seguimiento");
+        await page.GotoAsync(fixture.BaseUrl);
 
-        var boton = page.GetByTestId("app-status-install");
+        var invitacion = page.GetByTestId("install-invite");
+        await Expect(invitacion).ToBeVisibleAsync(new() { Timeout = 30_000 });
+        await Expect(invitacion).ToContainTextAsync("Instalar UrabáConecta");
+        await Expect(invitacion).ToContainTextAsync("Ten tus pedidos y seguimiento a la mano.");
+        var boton = invitacion.GetByTestId("install-native");
         await Expect(boton).ToBeVisibleAsync(new() { Timeout = 30_000 });
-        await Expect(boton).ToHaveTextAsync("Instalar");
+        await Expect(boton).ToHaveTextAsync("Instalar UrabáConecta");
         Assert.Equal("native", await page.EvaluateAsync<string>("urabaApp.install.state().mode"));
 
         await boton.ClickAsync();
-        await Expect(page.GetByTestId("app-status-app-valor")).ToHaveTextAsync("Instalada");
+        await Expect(invitacion).ToHaveCountAsync(0);
         Assert.True(await page.EvaluateAsync<bool>("window.__dialogoAbierto === true"));
     }
 
@@ -80,6 +80,8 @@ public sealed class PwaInstallJourneyTests(BrowserFixture fixture) : IClassFixtu
         await context.AddInitScriptAsync(GuionModoApp);
         var page = await context.NewPageAsync();
 
+        await page.GotoAsync(fixture.BaseUrl);
+        await Expect(page.GetByTestId("install-invite")).ToHaveCountAsync(0);
         await page.GotoAsync($"{fixture.BaseUrl}/seguimiento");
         await Expect(page.GetByTestId("app-status-app-valor")).ToHaveTextAsync("Instalada",
             new() { Timeout = 30_000 });
@@ -87,78 +89,49 @@ public sealed class PwaInstallJourneyTests(BrowserFixture fixture) : IClassFixtu
         await Expect(page.GetByTestId("app-status-install")).ToHaveCountAsync(0);
         await Expect(page.GetByTestId("install-invite")).ToHaveCountAsync(0);
 
-        await Login(page, DevelopmentSeeder.CorteOwnerEmail);
-        await Expect(page.GetByTestId("app-status-app-valor")).ToHaveTextAsync("Instalada",
-            new() { Timeout = 30_000 });
-        await Expect(page.GetByTestId("install-invite")).ToHaveCountAsync(0);
     }
 
     /// <summary>
-    /// Recordar una instalación no es estar dentro de la aplicación. La marca de localStorage
-    /// sobrevive a desinstalar, y antes bastaba para borrar el botón del DOM y dejar la pantalla
-    /// sin ninguna salida. El rótulo puede decir "Instalada"; el camino tiene que seguir ahí.
+    /// Una instalación aceptada se recuerda también al volver desde una pestaña: no se repite la
+    /// invitación ni queda otro CTA de instalación en Mi actividad.
     /// </summary>
     [Fact]
-    public async Task A_remembered_install_still_offers_the_manual_route_in_a_browser_tab()
+    public async Task A_remembered_install_hides_redundant_installation_calls_to_action()
     {
         await using var context = await AndroidContext();
         await context.AddInitScriptAsync(
             "try { localStorage.setItem('urabaAppInstalada', '1'); } catch {}");
         var page = await context.NewPageAsync();
 
+        await page.GotoAsync(fixture.BaseUrl);
+        await Expect(page.GetByTestId("install-invite")).ToHaveCountAsync(0);
         await page.GotoAsync($"{fixture.BaseUrl}/seguimiento");
-        await Expect(page.GetByTestId("app-status")).ToBeVisibleAsync(new() { Timeout = 30_000 });
-        Assert.False(await page.EvaluateAsync<bool>("urabaApp.install.state().runningAsApp"));
-
-        var boton = page.GetByTestId("app-status-install");
-        await Expect(boton).ToBeVisibleAsync();
-        await Expect(boton).ToHaveTextAsync("Cómo instalarla");
-        await boton.ClickAsync();
-        await Expect(page.GetByTestId("app-status-steps")).ToContainTextAsync("Instalar aplicación");
+        await Expect(page.GetByTestId("app-status-app-valor")).ToHaveTextAsync("Instalada",
+            new() { Timeout = 30_000 });
+        await Expect(page.GetByTestId("app-status-install")).ToHaveCountAsync(0);
     }
 
     /// <summary>
-    /// La causa del fallo en el Honor: Chrome de Android pone referrer "android-app://" a cualquier
-    /// enlace abierto desde otra aplicación —WhatsApp, el correo—, y lo tomábamos por "ya está
-    /// instalada". Quien llegaba a la Demo desde un mensaje no veía ningún botón.
+    /// El "ahora no" silencia la invitación durante catorce días y tampoco reaparece como otro CTA
+    /// al navegar inmediatamente a Mi actividad.
     /// </summary>
     [Fact]
-    public async Task A_link_opened_from_another_android_app_still_offers_installation()
+    public async Task Dismissal_silences_installation_across_immediate_navigation()
     {
         await using var context = await AndroidContext();
-        await context.AddInitScriptAsync(GuionReferrerDeApp);
+        await context.AddInitScriptAsync(GuionOfertaNativa);
         var page = await context.NewPageAsync();
 
-        await page.GotoAsync($"{fixture.BaseUrl}/seguimiento");
-        await Expect(page.GetByTestId("app-status")).ToBeVisibleAsync(new() { Timeout = 30_000 });
-        Assert.Equal("android-app://com.whatsapp/",
-            await page.EvaluateAsync<string>("document.referrer"));
-        Assert.Equal("manual", await page.EvaluateAsync<string>("urabaApp.install.state().mode"));
-        await Expect(page.GetByTestId("app-status-app-valor")).ToHaveTextAsync("Instalar");
-        await Expect(page.GetByTestId("app-status-install")).ToHaveTextAsync("Cómo instalarla");
-    }
-
-    /// <summary>
-    /// El "ahora no" silencia la invitación contextual durante catorce días. La ficha permanente de
-    /// Mi actividad no se toca: es donde se va a mirar el estado a propósito.
-    /// </summary>
-    [Fact]
-    public async Task Dismissal_silences_the_invitation_but_never_the_status_card()
-    {
-        await using var context = await AndroidContext();
-        await context.AddInitScriptAsync(
-            "try { localStorage.setItem('urabaInstalarDescartada', String(Date.now())); } catch {}");
-        var page = await context.NewPageAsync();
-
-        await page.GotoAsync($"{fixture.BaseUrl}/seguimiento");
-        await Expect(page.GetByTestId("app-status")).ToBeVisibleAsync(new() { Timeout = 30_000 });
+        await page.GotoAsync(fixture.BaseUrl);
+        var invitacion = page.GetByTestId("install-invite");
+        await Expect(invitacion).ToBeVisibleAsync(new() { Timeout = 30_000 });
+        await invitacion.GetByTestId("install-dismiss").ClickAsync();
         Assert.True(await page.EvaluateAsync<bool>("urabaApp.install.state().dismissed"));
         await Expect(page.GetByTestId("install-invite")).ToHaveCountAsync(0);
 
-        // Lo que no puede pasar: que el descarte se lleve por delante la ficha y su CTA.
-        await Expect(page.GetByTestId("app-status-app-valor")).ToHaveTextAsync("Instalar");
-        await Expect(page.GetByTestId("app-status-install")).ToHaveTextAsync("Cómo instalarla");
-        await Expect(page.GetByTestId("app-status-install")).ToBeVisibleAsync();
+        await page.GotoAsync($"{fixture.BaseUrl}/seguimiento");
+        await Expect(page.GetByTestId("app-status")).ToBeVisibleAsync(new() { Timeout = 30_000 });
+        await Expect(page.GetByTestId("app-status-install")).ToHaveCountAsync(0);
     }
 
     /// <summary>
@@ -169,9 +142,10 @@ public sealed class PwaInstallJourneyTests(BrowserFixture fixture) : IClassFixtu
     public async Task The_install_control_is_actually_visible_on_a_phone()
     {
         await using var context = await AndroidContext();
+        await context.AddInitScriptAsync(GuionOfertaNativa);
         var page = await context.NewPageAsync();
-        await page.GotoAsync($"{fixture.BaseUrl}/seguimiento");
-        var boton = page.GetByTestId("app-status-install");
+        await page.GotoAsync(fixture.BaseUrl);
+        var boton = page.GetByTestId("install-native");
         await Expect(boton).ToBeVisibleAsync(new() { Timeout = 30_000 });
 
         var medida = await boton.EvaluateAsync<Medida>("""
@@ -255,7 +229,7 @@ public sealed class PwaInstallJourneyTests(BrowserFixture fixture) : IClassFixtu
         var invitacion = page.GetByTestId("install-invite");
         await Expect(invitacion).ToBeVisibleAsync(new() { Timeout = 30_000 });
         await Expect(invitacion).ToContainTextAsync("Instalar UrabáConecta");
-        await Expect(invitacion).ToContainTextAsync("Ten tus turnos, citas y pedidos a mano");
+        await Expect(invitacion).ToContainTextAsync("Ten tus pedidos y seguimiento a la mano");
 
         var seguimiento = page.Url;
         await invitacion.GetByTestId("install-dismiss").ClickAsync();
@@ -349,17 +323,6 @@ public sealed class PwaInstallJourneyTests(BrowserFixture fixture) : IClassFixtu
         """;
 
     /// <summary>
-    /// Llegar desde otra aplicación de Android. Es lo que hace Chrome con cualquier enlace tocado
-    /// dentro de WhatsApp o del correo, y no distingue de un TWA por el referrer.
-    /// </summary>
-    private const string GuionReferrerDeApp = """
-        try {
-          Object.defineProperty(document, 'referrer',
-            { get: () => 'android-app://com.whatsapp/', configurable: true });
-        } catch {}
-        """;
-
-    /// <summary>
     /// Fija el permiso del navegador. Hay que falsificarlo en los dos sentidos: Chromium sin
     /// interfaz responde "denied" a las notificaciones haga lo que haga el permiso concedido del
     /// contexto, así que conceder por la vía de Playwright no probaría nada. Lo que se comprueba
@@ -386,7 +349,7 @@ public sealed class PwaInstallJourneyTests(BrowserFixture fixture) : IClassFixtu
         await fixture.Browser.NewContextAsync(new()
         {
             ViewportSize = new() { Width = 360, Height = 800 },
-            UserAgent = AgenteAndroid
+            UserAgent = AgenteMovil
         });
 
     private async Task Login(IPage page, string email)

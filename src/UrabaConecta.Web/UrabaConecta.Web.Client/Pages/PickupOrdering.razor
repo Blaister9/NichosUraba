@@ -157,9 +157,13 @@ else if (created is not null)
         <p class="lead">Total: @created.Total.ToString("C0", Colombia). @Fulfillment.ConfirmationText</p>
         <p>El negocio lo confirma y prepara. Guarda este enlace: con él sigues el estado sin crear cuenta.</p>
         <p class="notice" data-testid="activity-recovery-copy">
-            Puedes volver a consultar este pedido desde <a href="/seguimiento">Mi actividad</a>.
+            Puedes consultar este pedido después en Mi actividad.
         </p>
-        <a class="button-link btn-grande" href="/seguimiento/pedidos/@created.TrackingCode">Seguir mi pedido</a>
+        <div class="ficha-acciones">
+            <a class="button-link btn-grande" href="/seguimiento/pedidos/@created.TrackingCode">Seguir mi pedido</a>
+            <a class="button-link secondary btn-grande" href="/seguimiento"
+               data-testid="activity-recovery-cta">Mi actividad</a>
+        </div>
         <PushPrompt RegistrationPath="@OrderPushPath"
                     Title="Recibe cambios de este pedido"
                     Description="Activa los avisos para enterarte cuando cambie su estado."

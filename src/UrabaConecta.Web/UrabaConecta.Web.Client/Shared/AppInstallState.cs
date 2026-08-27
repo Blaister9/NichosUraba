@@ -11,8 +11,8 @@ public sealed record AppInstallState
 {
     /// <summary>
     /// <c>installed</c> ya está instalada o corriendo como aplicación; <c>native</c> el navegador
-    /// nos cedió su diálogo de instalación; <c>manual</c> no lo cedió pero sí se puede instalar a
-    /// mano; <c>unavailable</c> este navegador no instala nada.
+    /// cedió su diálogo de instalación; <c>manual</c> sólo hay una instrucción manual compatible;
+    /// <c>unavailable</c> no existe una acción de instalación verificable.
     /// </summary>
     public string Mode { get; init; } = "unavailable";
 
@@ -29,10 +29,10 @@ public sealed record AppInstallState
     public string Platform { get; init; } = "";
     public string Browser { get; init; } = "";
 
-    /// <summary>Nombre del menú donde vive la opción, cuando hay que explicarlo a mano.</summary>
+    /// <summary>Nombre genérico del control que abre el camino manual, si existe.</summary>
     public string Menu { get; init; } = "";
 
-    /// <summary>Los pasos literales de ESTE navegador. Vacío cuando no hay camino manual.</summary>
+    /// <summary>Instrucción mínima del dispositivo. Vacío cuando no hay camino manual conocido.</summary>
     public IReadOnlyList<string> Steps { get; init; } = [];
 
     public bool Installed => Mode == "installed";

@@ -1,10 +1,8 @@
 /* Modo instalable: registro del trabajador de servicio y estado de instalación.
 
-   El navegador decide por su cuenta si ofrece instalar y dónde lo ofrece. En Android suele
-   guardarlo dentro del menú de tres puntos, que es justo el sitio donde una persona normal no
-   entra. Por eso aquí se hacen dos cosas: se captura el permiso del navegador para abrir el
-   diálogo nativo cuando queramos, y cuando ese permiso no llega se describe el camino manual del
-   navegador concreto que se está usando, en vez de callar.
+   El navegador decide si ofrece instalar. Se captura ese permiso para abrir su diálogo desde una
+   acción explícita. Cuando no existe prompt programático sólo se conserva una instrucción manual
+   mínima en dispositivos donde ese camino es conocido; no se simula un instalador propio.
 
    El disparo del diálogo nativo va por delegación de eventos y no por interoperabilidad de
    Blazor: Chrome exige que prompt() se llame dentro del gesto de la persona, y un @onclick de
@@ -39,68 +37,17 @@
       .some(modo => window.matchMedia(`(display-mode: ${modo})`).matches) ||
     window.navigator.standalone === true;
 
-  const ua = navigator.userAgent || '';
-  const esAndroid = /Android/i.test(ua);
-  // iPadOS se anuncia como escritorio desde iOS 13; el número de puntos táctiles lo delata.
-  const esIOS = /iPhone|iPad|iPod/i.test(ua) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-
-  const navegador = () => {
-    if (/SamsungBrowser/i.test(ua)) return 'samsung';
-    if (/HuaweiBrowser|HonorBrowser/i.test(ua)) return 'huawei';
-    if (/MiuiBrowser|HeyTapBrowser|OppoBrowser|VivoBrowser/i.test(ua)) return 'oem';
-    if (/FxiOS/i.test(ua) || /Firefox/i.test(ua)) return 'firefox';
-    if (/OPR|OPT\//i.test(ua)) return 'opera';
-    if (/Edg/i.test(ua)) return 'edge';
-    if (/CriOS/i.test(ua)) return 'chrome-ios';
-    if (/Chrome|Chromium/i.test(ua)) return 'chrome';
-    if (/Safari/i.test(ua)) return 'safari';
-    return 'otro';
-  };
-
-  const plataforma = () => esIOS ? 'ios' : esAndroid ? 'android' : 'escritorio';
-
-  /* Instrucciones manuales. Son literales de cada navegador, no una frase genérica: "abre el
-     menú" no sirve si la persona no sabe cuál de los dos menús de la pantalla es. */
-  const camino = () => {
-    const cual = navegador();
-    if (esIOS) {
-      if (cual === 'safari') return {
-        menu: 'Compartir',
-        steps: ['Toca el botón Compartir, abajo en el centro.',
-                'Baja y elige “Añadir a pantalla de inicio”.',
-                'Confirma con “Añadir”.']
-      };
-      // En iOS sólo Safari puede instalar: cualquier otro navegador usa su motor pero no expone
-      // la opción, así que la única salida honesta es mandar a Safari.
-      return {
-        menu: 'Safari',
-        steps: ['Abre urabaconecta en Safari.',
-                'Toca Compartir y elige “Añadir a pantalla de inicio”.']
-      };
-    }
-    if (esAndroid) {
-      if (cual === 'samsung') return {
-        menu: 'Menú',
-        steps: ['Toca el menú (☰) abajo a la derecha.',
-                'Elige “Añadir página a”.',
-                'Elige “Pantalla de inicio”.']
-      };
-      if (cual === 'firefox') return {
-        menu: 'Menú',
-        steps: ['Toca el menú (⋮) de la barra.', 'Elige “Instalar”.']
-      };
-      return {
-        menu: 'Menú',
-        steps: ['Toca el menú (⋮) arriba a la derecha.',
-                'Elige “Instalar aplicación” o “Añadir a pantalla de inicio”.',
-                'Confirma con “Instalar”.']
-      };
-    }
-    if (cual === 'chrome' || cual === 'edge' || cual === 'opera') return {
-      menu: 'Barra de direcciones',
-      steps: ['Busca el icono de instalar al final de la barra de direcciones.',
-              'O abre el menú (⋮) y elige “Instalar UrabáConecta”.']
+  /* No se mantienen matrices por marca o navegador. La presencia de navigator.standalone es la
+     capacidad que expone el entorno móvil basado en WebKit; Android se reconoce como plataforma,
+     no por fabricante. En ambos casos la ayuda describe el menú: nunca promete abrirlo sola. */
+  const caminoManual = () => {
+    if ('standalone' in navigator) return {
+      menu: 'Compartir',
+      steps: ['Toca Compartir y elige “Añadir a pantalla de inicio”.']
+    };
+    if (/Android/i.test(navigator.userAgent || '')) return {
+      menu: 'Menú del navegador',
+      steps: ['Abre el menú del navegador y elige “Instalar aplicación” o “Añadir a pantalla de inicio”.']
     };
     return { menu: '', steps: [] };
   };
@@ -112,10 +59,10 @@
   };
 
   const estado = () => {
-    const pasos = camino();
-    // Dos cosas distintas: correr como aplicación se comprueba; haberla instalado alguna vez sólo
-    // se recuerda. La marca sirve para rotular el estado, nunca para retirar la ayuda: si la marca
-    // quedó de una instalación que ya no existe, quien mira esta pestaña necesita el camino igual.
+    const pasos = caminoManual();
+    // Correr como aplicación se comprueba ahora; una instalación aceptada también se recuerda para
+    // no volver a ofrecerla en pestañas del mismo dispositivo. Si el navegador vuelve a emitir
+    // beforeinstallprompt, esa señal más reciente limpia la marca y habilita de nuevo la oferta.
     const comoApp = enModoApp();
     let mode;
     if (comoApp || leer(INSTALADA) === '1') mode = 'installed';
@@ -126,8 +73,8 @@
       mode,
       runningAsApp: comoApp,
       dismissed: descartada(),
-      platform: plataforma(),
-      browser: navegador(),
+      platform: pasos.steps.length > 0 ? 'mobile' : '',
+      browser: '',
       menu: pasos.menu,
       steps: pasos.steps
     };
@@ -175,7 +122,7 @@
       evento.prompt();
       const { outcome } = await evento.userChoice;
       if (outcome === 'accepted') guardar(INSTALADA, '1');
-      else oferta = evento;
+      else guardar(DESCARTADA, String(Date.now()));
       avisar();
       return outcome;
     } catch {
@@ -185,17 +132,26 @@
     }
   };
 
+  const descartarInvitacion = () => {
+    guardar(DESCARTADA, String(Date.now()));
+    avisar();
+  };
+
   document.addEventListener('click', evento => {
-    const boton = evento.target instanceof Element
-      ? evento.target.closest('[data-uraba-instalar]') : null;
+    const objetivo = evento.target instanceof Element ? evento.target : null;
+    const boton = objetivo?.closest('[data-uraba-instalar]');
     if (boton) abrirDialogo();
+    // Se persiste dentro del clic, antes del viaje de @onclick a Blazor Server. Así una navegación
+    // inmediata no puede adelantarse a la decisión que la interfaz ya confirmó visualmente.
+    const descarte = objetivo?.closest('[data-uraba-descartar-instalacion]');
+    if (descarte) descartarInvitacion();
   }, true);
 
   window.urabaApp = {
     install: {
       state: estado,
       prompt: abrirDialogo,
-      dismiss: () => { guardar(DESCARTADA, String(Date.now())); avisar(); },
+      dismiss: descartarInvitacion,
       watch: (clave, oyente) => { oyentes.set(clave, oyente); return estado(); },
       unwatch: clave => { oyentes.delete(clave); }
     }

@@ -16,16 +16,14 @@
             <dt>App</dt>
             <dd>
                 <span class="estado-pastilla @ClaseApp" data-testid="app-status-app-valor">@EtiquetaApp</span>
-                @* El camino manual se ofrece siempre que exista y no estemos ya dentro de la
-                   aplicación. Antes se pedía Mode == "manual", así que cualquier conclusión de
-                   "instalada" —incluida una heredada y equivocada— borraba el botón del DOM y
-                   dejaba la pantalla sin salida. Ahora sólo lo retira estar de verdad en la app. *@
-                @if (instalacion is { Mode: "native" })
+                @* Esta ficha respeta la misma decisión que la invitación: no repite el CTA tras
+                   "Ahora no" y no lo muestra cuando la aplicación ya figura instalada. *@
+                @if (instalacion is { Mode: "native", Dismissed: false })
                 {
                     <button type="button" class="secondary" data-uraba-instalar="true"
                             data-testid="app-status-install">Instalar</button>
                 }
-                else if (instalacion is { Steps.Count: > 0, RunningAsApp: false })
+                else if (instalacion is { Mode: "manual", Dismissed: false, Steps.Count: > 0 })
                 {
                     <button type="button" class="secondary" aria-expanded="@pasosVisibles"
                             aria-controls="@idPasos" @onclick="() => pasosVisibles = !pasosVisibles"
@@ -91,10 +89,8 @@
     private string DescripcionApp => instalacion switch
     {
         { Mode: "installed", RunningAsApp: true } => "La abres desde el icono, como cualquier otra aplicación.",
-        // Recordamos haberla instalado, pero esto es una pestaña del navegador. Si el icono no está
-        // —porque se desinstaló, o porque es otro teléfono— los pasos siguen a mano.
-        { Mode: "installed" } => "Ya la instalaste en este dispositivo. Si no encuentras el icono, "
-            + "aquí tienes los pasos otra vez.",
+        { Mode: "installed" } => "Ya está instalada en este dispositivo.",
+        { Dismissed: true } => "Puedes seguir usando UrabáConecta en el navegador.",
         { Mode: "native" or "manual" } => "Ten tus turnos, citas y pedidos a mano, sin escribir la dirección.",
         { Mode: "unavailable" } => "Este navegador no instala aplicaciones. Puedes seguir usándola aquí igual.",
         _ => "Estamos comprobando este dispositivo."
@@ -157,9 +153,10 @@
     [JSInvokable]
     public Task EstadoDeInstalacionCambio(AppInstallState nuevo)
     {
-        // Si el diálogo nativo no llegó a abrirse, se enseñan los pasos sin pedir otro toque.
-        if (instalacion is { Mode: "native" } && nuevo.Mode == "manual") pasosVisibles = true;
-        else if (nuevo.Mode != "manual") pasosVisibles = false;
+        // Si el diálogo nativo falló, sólo se abre la ayuda manual cuando no hubo un descarte.
+        if (instalacion is { Mode: "native" } && nuevo is { Mode: "manual", Dismissed: false })
+            pasosVisibles = true;
+        else if (nuevo.Mode != "manual" || nuevo.Dismissed) pasosVisibles = false;
         instalacion = nuevo;
         StateHasChanged();
         return Task.CompletedTask;

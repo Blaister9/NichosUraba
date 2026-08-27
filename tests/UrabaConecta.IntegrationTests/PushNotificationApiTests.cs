@@ -134,11 +134,11 @@ public sealed class PushNotificationApiTests(PushWebFactory factory) : IClassFix
 
     /// <summary>
     /// El guion de instalación tiene que llegar entero al navegador. Sin la captura de
-    /// beforeinstallprompt no hay diálogo nativo que abrir desde nuestra invitación, y sin el
-    /// camino manual la única salida vuelve a ser el menú del navegador, que es de donde venimos.
+    /// beforeinstallprompt no hay diálogo nativo que abrir desde nuestra invitación. La alternativa
+    /// manual se mantiene breve y no depende de marcas de teléfono o familias de navegador.
     /// </summary>
     [Fact]
-    public async Task Install_script_captures_the_browser_offer_and_keeps_a_manual_route()
+    public async Task Install_script_captures_the_browser_offer_and_uses_generic_fallback_copy()
     {
         using var client = factory.CreateClient();
         var guion = await client.GetStringAsync("/pwa.js");
@@ -149,10 +149,12 @@ public sealed class PushNotificationApiTests(PushWebFactory factory) : IClassFix
         // El clic se atiende en el DOM: Chrome exige que prompt() ocurra dentro del gesto.
         Assert.Contains("data-uraba-instalar", guion);
         Assert.Contains("urabaApp", guion);
-        // Instrucciones literales de cada familia de navegador, no una frase genérica.
+        // Una única instrucción manual compatible, sin matrices por fabricante.
         Assert.Contains("Añadir a pantalla de inicio", guion);
         Assert.Contains("Instalar aplicación", guion);
-        Assert.Contains("Añadir página a", guion);
+        Assert.DoesNotContain("const navegador =", guion);
+        Assert.DoesNotContain("browser: navegador()", guion);
+        Assert.Contains("browser: ''", guion);
 
         var avisos = await client.GetStringAsync("/push-notifications.js");
         // Pedir el permiso sin suscribir: es lo que usa la ficha de estado de la cuenta.

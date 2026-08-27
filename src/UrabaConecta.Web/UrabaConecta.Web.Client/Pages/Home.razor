@@ -26,6 +26,9 @@
 <PageTitle>@Titulo | UrabáConecta</PageTitle>
 
 <div class="ahora-home guided" data-paso="@Paso" data-testid="ahora-home">
+    @* Invitación en la entrada normal del cliente. El componente sólo aparece si el navegador
+       ofrece instalación, se oculta al estar instalada y respeta el periodo de descarte. *@
+    <InstallPrompt />
     @if (loading)
     {
         <div class="guided-boot" aria-busy="true"><span class="skeleton"></span></div>

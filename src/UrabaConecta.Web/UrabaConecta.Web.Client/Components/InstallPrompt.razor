@@ -1,13 +1,9 @@
 @implements IAsyncDisposable
 @inject IJSRuntime JS
 
-@* Invitación propia a instalar. No es una ventana emergente y no aparece al segundo de entrar:
-   se coloca donde la instalación ya tiene sentido —después de tomar un turno, de reservar, de
-   pedir, o en el panel de quien trabaja con esto todos los días— y se puede posponer.
-
-   Cuando el navegador nos cedió su diálogo, el botón lo abre. Cuando no lo cedió, no se calla:
-   se enseñan los pasos exactos de ESE navegador, que es lo que separa "es instalable" de "una
-   persona normal puede instalarla".
+@* Invitación propia a instalar. Es una pieza en el flujo, no una ventana emergente. Cuando el
+   navegador ofrece su diálogo, el botón lo abre; cuando sólo hay un camino manual conocido, se
+   muestra una instrucción corta sin prometer una instalación automática.
 
    El botón nativo no lleva un manejador de Blazor: quien atiende ese clic es pwa.js, dentro del evento
    del DOM, porque Chrome exige que el diálogo se pida dentro del gesto de la persona y un viaje
@@ -25,7 +21,7 @@
                 @if (estado.Mode == "native")
                 {
                     <button type="button" class="primary" data-uraba-instalar="true"
-                            data-testid="install-native">Instalar la aplicación</button>
+                            data-testid="install-native">Instalar UrabáConecta</button>
                 }
                 else
                 {
@@ -37,7 +33,8 @@
                 }
                 @if (Descartable)
                 {
-                    <button type="button" class="inline-button" @onclick="Descartar"
+                    <button type="button" class="inline-button" data-uraba-descartar-instalacion="true"
+                            @onclick="Descartar"
                             data-testid="install-dismiss">Ahora no</button>
                 }
             </div>
@@ -47,7 +44,6 @@
                 <ol class="install-pasos" id="@idPasos" data-testid="install-steps">
                     @foreach (var paso in estado.Steps) { <li>@paso</li> }
                 </ol>
-                <p class="meta">Después la abres desde el icono, sin escribir la dirección.</p>
             }
         </div>
     </aside>
@@ -56,7 +52,7 @@
 @code {
     [Parameter] public string Titulo { get; set; } = "Instalar UrabáConecta";
 
-    [Parameter] public string Descripcion { get; set; } = "Ten tus turnos, citas y pedidos a mano.";
+    [Parameter] public string Descripcion { get; set; } = "Ten tus pedidos y seguimiento a la mano.";
 
     /// <summary>Presencia de propietario: la instalación es su herramienta de trabajo, no un extra.</summary>
     [Parameter] public bool Destacada { get; set; }
@@ -100,9 +96,8 @@
     [JSInvokable]
     public Task EstadoDeInstalacionCambio(AppInstallState nuevo)
     {
-        // Caer de "nativo" a "manual" significa que el diálogo del navegador no se abrió. La
-        // persona ya tocó Instalar: dejarle otro botón sin explicación sería un callejón, así que
-        // el camino manual se despliega solo.
+        // Si el diálogo no pudo abrirse pero el dispositivo tiene un camino manual conocido, se
+        // muestra esa única alternativa sin requerir otro toque.
         if (estado is { Mode: "native" } && nuevo.Mode == "manual") pasosVisibles = true;
         else if (!nuevo.CanOffer) pasosVisibles = false;
         estado = nuevo;
@@ -113,9 +108,11 @@
     private async Task Descartar()
     {
         pasosVisibles = false;
-        estado = estado is null ? null : estado with { Dismissed = true };
         try { await JS.InvokeVoidAsync("urabaApp.install.dismiss"); }
         catch (JSException) { }
+        // La invitación sólo desaparece después de intentar persistir la decisión. Así una
+        // navegación inmediata no puede adelantarse al localStorage y volver a mostrarla.
+        estado = estado is null ? null : estado with { Dismissed = true };
     }
 
     /// <summary>
