@@ -277,7 +277,9 @@ public sealed class PwaInstallJourneyTests(BrowserFixture fixture) : IClassFixtu
         await concedido.AddInitScriptAsync(GuionPermiso("granted"));
         var otorgada = await concedido.NewPageAsync();
         await otorgada.GotoAsync($"{fixture.BaseUrl}/seguimiento");
-        await Expect(otorgada.GetByTestId("app-status-push-valor")).ToHaveTextAsync("Activas",
+        // EVIDENCIA PRE-FIX QUE REPRODUCE: permission=granted se mostraba como "Activas" aunque
+        // no hubiera PushSubscription persistida para ninguna operación.
+        await Expect(otorgada.GetByTestId("app-status-push-valor")).ToHaveTextAsync("Permitidas",
             new() { Timeout = 30_000 });
         await Expect(otorgada.GetByTestId("app-status-push-enable")).ToHaveCountAsync(0);
 

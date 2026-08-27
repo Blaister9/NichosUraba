@@ -2,6 +2,8 @@
 @page "/seguimiento/citas"
 @rendermode InteractiveServer
 @inject NavigationManager Navigation
+@inject IUrabaConectaApi Api
+@inject IJSRuntime JS
 
 @* "Mi actividad": la puerta única a los tres seguimientos.
 
@@ -17,6 +19,21 @@
 </section>
 
 <section class="narrow">
+    @if (!recuperacionCargada)
+    {
+        <p class="notice" role="status">Buscando tu último pedido…</p>
+    }
+    else if (ultimoPedido is not null && ultimoCodigo is not null)
+    {
+        <section class="config-form" data-testid="last-order">
+            <h2>Tu último pedido</h2>
+            <p><strong>@ultimoPedido.BusinessName · Pedido #@ultimoPedido.OrderNumber</strong></p>
+            <p>Estado actual: <span class="status @ultimoPedido.Status.ToLowerInvariant()">@ultimoPedido.StatusLabel</span></p>
+            <a class="button-link btn-grande"
+               href="/seguimiento/pedidos/@Uri.EscapeDataString(ultimoCodigo)">Ver seguimiento</a>
+        </section>
+    }
+
     <div class="segmentado" role="group" aria-label="Qué quieres consultar">
         @foreach (var opcion in Opciones)
         {
@@ -46,7 +63,9 @@
 
 @code {
     private string tipo = "citas", codigo = "";
-    private bool listo, intentado;
+    private string? ultimoCodigo;
+    private PickupOrderTrackingDto? ultimoPedido;
+    private bool listo, intentado, recuperacionCargada;
 
     private sealed record Opcion(string Clave, string Etiqueta, string Icono);
 
@@ -67,11 +86,34 @@
     // Los tres códigos los emite el mismo servicio, así que comparten longitud mínima.
     private bool CodigoValido => codigo.Trim().Length >= 20;
 
-    protected override void OnAfterRender(bool firstRender)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
         listo = true;
+        await CargarUltimoPedido();
         StateHasChanged();
+    }
+
+    private async Task CargarUltimoPedido()
+    {
+        try
+        {
+            ultimoCodigo = await JS.InvokeAsync<string?>("urabaOrderRecovery.load");
+            if (ultimoCodigo is not null)
+            {
+                ultimoPedido = await Api.GetPickupOrderAsync(ultimoCodigo);
+                if (ultimoPedido is null)
+                {
+                    ultimoCodigo = null;
+                    await JS.InvokeVoidAsync("urabaOrderRecovery.clear");
+                }
+            }
+        }
+        // Un 404 llega como null y sí invalida la referencia. Ante una falla transitoria de la
+        // API conservamos el único token local para que una recarga posterior pueda recuperarlo.
+        catch (ApiException) { ultimoPedido = null; }
+        catch (JSException) { ultimoCodigo = null; }
+        finally { recuperacionCargada = true; }
     }
 
     private void AlTeclear(KeyboardEventArgs e)

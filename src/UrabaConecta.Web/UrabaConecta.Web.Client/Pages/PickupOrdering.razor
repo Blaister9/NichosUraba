@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @inject IUrabaConectaApi Api
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <PageTitle>@(menu is null ? "Pedidos" : Fulfillment.PageTitle) | UrabáConecta</PageTitle>
 <a class="back-link" href="/negocios/@Slug">← Volver al negocio</a>
@@ -155,7 +156,17 @@ else if (created is not null)
         <h1>Recibimos tu pedido #@created.OrderNumber</h1>
         <p class="lead">Total: @created.Total.ToString("C0", Colombia). @Fulfillment.ConfirmationText</p>
         <p>El negocio lo confirma y prepara. Guarda este enlace: con él sigues el estado sin crear cuenta.</p>
+        <p class="notice" data-testid="activity-recovery-copy">
+            Puedes volver a consultar este pedido desde <a href="/seguimiento">Mi actividad</a>.
+        </p>
         <a class="button-link btn-grande" href="/seguimiento/pedidos/@created.TrackingCode">Seguir mi pedido</a>
+        <PushPrompt RegistrationPath="@OrderPushPath"
+                    Title="Recibe cambios de este pedido"
+                    Description="Activa los avisos para enterarte cuando cambie su estado."
+                    ActiveDescription="Los avisos de este pedido están activos en este dispositivo."
+                    ButtonLabel="Activar avisos de este pedido"
+                    DeniedNote="El pedido queda guardado en Mi actividad aunque no actives avisos." />
+        <InstallPrompt />
     </section>
 }
 
@@ -217,7 +228,20 @@ else if (created is not null)
         request.Lines = quantities.Where(x => x.Value > 0)
             .Select(x => new CreatePickupOrderLineRequest { ProductId = x.Key, Quantity = x.Value }).ToList();
         busy = true; error = null;
-        try { created = await Api.CreatePickupOrderAsync(Slug, request); }
+        try
+        {
+            created = await Api.CreatePickupOrderAsync(Slug, request);
+            // El tracking token es la credencial mínima de recuperación. No se guarda alias,
+            // teléfono, carrito ni estado: al volver, el estado se consulta al servidor.
+            try { await JS.InvokeVoidAsync("urabaOrderRecovery.save", created.TrackingCode); }
+            catch (JSException) { }
+
+            // Si la persona ya había permitido avisos desde Mi actividad, ahora sí existe el
+            // alcance concreto: se registra la PushSubscription contra ESTE pedido. Sin permiso
+            // previo no se abre un diálogo tardío; el control de la confirmación queda disponible.
+            try { await JS.InvokeAsync<PushState>("urabaPush.subscribeGranted", OrderPushPath); }
+            catch (JSException) { }
+        }
         catch (ApiException ex)
         {
             // Si la franja se llenó mientras el cliente escribía, se recargan las disponibles
@@ -231,4 +255,13 @@ else if (created is not null)
     private static string Local(DateTimeOffset value) =>
         TimeZoneInfo.ConvertTime(value, TimeZoneInfo.FindSystemTimeZoneById("America/Bogota"))
             .ToString("ddd d MMM, h:mm tt", Colombia);
+
+    private string OrderPushPath => created is null ? "" :
+        $"/api/v1/public/orders/{Uri.EscapeDataString(created.TrackingCode)}/push-subscriptions";
+
+    private sealed class PushState
+    {
+        public bool Active { get; set; }
+        public string Permission { get; set; } = "default";
+    }
 }

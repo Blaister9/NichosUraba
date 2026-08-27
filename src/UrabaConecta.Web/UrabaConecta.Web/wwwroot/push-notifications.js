@@ -33,6 +33,22 @@
     return { endpoint: json.endpoint, keys: { p256dh: json.keys?.p256dh, auth: json.keys?.auth } };
   };
 
+  const register = async (registrationPath, askPermission) => {
+    const config = await configuration();
+    if (!config.supported || !config.configured) throw new Error('Los avisos no están disponibles.');
+    const permission = askPermission ? await Notification.requestPermission() : Notification.permission;
+    if (permission !== 'granted') return { active: false, permission };
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription() ||
+      await registration.pushManager.subscribe({ userVisibleOnly: true,
+        applicationServerKey: decodeKey(config.publicKey) });
+    const response = await fetch(registrationPath, { method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(subscriptionBody(subscription)) });
+    if (!response.ok) throw new Error('No pudimos guardar los avisos en este dispositivo.');
+    rememberScope(registrationPath, true);
+    return { active: true, permission };
+  };
+
   window.urabaPush = {
     availability: configuration,
     /* Pedir el permiso sin suscribir a nada. Lo usa la ficha de estado de la cuenta, donde la
@@ -43,21 +59,10 @@
       if (Notification.permission !== 'default') return { permission: Notification.permission };
       return { permission: await Notification.requestPermission() };
     },
-    subscribe: async registrationPath => {
-      const config = await configuration();
-      if (!config.supported || !config.configured) throw new Error('Los avisos no están disponibles.');
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') return { active: false, permission };
-      const registration = await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.getSubscription() ||
-        await registration.pushManager.subscribe({ userVisibleOnly: true,
-          applicationServerKey: decodeKey(config.publicKey) });
-      const response = await fetch(registrationPath, { method: 'POST', credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(subscriptionBody(subscription)) });
-      if (!response.ok) throw new Error('No pudimos guardar los avisos en este dispositivo.');
-      rememberScope(registrationPath, true);
-      return { active: true, permission };
-    },
+    subscribe: registrationPath => register(registrationPath, true),
+    // Al crear el pedido reutiliza un permiso ya concedido, sin abrir un diálogo fuera del gesto
+    // de la persona. El estado activo sólo vuelve después de que el backend aceptó el POST.
+    subscribeGranted: registrationPath => register(registrationPath, false),
     unsubscribe: async registrationPath => {
       const registration = await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.getSubscription();

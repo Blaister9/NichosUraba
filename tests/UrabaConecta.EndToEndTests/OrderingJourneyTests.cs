@@ -1,11 +1,97 @@
 using System.Text.RegularExpressions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
+using UrabaConecta.Domain;
 using UrabaConecta.Infrastructure.Persistence;
 
 namespace UrabaConecta.EndToEndTests;
 
 public sealed class OrderingJourneyTests(BrowserFixture fixture) : IClassFixture<BrowserFixture>
 {
+    /// <summary>
+    /// EVIDENCIA PRE-FIX QUE REPRODUCE: el permiso global quedaba en granted, pero crear el pedido
+    /// no ejecutaba el POST de /orders/{code}/push-subscriptions y no existía destinatario cliente.
+    /// </summary>
+    [Fact]
+    public async Task Granted_permission_is_linked_to_the_order_subscription_after_creation()
+    {
+        var endpoint = $"https://push.example/order-browser-{Guid.NewGuid():N}";
+        await using var context = await MobileContext();
+        await context.AddInitScriptAsync(PushPermitido(endpoint));
+        var page = await context.NewPageAsync();
+
+        await page.GotoAsync($"{fixture.BaseUrl}/seguimiento");
+        await Expect(page.GetByTestId("app-status-push-valor")).ToHaveTextAsync("Permitidas",
+            new() { Timeout = 30_000 });
+
+        await CreateOrder(page, "Push pedido");
+        await Expect(page.GetByTestId("order-created")).ToBeVisibleAsync();
+        await Expect(page.GetByTestId("push-prompt")).ToContainTextAsync(
+            "Los avisos de este pedido están activos");
+
+        var numberText = await page.GetByRole(AriaRole.Heading,
+            new() { NameRegex = new Regex("Recibimos tu pedido #") }).InnerTextAsync();
+        var orderNumber = int.Parse(Regex.Match(numberText, @"\d+").Value);
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(fixture.ConnectionString).Options;
+        await using var db = new AppDbContext(options);
+        var order = await db.PickupOrders.SingleAsync(x =>
+            x.BusinessId == DevelopmentSeeder.SazonBusinessId && x.PublicOrderNumber == orderNumber);
+        var subscription = await db.WebPushSubscriptions.SingleAsync(x => x.Endpoint == endpoint);
+
+        Assert.Equal(PushAudience.PickupOrder, subscription.Audience);
+        Assert.Equal(order.Id, subscription.EntityId);
+        Assert.Equal(order.Id.ToString("N"), subscription.ScopeKey);
+        Assert.Null(subscription.UserId);
+        Assert.DoesNotContain("/seguimiento/pedidos/", subscription.ProtectedDeepLink ?? "");
+    }
+
+    /// <summary>
+    /// EVIDENCIA PRE-FIX QUE REPRODUCE: TrackingCode sólo vivía en el campo created del circuito;
+    /// al cerrar la página y abrir otra no había referencia ni entrada visible al pedido.
+    /// </summary>
+    [Fact]
+    public async Task Closing_and_reopening_keeps_the_last_order_discoverable_with_server_status()
+    {
+        await using var context = await MobileContext();
+        var page = await context.NewPageAsync();
+        await CreateOrder(page, "Recuperación pedido");
+
+        await Expect(page.GetByTestId("activity-recovery-copy")).ToContainTextAsync(
+            "Puedes volver a consultar este pedido desde Mi actividad");
+        await Expect(page.GetByTestId("install-invite")).ToBeVisibleAsync();
+        Assert.True(await page.EvaluateAsync<bool>(
+            "(localStorage.getItem('urabaLastPickupOrder') || '').length >= 20"));
+
+        var numberText = await page.GetByRole(AriaRole.Heading,
+            new() { NameRegex = new Regex("Recibimos tu pedido #") }).InnerTextAsync();
+        var orderNumber = int.Parse(Regex.Match(numberText, @"\d+").Value);
+
+        await page.CloseAsync();
+        // Cambia el servidor después de cerrar. Si Mi actividad mostrara un snapshot local, seguiría
+        // diciendo Pendiente; Aceptado demuestra que volvió a consultar el tracking real.
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(fixture.ConnectionString).Options;
+        await using (var db = new AppDbContext(options))
+        {
+            var order = await db.PickupOrders.SingleAsync(x =>
+                x.BusinessId == DevelopmentSeeder.SazonBusinessId && x.PublicOrderNumber == orderNumber);
+            order.Transition(PickupOrderStatus.Accepted, DateTimeOffset.UtcNow, order.Version);
+            await db.SaveChangesAsync();
+        }
+        var reopened = await context.NewPageAsync();
+        await reopened.GotoAsync(fixture.BaseUrl);
+        await reopened.Locator("nav.nav-inferior").GetByRole(AriaRole.Link,
+            new() { Name = "Mi actividad" }).ClickAsync();
+
+        var lastOrder = reopened.GetByTestId("last-order");
+        await Expect(lastOrder).ToBeVisibleAsync(new() { Timeout = 30_000 });
+        await Expect(lastOrder).ToContainTextAsync("Tu último pedido");
+        await Expect(lastOrder).ToContainTextAsync("Estado actual: Aceptado");
+        await lastOrder.GetByRole(AriaRole.Link, new() { Name = "Ver seguimiento" }).ClickAsync();
+        await Expect(reopened.GetByTestId("order-tracking")).ToBeVisibleAsync();
+    }
+
     [Fact]
     public async Task Eight_pickup_order_scenarios_work_in_real_mobile_chromium()
     {
@@ -81,6 +167,40 @@ public sealed class OrderingJourneyTests(BrowserFixture fixture) : IClassFixture
 
     private Task<IBrowserContext> MobileContext() => fixture.Browser.NewContextAsync(new()
     { ViewportSize = new() { Width = 360, Height = 800 } });
+
+    private async Task CreateOrder(IPage page, string alias)
+    {
+        await page.GotoAsync($"{fixture.BaseUrl}/negocios/restaurante-sazon-local/pedidos");
+        await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Pedido para recoger" }))
+            .ToBeVisibleAsync(new() { Timeout = 30_000 });
+        await page.Locator("[data-testid=product-card]").First
+            .GetByRole(AriaRole.Button, new() { NameRegex = new Regex("^Agregar uno de ") }).ClickAsync();
+        await page.GetByLabel("Hora para recoger").SelectOptionAsync(new SelectOptionValue { Index = 1 });
+        await page.GetByLabel("Nombre o alias").FillAsync(alias);
+        await page.GetByLabel("Celular").FillAsync("3001234567");
+        await page.GetByLabel("Acepto el uso de estos datos").CheckAsync();
+        await page.GetByRole(AriaRole.Button, new() { Name = "Confirmar pedido" }).ClickAsync();
+        await Expect(page.GetByTestId("order-created")).ToBeVisibleAsync();
+    }
+
+    private static string PushPermitido(string endpoint) => $$$"""
+        try {
+          Object.defineProperty(Notification, 'permission',
+            { get: () => 'granted', configurable: true });
+          Notification.requestPermission = () => Promise.resolve('granted');
+          const subscription = {
+            endpoint: '{{{endpoint}}}',
+            toJSON: () => ({ endpoint: '{{{endpoint}}}',
+              keys: { p256dh: 'browser-public-key', auth: 'browser-auth-secret' } })
+          };
+          const registration = { pushManager: {
+            getSubscription: () => Promise.resolve(subscription),
+            subscribe: () => Promise.resolve(subscription)
+          }};
+          Object.defineProperty(navigator.serviceWorker, 'ready',
+            { get: () => Promise.resolve(registration), configurable: true });
+        } catch (error) { window.__pushSetupError = String(error); }
+        """;
     private async Task Login(IPage page, string email)
     {
         await page.GotoAsync($"{fixture.BaseUrl}/Account/Login");

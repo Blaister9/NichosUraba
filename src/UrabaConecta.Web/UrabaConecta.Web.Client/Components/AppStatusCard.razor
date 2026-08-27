@@ -48,7 +48,7 @@
                 @if (avisos is { Supported: true, Configured: true, Permission: "default" })
                 {
                     <button type="button" class="secondary" disabled="@pidiendo" @onclick="PedirPermiso"
-                            data-testid="app-status-push-enable">@(pidiendo ? "Esperando…" : "Activar")</button>
+                            data-testid="app-status-push-enable">@(pidiendo ? "Esperando…" : "Permitir")</button>
                 }
                 <p class="meta">@DescripcionPush</p>
             </dd>
@@ -103,7 +103,9 @@
     private string EtiquetaPush => avisos switch
     {
         { Supported: false } or { Configured: false } => "No disponibles aquí",
-        { Permission: "granted" } => "Activas",
+        // El permiso del navegador no prueba que exista una suscripción en el backend para una
+        // operación concreta. Esa confirmación sólo la dan los controles contextuales.
+        { Permission: "granted" } => "Permitidas",
         { Permission: "denied" } => "Bloqueadas",
         { Permission: "default" } => "Activar",
         _ => "Comprobando…"
@@ -111,7 +113,7 @@
 
     private string ClasePush => avisos switch
     {
-        { Supported: true, Configured: true, Permission: "granted" } => "es-bien",
+        { Supported: true, Configured: true, Permission: "granted" } => "es-pendiente",
         { Supported: true, Configured: true, Permission: "denied" } => "es-bloqueado",
         { Supported: true, Configured: true, Permission: "default" } => "es-pendiente",
         _ => "es-neutro"
@@ -124,16 +126,16 @@
         { Supported: false } or { Configured: false } =>
             "Este navegador no admite avisos. Todo lo demás funciona igual.",
         { Permission: "granted" } when Operativa =>
-            "Recibirás las nuevas citas, turnos y pedidos de tus negocios aunque no la tengas abierta.",
+            "El navegador permite avisos. Actívalos dentro de cada negocio para registrarlos.",
         { Permission: "granted" } =>
-            "Te avisamos de tus turnos, citas y pedidos aunque no la tengas abierta.",
+            "El navegador permite avisos. Al crear o abrir una actividad la enlazamos con ella.",
         { Permission: "denied" } =>
             "Puedes permitirlas desde los ajustes del navegador. Nada deja de funcionar sin ellas: "
             + "tus pantallas de seguimiento se actualizan solas.",
         { Permission: "default" } when Operativa =>
-            "Te avisamos cuando entre una cita, un turno o un pedido.",
+            "Permite los avisos; después actívalos dentro del negocio que operas.",
         { Permission: "default" } =>
-            "Te avisamos cuando falte poco para tu turno y cuando cambie tu pedido.",
+            "Permite los avisos; los registraremos cuando exista una actividad concreta.",
         _ => "Estamos comprobando este dispositivo."
     };
 
