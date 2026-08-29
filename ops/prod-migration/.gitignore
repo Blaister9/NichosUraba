@@ -1,0 +1,12 @@
+# Nada generado desde el piloto o desde Production entra al repositorio.
+#
+# El paquete que produce generate.sql lleva datos personales y, en 20_identity.sql,
+# hashes de contraseña. Se regenera en cada corte; versionarlo sería publicarlo.
+pkg/
+*.dump
+*.csv
+_*.txt
+_*.log
+*_raw.sql
+ef_schema.sql
+pilot_schema.sql
