@@ -87,7 +87,8 @@ builder.Services.AddAuthorizationBuilder()
     // tarjetas de Perfil e Imágenes y le cerraba la puerta al entrar.
     .AddPolicy("BusinessProfile.Manage",
         policy => policy.RequireRole("BusinessOwner", "PartnerOperator", "PlatformAdmin"))
-    .AddPolicy("BusinessConfiguration.Manage", policy => policy.RequireRole("BusinessOwner", "BusinessWorker"))
+    .AddPolicy("BusinessConfiguration.Manage",
+        policy => policy.RequireRole("BusinessOwner", "BusinessWorker", "PlatformAdmin"))
     .AddPolicy("Workers.Manage", policy => policy.RequireRole("BusinessOwner", "BusinessWorker"))
     .AddPolicy("PlatformAdmin", policy => policy.RequireRole("PlatformAdmin"))
     // Las socias comparten la consola administrativa; el alcance real lo impone cada caso de uso.
@@ -698,34 +699,39 @@ privateApi.MapPost("/{businessId:guid}/appointments/{appointmentId:guid}/deposit
 privateApi.MapPut("/{businessId:guid}/services/{serviceId:guid}",
     (Guid businessId, Guid serviceId, UpdateServiceRequest request, ClaimsPrincipal user,
         IUrabaUseCases useCases, CancellationToken ct)
-        => useCases.UpdateServiceAsync(UserId(user), businessId, serviceId, request, ct))
+        => useCases.UpdateServiceAsync(UserId(user), businessId, serviceId, request, ct,
+            user.IsInRole("PlatformAdmin")))
     .RequireAuthorization("BusinessConfiguration.Manage");
 privateApi.MapGet("/{businessId:guid}/services",
     (Guid businessId, ClaimsPrincipal user, IUrabaUseCases useCases, CancellationToken ct)
-        => useCases.GetServicesAsync(UserId(user), businessId, ct))
+        => useCases.GetServicesAsync(UserId(user), businessId, ct, user.IsInRole("PlatformAdmin")))
     .RequireAuthorization("BusinessConfiguration.Manage");
 privateApi.MapPost("/{businessId:guid}/services",
     async (Guid businessId, CreateServiceRequest request, ClaimsPrincipal user,
         IUrabaUseCases useCases, CancellationToken ct) =>
-        Results.Created("", await useCases.CreateServiceAsync(UserId(user), businessId, request, ct)))
+        Results.Created("", await useCases.CreateServiceAsync(UserId(user), businessId, request, ct,
+            user.IsInRole("PlatformAdmin"))))
     .RequireAuthorization("BusinessConfiguration.Manage");
 privateApi.MapDelete("/{businessId:guid}/services/{serviceId:guid}",
     async (Guid businessId, Guid serviceId, ClaimsPrincipal user, IUrabaUseCases useCases, CancellationToken ct) =>
-    { await useCases.DeactivateServiceAsync(UserId(user), businessId, serviceId, ct); return Results.NoContent(); })
+    { await useCases.DeactivateServiceAsync(UserId(user), businessId, serviceId, ct,
+        user.IsInRole("PlatformAdmin")); return Results.NoContent(); })
     .RequireAuthorization("BusinessConfiguration.Manage");
 privateApi.MapGet("/{businessId:guid}/staff",
     (Guid businessId, ClaimsPrincipal user, IUrabaUseCases useCases, CancellationToken ct)
-        => useCases.GetStaffAsync(UserId(user), businessId, ct))
+        => useCases.GetStaffAsync(UserId(user), businessId, ct, user.IsInRole("PlatformAdmin")))
     .RequireAuthorization("BusinessConfiguration.Manage");
 privateApi.MapPost("/{businessId:guid}/staff",
     async (Guid businessId, SaveStaffMemberRequest request, ClaimsPrincipal user,
         IUrabaUseCases useCases, CancellationToken ct) =>
-        Results.Created("", await useCases.CreateStaffAsync(UserId(user), businessId, request, ct)))
+        Results.Created("", await useCases.CreateStaffAsync(UserId(user), businessId, request, ct,
+            user.IsInRole("PlatformAdmin"))))
     .RequireAuthorization("BusinessConfiguration.Manage");
 privateApi.MapPut("/{businessId:guid}/staff/{staffId:guid}",
     (Guid businessId, Guid staffId, SaveStaffMemberRequest request, ClaimsPrincipal user,
         IUrabaUseCases useCases, CancellationToken ct)
-        => useCases.UpdateStaffAsync(UserId(user), businessId, staffId, request, ct))
+        => useCases.UpdateStaffAsync(UserId(user), businessId, staffId, request, ct,
+            user.IsInRole("PlatformAdmin")))
     .RequireAuthorization("BusinessConfiguration.Manage");
 privateApi.MapGet("/{businessId:guid}/hours",
     (Guid businessId, ClaimsPrincipal user, IUrabaUseCases useCases, CancellationToken ct)

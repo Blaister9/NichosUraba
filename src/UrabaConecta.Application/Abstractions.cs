@@ -472,19 +472,19 @@ public interface IUrabaUseCases
     Task<AppointmentAdminDto> ChangeStatusAsync(Guid userId, Guid businessId, Guid appointmentId,
         ChangeAppointmentStatusRequest request, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ServiceDto>> GetServicesAsync(Guid userId, Guid businessId,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default, bool isPlatformAdmin = false);
     Task<ServiceDto> UpdateServiceAsync(Guid userId, Guid businessId, Guid serviceId,
-        UpdateServiceRequest request, CancellationToken cancellationToken = default);
+        UpdateServiceRequest request, CancellationToken cancellationToken = default, bool isPlatformAdmin = false);
     Task<ServiceDto> CreateServiceAsync(Guid userId, Guid businessId, CreateServiceRequest request,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default, bool isPlatformAdmin = false);
     Task DeactivateServiceAsync(Guid userId, Guid businessId, Guid serviceId,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default, bool isPlatformAdmin = false);
     Task<IReadOnlyList<StaffMemberDto>> GetStaffAsync(Guid userId, Guid businessId,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default, bool isPlatformAdmin = false);
     Task<StaffMemberDto> CreateStaffAsync(Guid userId, Guid businessId, SaveStaffMemberRequest request,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default, bool isPlatformAdmin = false);
     Task<StaffMemberDto> UpdateStaffAsync(Guid userId, Guid businessId, Guid staffId, SaveStaffMemberRequest request,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default, bool isPlatformAdmin = false);
     Task<IReadOnlyList<BusinessHourAdminDto>> GetBusinessHoursAsync(Guid userId, Guid businessId,
         CancellationToken cancellationToken = default);
     Task<ConfigurationImpactDto> SetBusinessHourAsync(Guid userId, Guid businessId, DayOfWeek day, SaveBusinessHourRequest request,

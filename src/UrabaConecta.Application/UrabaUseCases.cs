@@ -416,10 +416,10 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
     }
 
     public async Task<ServiceDto> UpdateServiceAsync(Guid userId, Guid businessId, Guid serviceId,
-        UpdateServiceRequest request, CancellationToken cancellationToken = default)
+        UpdateServiceRequest request, CancellationToken cancellationToken = default, bool isPlatformAdmin = false)
     {
         await DemandConfigurationAccess(userId, businessId, cancellationToken,
-            BusinessModuleKind.Services);
+            BusinessModuleKind.Services, isPlatformAdmin);
         var service = await store.GetServiceAsync(businessId, serviceId, cancellationToken)
             ?? throw new ApiException("SERVICE_NOT_FOUND", "No encontramos el servicio.", 404);
         var policy = ToPolicy(request, request.ReferencePrice);
@@ -430,18 +430,18 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
     }
 
     public async Task<IReadOnlyList<ServiceDto>> GetServicesAsync(Guid userId, Guid businessId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, bool isPlatformAdmin = false)
     {
         await DemandConfigurationAccess(userId, businessId, cancellationToken,
-            BusinessModuleKind.Services);
+            BusinessModuleKind.Services, isPlatformAdmin);
         return await store.GetServicesAsync(businessId, timeProvider.GetUtcNow(), cancellationToken);
     }
 
     public async Task<ServiceDto> CreateServiceAsync(Guid userId, Guid businessId, CreateServiceRequest request,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, bool isPlatformAdmin = false)
     {
         await DemandConfigurationAccess(userId, businessId, cancellationToken,
-            BusinessModuleKind.Services);
+            BusinessModuleKind.Services, isPlatformAdmin);
         Service service;
         try
         {
@@ -456,10 +456,10 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
     }
 
     public async Task DeactivateServiceAsync(Guid userId, Guid businessId, Guid serviceId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, bool isPlatformAdmin = false)
     {
         await DemandConfigurationAccess(userId, businessId, cancellationToken,
-            BusinessModuleKind.Services);
+            BusinessModuleKind.Services, isPlatformAdmin);
         var service = await store.GetServiceAsync(businessId, serviceId, cancellationToken)
             ?? throw new ApiException("SERVICE_NOT_FOUND", "No encontramos el servicio.", 404);
         service.Update(service.Name, service.DurationMinutes, service.ReferencePrice, false,
@@ -468,18 +468,18 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
     }
 
     public async Task<IReadOnlyList<StaffMemberDto>> GetStaffAsync(Guid userId, Guid businessId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, bool isPlatformAdmin = false)
     {
         await DemandConfigurationAccess(userId, businessId, cancellationToken,
-            BusinessModuleKind.Staff);
+            BusinessModuleKind.Staff, isPlatformAdmin);
         return await store.GetStaffAsync(businessId, cancellationToken);
     }
 
     public async Task<StaffMemberDto> CreateStaffAsync(Guid userId, Guid businessId, SaveStaffMemberRequest request,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, bool isPlatformAdmin = false)
     {
         await DemandConfigurationAccess(userId, businessId, cancellationToken,
-            BusinessModuleKind.Staff);
+            BusinessModuleKind.Staff, isPlatformAdmin);
         var staff = new StaffMember(Guid.NewGuid(), businessId, request.DisplayName.Trim());
         staff.Update(request.DisplayName, request.IsActive, request.ParticipatesInAvailability);
         store.AddStaffMember(staff);
@@ -491,10 +491,10 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
     }
 
     public async Task<StaffMemberDto> UpdateStaffAsync(Guid userId, Guid businessId, Guid staffId,
-        SaveStaffMemberRequest request, CancellationToken cancellationToken = default)
+        SaveStaffMemberRequest request, CancellationToken cancellationToken = default, bool isPlatformAdmin = false)
     {
         await DemandConfigurationAccess(userId, businessId, cancellationToken,
-            BusinessModuleKind.Staff);
+            BusinessModuleKind.Staff, isPlatformAdmin);
         var staff = await store.GetStaffMemberAsync(businessId, staffId, cancellationToken)
             ?? throw new ApiException("STAFF_NOT_FOUND", "No encontramos al trabajador.", 404);
         TryDomain(() => staff.Update(request.DisplayName, request.IsActive, request.ParticipatesInAvailability,
@@ -649,13 +649,20 @@ public sealed partial class UrabaUseCases(IUrabaStore store, IMembershipAdminist
     /// negocio que sólo despacha pedidos.
     /// </summary>
     private async Task DemandConfigurationAccess(Guid userId, Guid businessId,
-        CancellationToken cancellationToken, BusinessModuleKind? capability = null)
+        CancellationToken cancellationToken, BusinessModuleKind? capability = null, bool isPlatformAdmin = false)
     {
         if (userId == Guid.Empty) throw new ApiException("UNAUTHENTICATED", "Debe iniciar sesión.", 401);
-        if (!await store.IsMemberAsync(userId, businessId, cancellationToken))
-            throw new ApiException("BUSINESS_ACCESS_DENIED", "No tiene acceso a este establecimiento.", 403);
-        if (!await store.CanManageConfigurationAsync(userId, businessId, cancellationToken))
-            throw new ApiException("CONFIGURATION_FORBIDDEN", "No tiene permiso para cambiar la configuración.", 403);
+        // El rol se resuelve en el borde autenticado. Su bypass es deliberadamente estrecho:
+        // Servicios y Personal son las superficies de onboarding asistido; horarios y excepciones
+        // continúan exigiendo una membresía operativa del negocio.
+        var platformOnboardingAccess = isPlatformAdmin && capability is BusinessModuleKind.Services or BusinessModuleKind.Staff;
+        if (!platformOnboardingAccess)
+        {
+            if (!await store.IsMemberAsync(userId, businessId, cancellationToken))
+                throw new ApiException("BUSINESS_ACCESS_DENIED", "No tiene acceso a este establecimiento.", 403);
+            if (!await store.CanManageConfigurationAsync(userId, businessId, cancellationToken))
+                throw new ApiException("CONFIGURATION_FORBIDDEN", "No tiene permiso para cambiar la configuración.", 403);
+        }
         if (capability is { } required &&
             !await store.HasCapabilityAsync(businessId, required, cancellationToken))
             throw new ApiException("CAPABILITY_DISABLED",

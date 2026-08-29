@@ -81,22 +81,28 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
         => await Serialized(async () => await useCases.ChangeStatusAsync(await UserId(), businessId, appointmentId, request, cancellationToken), cancellationToken);
     public async Task<IReadOnlyList<ServiceDto>> GetServicesAsync(Guid businessId,
         CancellationToken cancellationToken = default)
-        => await Serialized(async () => await useCases.GetServicesAsync(await UserId(), businessId, cancellationToken), cancellationToken);
+        => await Serialized(async () => await useCases.GetServicesAsync(await UserId(), businessId, cancellationToken,
+            await IsPlatformAdmin()), cancellationToken);
     public async Task<ServiceDto> CreateServiceAsync(Guid businessId, CreateServiceRequest request,
         CancellationToken cancellationToken = default)
-        => await Serialized(async () => await useCases.CreateServiceAsync(await UserId(), businessId, request, cancellationToken), cancellationToken);
+        => await Serialized(async () => await useCases.CreateServiceAsync(await UserId(), businessId, request, cancellationToken,
+            await IsPlatformAdmin()), cancellationToken);
     public async Task<ServiceDto> UpdateServiceAsync(Guid businessId, Guid serviceId, UpdateServiceRequest request,
         CancellationToken cancellationToken = default)
-        => await Serialized(async () => await useCases.UpdateServiceAsync(await UserId(), businessId, serviceId, request, cancellationToken), cancellationToken);
+        => await Serialized(async () => await useCases.UpdateServiceAsync(await UserId(), businessId, serviceId, request,
+            cancellationToken, await IsPlatformAdmin()), cancellationToken);
     public async Task<IReadOnlyList<StaffMemberDto>> GetStaffAsync(Guid businessId,
         CancellationToken cancellationToken = default)
-        => await Serialized(async () => await useCases.GetStaffAsync(await UserId(), businessId, cancellationToken), cancellationToken);
+        => await Serialized(async () => await useCases.GetStaffAsync(await UserId(), businessId, cancellationToken,
+            await IsPlatformAdmin()), cancellationToken);
     public async Task<StaffMemberDto> CreateStaffAsync(Guid businessId, SaveStaffMemberRequest request,
         CancellationToken cancellationToken = default)
-        => await Serialized(async () => await useCases.CreateStaffAsync(await UserId(), businessId, request, cancellationToken), cancellationToken);
+        => await Serialized(async () => await useCases.CreateStaffAsync(await UserId(), businessId, request, cancellationToken,
+            await IsPlatformAdmin()), cancellationToken);
     public async Task<StaffMemberDto> UpdateStaffAsync(Guid businessId, Guid staffId,
         SaveStaffMemberRequest request, CancellationToken cancellationToken = default)
-        => await Serialized(async () => await useCases.UpdateStaffAsync(await UserId(), businessId, staffId, request, cancellationToken), cancellationToken);
+        => await Serialized(async () => await useCases.UpdateStaffAsync(await UserId(), businessId, staffId, request,
+            cancellationToken, await IsPlatformAdmin()), cancellationToken);
     public async Task<IReadOnlyList<BusinessHourAdminDto>> GetBusinessHoursAsync(Guid businessId,
         CancellationToken cancellationToken = default)
         => await Serialized(async () => await useCases.GetBusinessHoursAsync(await UserId(), businessId, cancellationToken), cancellationToken);
@@ -443,6 +449,9 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
         var user = (await authentication.GetAuthenticationStateAsync()).User;
         return Guid.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : Guid.Empty;
     }
+
+    private async Task<bool> IsPlatformAdmin()
+        => (await authentication.GetAuthenticationStateAsync()).User.IsInRole("PlatformAdmin");
 
     /// <summary>El rol se lee de los claims de la petición, nunca de un parámetro del cliente.</summary>
     private async Task<PlatformActor> Actor()

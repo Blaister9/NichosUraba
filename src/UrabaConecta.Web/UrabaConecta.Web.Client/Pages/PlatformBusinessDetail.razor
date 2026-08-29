@@ -97,6 +97,17 @@ else
             <p>Desactivar una función conserva su configuración y datos históricos.</p>
         </section>
 
+        @if (isPlatformAdmin && appointments)
+        {
+            <section class="panel-card" data-testid="onboarding-operativo"><h2>Configuración operativa</h2>
+                <p>Administra el catálogo y quién presta cada servicio sin salir de la ficha.</p>
+                <p>
+                    <a class="button-link" href="/panel/@BusinessId/configuracion/servicios">Servicios</a>
+                    <a class="button-link" href="/panel/@BusinessId/configuracion/personal">Personal</a>
+                </p>
+            </section>
+        }
+
         <section class="panel-card"><h2>Identidad visual</h2>
             <p>JPEG, PNG o WebP. Máximo 5 MB. Se reescala a 1600 px y se eliminan los metadatos EXIF.</p>
             <label>Tipo de imagen
