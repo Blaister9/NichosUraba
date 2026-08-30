@@ -2055,6 +2055,12 @@ body:has(.ficha-hero) .back-link { color: rgb(255 253 249 / 78%) }
     min-height: 72px; padding: .5rem .6rem; border-radius: 14px;
     background: var(--uc-jungle-soft); color: var(--uc-paper); text-decoration: none;
 }
+/* Es el clic que un negocio paga: no puede ser lo único de la entrada que no acusa el toque. */
+.guided-banner { transition: transform .13s ease, background-color .13s ease }
+.guided-banner:active { transform: scale(.985) }
+@media (hover: hover) {
+    .guided-banner:hover { background: #22332C }
+}
 .guided-banner img { width: 56px; height: 56px; border-radius: 10px; object-fit: cover }
 .guided-banner-art { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 10px;
     background: rgb(255 253 249 / 8%); color: rgb(255 253 249 / 55%) }
@@ -2113,6 +2119,9 @@ body:has(.ficha-hero) .back-link { color: rgb(255 253 249 / 78%) }
 .guided-back { display: inline-grid; place-items: center; width: var(--alto-tocable);
     height: var(--alto-tocable); border-radius: 50%; color: rgb(255 253 249 / 78%); text-decoration: none }
 .guided-back:hover { background: rgb(255 253 249 / 12%); color: var(--uc-paper) }
+/* Volver un paso es la salida del recorrido: tenía hover para el ratón y nada para el dedo. */
+.guided-back { transition: background .14s ease, transform .12s ease }
+.guided-back:active { background: rgb(255 253 249 / 18%); transform: scale(.94) }
 
 /* PASO 2 — bloques altos: aquí la decisión es visual y el icono manda sobre el nombre. Sin conteo,
    sin descripción y sin ficha de negocio. */
@@ -2171,6 +2180,19 @@ body:has(.ficha-hero) .back-link { color: rgb(255 253 249 / 78%) }
 .feed-primary .feed-media { height: clamp(340px, 44svh, 400px) }
 .feed-media img { width: 100%; height: 100%; object-fit: cover; transition: transform .18s ease }
 .feed-media:active img { transform: scale(1.015) }
+/* El acuse del tacto vivía sólo en la fotografía, y una pieza sin foto no renderiza <img>: entra
+   por .feed-art, que no tiene nada que escalar. Esas escenas —las de quien todavía no subió una
+   portada, que son las más nuevas del directorio— se quedaban sin ninguna respuesta al dedo. El
+   press pasa al propio enlace, así que responden las dos: la que tiene foto y la que no. */
+.feed-media { transition: transform .13s ease }
+.feed-media:active { transform: scale(.994) }
+/* Con puntero la escena tiene que leerse como algo que se abre, no como una fotografía pegada:
+   la imagen respira y la acción se adelanta hacia su flecha. Bajo el dedo esto no existe —no hay
+   hover en una pantalla táctil— y por eso va detrás de (hover: hover). */
+@media (hover: hover) {
+    .feed-media:hover img { transform: scale(1.03) }
+    .feed-piece:hover .feed-action { transform: translateX(3px) }
+}
 /* Sin fotografía no hay escena. Ahora que el color lo pone la foto, una pieza sin imagen sobre
    selva es un agujero de 400px, así que no se le da el alto de una escena: se encoge hasta lo que
    ocupa su propio icono y la lectura pasa a mandar. El negocio que sube una foto se lleva la
@@ -3024,3 +3046,44 @@ body:has(.ahora-home) footer .meta {
    selva sobre coral da 6:1. El punto que late se queda claro para que siga leyendose como senal. */
 .live-badge { color: var(--uc-jungle) }
 .live-badge i { background: var(--uc-jungle); box-shadow: 0 0 0 4px rgb(12 22 19 / 22%) }
+
+/* =============================================================================================
+   SEÑALES DE QUE ALGO ESTÁ PASANDO
+   Dos cosas que no pertenecen a ninguna pantalla porque ocurren ENTRE pantallas. Las pone
+   site-motion.js; aquí sólo viven su forma y su duración.
+   ============================================================================================= */
+
+/* NAVEGACIÓN EN CURSO — los destinos públicos llevan data-enhance-nav="false", así que cada uno
+   es una carga de documento entera y el navegador no pinta nada entre el toque y la página nueva.
+   Dos píxeles arriba del todo son toda la respuesta que hace falta: alguien recibió el toque y
+   algo viene en camino. Por encima de la cabecera pegajosa (z-index 20), y sin recibir toques:
+   informa, no se toca. */
+.uc-nav-progress {
+    position: fixed; inset: 0 0 auto; z-index: 60; height: 2px; overflow: hidden;
+    background: rgb(15 138 98 / 22%); pointer-events: none;
+}
+.uc-nav-progress::before {
+    display: block; width: 38%; height: 100%; background: var(--uc-green-lift);
+    content: ""; animation: uc-nav-recorre 1.05s cubic-bezier(.65,.05,.36,1) infinite;
+}
+@keyframes uc-nav-recorre {
+    from { transform: translateX(-105%) }
+    to { transform: translateX(365%) }
+}
+/* Sin movimiento la barra sigue haciendo su trabajo: está o no está, y eso ya es la respuesta.
+   Se queda quieta y llena, que es lo mismo que dice la versión que se mueve. */
+.uc-nav-progress[data-quieta]::before { width: 100%; animation: none }
+
+/* FOTOGRAFÍA QUE TERMINA DE CARGAR — el hueco ya estaba reservado, así que esto no mueve nada de
+   sitio: sólo evita que el salto de fondo a foto sea un tirón. 220 ms y sólo opacidad. */
+.uc-media-lista { animation: uc-media-entra .22s ease-out both }
+.uc-media-sin-fundido { animation: none }
+@keyframes uc-media-entra { from { opacity: 0 } to { opacity: 1 } }
+
+@media (prefers-reduced-motion: reduce) {
+    .uc-nav-progress::before { animation: none }
+    .uc-media-lista { animation: none }
+    .feed-media, .guided-banner, .guided-back { transition: none }
+    .feed-media:active, .guided-banner:active, .guided-back:active { transform: none }
+    .feed-media:hover img, .feed-piece:hover .feed-action { transform: none }
+}
