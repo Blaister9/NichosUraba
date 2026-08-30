@@ -11,17 +11,28 @@
 @if (Visible)
 {
     <aside class="install-invite @(Destacada ? "is-destacada" : null)" data-testid="install-invite"
-           data-modo="@estado!.Mode">
+           data-modo="@estado!.Mode" data-plataforma="@estado.Platform" aria-live="polite">
         <span class="install-invite-icono" aria-hidden="true"><Icon Name="instalar" Size="22" /></span>
         <div class="install-invite-copy">
             <strong>@Titulo</strong>
             <p>@Descripcion</p>
 
+            @if (ContextoPlataforma is { } contexto)
+            {
+                <small class="install-invite-plataforma">@contexto</small>
+            }
+
             <div class="install-invite-acciones">
-                @if (estado.Mode == "native")
+                @if (estado.Mode == "pending")
+                {
+                    <span class="install-pending" role="status" data-testid="install-pending">
+                        Terminando la instalación…
+                    </span>
+                }
+                else if (estado.Mode == "native")
                 {
                     <button type="button" class="primary" data-uraba-instalar="true"
-                            data-testid="install-native">Instalar UrabáConecta</button>
+                            data-testid="install-native">Instalar</button>
                 }
                 else
                 {
@@ -31,7 +42,11 @@
                         @(pasosVisibles ? "Ocultar los pasos" : "Cómo instalarla")
                     </button>
                 }
-                @if (Descartable)
+                @* Mientras el navegador termina, "Ahora no" estorba: la persona ya aceptó. Se
+                   esconde durante ese momento y no más: pwa.js espera appinstalled una ventana
+                   acotada y, si no llega, suelta el pendiente por su cuenta. El modo vuelve
+                   entonces a "manual" y esta salida reaparece sin recargar nada. *@
+                @if (Descartable && estado.Mode != "pending")
                 {
                     <button type="button" class="inline-button" data-uraba-descartar-instalacion="true"
                             @onclick="Descartar"
@@ -50,9 +65,10 @@
 }
 
 @code {
-    [Parameter] public string Titulo { get; set; } = "Instalar UrabáConecta";
+    [Parameter] public string Titulo { get; set; } = "Lleva UrabáConecta contigo";
 
-    [Parameter] public string Descripcion { get; set; } = "Ten tus pedidos y seguimiento a la mano.";
+    [Parameter] public string Descripcion { get; set; } =
+        "Instálala y entra más rápido a tus citas, pedidos y negocios.";
 
     /// <summary>Presencia de propietario: la instalación es su herramienta de trabajo, no un extra.</summary>
     [Parameter] public bool Destacada { get; set; }
@@ -74,7 +90,15 @@
     /// ni cuando este navegador no puede instalar: una invitación que no lleva a ninguna parte es
     /// peor que no invitar.
     /// </summary>
-    private bool Visible => estado is { CanOffer: true } && !(Descartable && estado.Dismissed);
+    private bool Visible => estado is { CanOffer: true, Ready: true }
+                            && !(Descartable && estado.Dismissed);
+
+    private string? ContextoPlataforma => estado?.Platform switch
+    {
+        "ios" => "En iOS se añade desde Compartir.",
+        "desktop" when estado.Mode == "manual" => "También puedes instalarla desde el menú del navegador.",
+        _ => null
+    };
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -83,6 +107,7 @@
         try
         {
             estado = await JS.InvokeAsync<AppInstallState>("urabaApp.install.watch", clave, referencia);
+            pasosVisibles = estado is { Mode: "manual", Platform: "ios" };
             observando = true;
             StateHasChanged();
         }
@@ -98,7 +123,8 @@
     {
         // Si el diálogo no pudo abrirse pero el dispositivo tiene un camino manual conocido, se
         // muestra esa única alternativa sin requerir otro toque.
-        if (estado is { Mode: "native" } && nuevo.Mode == "manual") pasosVisibles = true;
+        if (nuevo is { Mode: "manual", Platform: "ios", Dismissed: false }) pasosVisibles = true;
+        else if (estado is { Mode: "native" } && nuevo.Mode == "manual") pasosVisibles = true;
         else if (!nuevo.CanOffer) pasosVisibles = false;
         estado = nuevo;
         StateHasChanged();

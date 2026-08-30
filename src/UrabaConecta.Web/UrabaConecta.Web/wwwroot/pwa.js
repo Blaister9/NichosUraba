@@ -9,12 +9,27 @@
    InteractiveServer viaja al servidor y vuelve. Escuchando el clic aquí, la llamada ocurre dentro
    del propio evento del DOM y nunca depende de lo que tarde el circuito. */
 (() => {
-  const INSTALADA = 'urabaAppInstalada';
+  const INSTALADA_LEGACY = 'urabaAppInstalada';
   const DESCARTADA = 'urabaInstalarDescartada';
   const DIAS_DE_DESCARTE = 14;
+  const CORTESIA_MS = 1_600;
+  /* Aceptar el diálogo del navegador no es haber instalado: la única confirmación es
+     appinstalled (o el cambio de display-mode). Esa señal se espera una ventana acotada y no
+     para siempre. Doce segundos cubren con holgura lo que tarda Chrome en escribir el acceso
+     directo —uno o dos normalmente, y unos pocos más en un teléfono lento bajando los iconos
+     del manifiesto—, y siguen siendo poco tiempo para quien mira la pantalla. Sin este límite,
+     un appinstalled que no llega nunca —el sistema cancela la instalación, o el navegador
+     simplemente no emite el evento— dejaba a la persona en "Terminando la instalación…" sin
+     botón, sin "Ahora no" y sin más salida que recargar. */
+  const ESPERA_INSTALACION_MS = 12_000;
 
   /** El BeforeInstallPromptEvent que el navegador nos dejó guardar, o null. */
   let oferta = null;
+  let instalacionPendiente = false;
+  /** Temporizador de recuperación del estado pendiente, o 0 si no hay ninguno en marcha. */
+  let relojDeEspera = 0;
+  let instaladaEnEstaSesion = false;
+  let invitacionLista = false;
   /* Referencias .NET que quieren enterarse de los cambios de estado, por clave propia del
      componente: Blazor no garantiza que la misma referencia llegue como el mismo objeto de
      JavaScript, así que darse de baja por identidad dejaría oyentes muertos acumulándose. */
@@ -23,6 +38,10 @@
   const guardar = (clave, valor) => { try { localStorage.setItem(clave, valor); } catch { } };
   const leer = clave => { try { return localStorage.getItem(clave); } catch { return null; } };
   const borrar = clave => { try { localStorage.removeItem(clave); } catch { } };
+
+  // Versiones anteriores recordaban para siempre una instalación que podía no haber terminado.
+  // Se retira esa marca al cargar: instalada sólo significa una señal real de esta sesión.
+  borrar(INSTALADA_LEGACY);
 
   /* Correr como aplicación es algo que se comprueba ahora, no que se recuerda: lo dice el modo de
      presentación que informa el propio navegador.
@@ -37,35 +56,53 @@
       .some(modo => window.matchMedia(`(display-mode: ${modo})`).matches) ||
     window.navigator.standalone === true;
 
-  /* No se mantienen matrices por marca o navegador. La presencia de navigator.standalone es la
-     capacidad que expone el entorno móvil basado en WebKit; Android se reconoce como plataforma,
-     no por fabricante. En ambos casos la ayuda describe el menú: nunca promete abrirlo sola. */
+  /* No se mantienen matrices por marca de teléfono. La presencia de navigator.standalone es la
+     capacidad que expone iOS/WebKit; Android y Chromium desktop sólo se distinguen para ofrecer el
+     camino de menú que realmente existe cuando el evento nativo todavía no está disponible. */
   const caminoManual = () => {
     if ('standalone' in navigator) return {
+      platform: 'ios',
       menu: 'Compartir',
-      steps: ['Toca Compartir y elige “Añadir a pantalla de inicio”.']
+      steps: [
+        'Toca Compartir en la barra del navegador.',
+        'Elige “Añadir a pantalla de inicio” y confirma.'
+      ]
     };
     if (/Android/i.test(navigator.userAgent || '')) return {
+      platform: 'android',
       menu: 'Menú del navegador',
-      steps: ['Abre el menú del navegador y elige “Instalar aplicación” o “Añadir a pantalla de inicio”.']
+      steps: [
+        'Abre el menú del navegador.',
+        'Elige “Instalar aplicación” o “Añadir a pantalla de inicio”.'
+      ]
     };
-    return { menu: '', steps: [] };
+    if (/(?:Chrome|Chromium|Edg)\//i.test(navigator.userAgent || '')) return {
+      platform: 'desktop',
+      menu: 'Menú del navegador',
+      steps: [
+        'Abre el menú de este navegador.',
+        'Elige “Instalar UrabáConecta” o “Instalar aplicación”.'
+      ]
+    };
+    return { platform: '', menu: '', steps: [] };
   };
 
   const descartada = () => {
     const cuando = Number(leer(DESCARTADA));
     if (!cuando) return false;
-    return Date.now() - cuando < DIAS_DE_DESCARTE * 86_400_000;
+    if (Date.now() - cuando < DIAS_DE_DESCARTE * 86_400_000) return true;
+    borrar(DESCARTADA);
+    return false;
   };
 
   const estado = () => {
     const pasos = caminoManual();
-    // Correr como aplicación se comprueba ahora; una instalación aceptada también se recuerda para
-    // no volver a ofrecerla en pestañas del mismo dispositivo. Si el navegador vuelve a emitir
-    // beforeinstallprompt, esa señal más reciente limpia la marca y habilita de nuevo la oferta.
+    // Aceptar el diálogo no equivale a instalar. Sólo appinstalled o el modo standalone permiten
+    // afirmar que la instalación terminó; mientras tanto se conserva un estado pendiente honesto.
     const comoApp = enModoApp();
     let mode;
-    if (comoApp || leer(INSTALADA) === '1') mode = 'installed';
+    if (comoApp || instaladaEnEstaSesion) mode = 'installed';
+    else if (instalacionPendiente) mode = 'pending';
     else if (oferta) mode = 'native';
     else if (pasos.steps.length > 0) mode = 'manual';
     else mode = 'unavailable';
@@ -73,7 +110,8 @@
       mode,
       runningAsApp: comoApp,
       dismissed: descartada(),
-      platform: pasos.steps.length > 0 ? 'mobile' : '',
+      ready: invitacionLista,
+      platform: pasos.platform,
       browser: '',
       menu: pasos.menu,
       steps: pasos.steps
@@ -87,17 +125,61 @@
     }
   };
 
+  const soltarEspera = () => {
+    if (!relojDeEspera) return;
+    window.clearTimeout(relojDeEspera);
+    relojDeEspera = 0;
+  };
+
+  /* Salir de pendiente por cualquier vía —se instaló, el navegador volvió a ofrecer su diálogo,
+     el intento falló— cancela también la recuperación: un temporizador vivo sobre un estado que
+     ya cambió sólo puede llegar tarde y contradecirlo. */
+  const cerrarEspera = () => {
+    soltarEspera();
+    instalacionPendiente = false;
+  };
+
+  /* Recuperación acotada, no reintento: al vencer no se afirma nada que no se sepa. No se marca
+     instalada —no hubo señal— ni se guarda un descarte que la persona no pidió, así que el plazo
+     de catorce días queda como estaba. Se suelta el pendiente y el estado vuelve a calcularse
+     solo; como la oferta nativa ya se gastó, lo que queda es el camino manual del navegador, con
+     su "Ahora no" otra vez disponible. Dispara una vez y no se reprograma: no hay ciclo. */
+  const esperarInstalacion = () => {
+    soltarEspera();
+    relojDeEspera = window.setTimeout(() => {
+      relojDeEspera = 0;
+      if (!instalacionPendiente) return;
+      instalacionPendiente = false;
+      avisar();
+    }, ESPERA_INSTALACION_MS);
+  };
+
+  // La card no compite con la primera pintura. Aparece después de una breve cortesía o en cuanto
+  // la persona interactúa: sigue siendo visible, pero nunca es una ventana que bloquea la entrada.
+  const revelarInvitacion = () => {
+    if (invitacionLista) return;
+    invitacionLista = true;
+    avisar();
+  };
+  const revelarTrasInteraccion = evento => { if (evento.isTrusted) revelarInvitacion(); };
+  window.addEventListener('pointerdown', revelarTrasInteraccion, { once: true, passive: true });
+  window.addEventListener('keydown', revelarTrasInteraccion, { once: true });
+  const programarCortesia = () => window.setTimeout(revelarInvitacion, CORTESIA_MS);
+  if (document.readyState === 'complete') programarCortesia();
+  else window.addEventListener('load', programarCortesia, { once: true });
+
   window.addEventListener('beforeinstallprompt', evento => {
     // Sin preventDefault, Chrome puede pintar su propia franja encima de la nuestra.
     evento.preventDefault();
     oferta = evento;
-    borrar(INSTALADA);
+    cerrarEspera();
     avisar();
   });
 
   window.addEventListener('appinstalled', () => {
     oferta = null;
-    guardar(INSTALADA, '1');
+    cerrarEspera();
+    instaladaEnEstaSesion = true;
     borrar(DESCARTADA);
     avisar();
   });
@@ -108,7 +190,13 @@
      por delante lo que viene después: el objeto de instalación y el registro del sw. */
   try {
     window.matchMedia('(display-mode: standalone)')
-      .addEventListener('change', evento => { if (evento.matches) { guardar(INSTALADA, '1'); avisar(); } });
+      .addEventListener('change', evento => {
+        if (evento.matches) {
+          cerrarEspera();
+          instaladaEnEstaSesion = true;
+          avisar();
+        }
+      });
   } catch { }
 
   /* El clic se atiende aquí, en fase de captura, para que prompt() ocurra dentro del gesto. */
@@ -121,12 +209,19 @@
     try {
       evento.prompt();
       const { outcome } = await evento.userChoice;
-      if (outcome === 'accepted') guardar(INSTALADA, '1');
-      else guardar(DESCARTADA, String(Date.now()));
+      if (outcome === 'accepted') {
+        // El pendiente y su recuperación se arman en la misma línea: separarlos es justamente
+        // como se llegó al atasco, con el estado puesto y el reloj sin arrancar.
+        if (!instaladaEnEstaSesion) { instalacionPendiente = true; esperarInstalacion(); }
+      } else {
+        cerrarEspera();
+        guardar(DESCARTADA, String(Date.now()));
+      }
       avisar();
       return outcome;
     } catch {
       // Chrome lanza si el gesto ya caducó. Se cae a las instrucciones manuales, que siempre valen.
+      cerrarEspera();
       avisar();
       return 'error';
     }

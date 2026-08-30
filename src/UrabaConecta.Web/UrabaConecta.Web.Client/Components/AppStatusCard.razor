@@ -74,6 +74,7 @@
     private string EtiquetaApp => instalacion switch
     {
         { Mode: "installed" } => "Instalada",
+        { Mode: "pending" } => "Instalando…",
         { Mode: "native" or "manual" } => "Instalar",
         { Mode: "unavailable" } => "No disponible aquí",
         _ => "Comprobando…"
@@ -82,6 +83,7 @@
     private string ClaseApp => instalacion switch
     {
         { Mode: "installed" } => "es-bien",
+        { Mode: "pending" } => "es-pendiente",
         { Mode: "native" or "manual" } => "es-pendiente",
         _ => "es-neutro"
     };
@@ -90,6 +92,7 @@
     {
         { Mode: "installed", RunningAsApp: true } => "La abres desde el icono, como cualquier otra aplicación.",
         { Mode: "installed" } => "Ya está instalada en este dispositivo.",
+        { Mode: "pending" } => "Completa el paso del navegador; confirmaremos cuando la instalación termine.",
         { Dismissed: true } => "Puedes seguir usando UrabáConecta en el navegador.",
         { Mode: "native" or "manual" } => "Ten tus turnos, citas y pedidos a mano, sin escribir la dirección.",
         { Mode: "unavailable" } => "Este navegador no instala aplicaciones. Puedes seguir usándola aquí igual.",

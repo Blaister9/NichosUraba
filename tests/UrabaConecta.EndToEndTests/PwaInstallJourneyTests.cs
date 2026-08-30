@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using UrabaConecta.Infrastructure.Persistence;
@@ -5,14 +6,32 @@ using UrabaConecta.Infrastructure.Persistence;
 namespace UrabaConecta.EndToEndTests;
 
 /// <summary>
-/// Comprueba la experiencia de instalación que ve una persona en un teléfono: oferta nativa,
-/// alternativa manual mínima, descarte persistente y ausencia de insistencia si ya está instalada.
+/// Comprueba la experiencia de instalación que ve una persona en teléfono y escritorio: oferta
+/// nativa, alternativas manuales, descarte temporal y ausencia de falsos positivos de instalación.
 /// </summary>
 public sealed class PwaInstallJourneyTests(BrowserFixture fixture) : IClassFixture<BrowserFixture>
 {
     private const string AgenteMovil =
         "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) " +
         "Chrome/120.0.0.0 Mobile Safari/537.36";
+
+    private const string AgenteIos =
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 " +
+        "(KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1";
+
+    /// <summary>
+    /// La ventana de recuperación de pwa.js (ESPERA_INSTALACION_MS) son 12 s reales. Los tests la
+    /// dejan correr de verdad en vez de falsificar el reloj: intervenir setTimeout en una página de
+    /// Blazor Server también intervendría los latidos de SignalR, y entonces lo que se estaría
+    /// midiendo sería el reloj falso y no la recuperación.
+    /// </summary>
+    private const float VentanaDeRecuperacion = 12_000;
+
+    /// <summary>Tope para esperar el vencimiento, con margen sobre la ventana.</summary>
+    private const float TopeDeRecuperacion = 20_000;
+
+    /// <summary>Margen que se deja correr POR ENCIMA de la ventana para probar una ausencia.</summary>
+    private const float MasAllaDeLaRecuperacion = VentanaDeRecuperacion + 4_000;
 
     /// <summary>
     /// Sin oferta programática no aparece un botón que finja abrir el instalador. Sólo queda la
@@ -35,11 +54,43 @@ public sealed class PwaInstallJourneyTests(BrowserFixture fixture) : IClassFixtu
         await Expect(page.GetByTestId("install-native")).ToHaveCountAsync(0);
         await Expect(pasos).ToContainTextAsync("Instalar aplicación");
         await Expect(pasos).ToContainTextAsync("pantalla de inicio");
-        await Expect(pasos.Locator("li")).ToHaveCountAsync(1);
+        await Expect(pasos.Locator("li")).ToHaveCountAsync(2);
 
         // Nada de esto puede empujar la pantalla a lo ancho en un teléfono.
         Assert.False(await page.EvaluateAsync<bool>(
             "document.documentElement.scrollWidth > window.innerWidth"));
+    }
+
+    [Fact]
+    public async Task Ios_shows_share_and_add_to_home_instructions_without_an_android_prompt()
+    {
+        await using var context = await IosContext();
+        await context.AddInitScriptAsync(GuionIos);
+        var page = await context.NewPageAsync();
+
+        await page.GotoAsync(fixture.BaseUrl);
+        var invitacion = page.GetByTestId("install-invite");
+        await Expect(invitacion).ToBeVisibleAsync(new() { Timeout = 30_000 });
+        Assert.Equal("ios", await invitacion.GetAttributeAsync("data-plataforma"));
+        await Expect(invitacion.GetByTestId("install-native")).ToHaveCountAsync(0);
+        await Expect(invitacion.GetByTestId("install-steps")).ToContainTextAsync("Compartir");
+        await Expect(invitacion.GetByTestId("install-steps")).ToContainTextAsync("Añadir a pantalla de inicio");
+        await Expect(invitacion).Not.ToContainTextAsync("Instalar aplicación");
+    }
+
+    [Fact]
+    public async Task Desktop_chromium_without_native_offer_keeps_a_visible_manual_route()
+    {
+        await using var context = await DesktopContext();
+        var page = await context.NewPageAsync();
+
+        await page.GotoAsync(fixture.BaseUrl);
+        var invitacion = page.GetByTestId("install-invite");
+        await Expect(invitacion).ToBeVisibleAsync(new() { Timeout = 30_000 });
+        Assert.Equal("desktop", await invitacion.GetAttributeAsync("data-plataforma"));
+        await Expect(invitacion.GetByTestId("install-native")).ToHaveCountAsync(0);
+        await invitacion.GetByTestId("install-manual").ClickAsync();
+        await Expect(invitacion.GetByTestId("install-steps")).ToContainTextAsync("menú de este navegador");
     }
 
     /// <summary>
@@ -57,16 +108,122 @@ public sealed class PwaInstallJourneyTests(BrowserFixture fixture) : IClassFixtu
 
         var invitacion = page.GetByTestId("install-invite");
         await Expect(invitacion).ToBeVisibleAsync(new() { Timeout = 30_000 });
-        await Expect(invitacion).ToContainTextAsync("Instalar UrabáConecta");
-        await Expect(invitacion).ToContainTextAsync("Ten tus pedidos y seguimiento a la mano.");
+        await Expect(invitacion).ToContainTextAsync("Lleva UrabáConecta contigo");
+        await Expect(invitacion).ToContainTextAsync("entra más rápido a tus citas, pedidos y negocios");
         var boton = invitacion.GetByTestId("install-native");
         await Expect(boton).ToBeVisibleAsync(new() { Timeout = 30_000 });
-        await Expect(boton).ToHaveTextAsync("Instalar UrabáConecta");
+        await Expect(boton).ToHaveTextAsync("Instalar");
         Assert.Equal("native", await page.EvaluateAsync<string>("urabaApp.install.state().mode"));
 
         await boton.ClickAsync();
-        await Expect(invitacion).ToHaveCountAsync(0);
         Assert.True(await page.EvaluateAsync<bool>("window.__dialogoAbierto === true"));
+        await Expect(invitacion.GetByTestId("install-pending")).ToBeVisibleAsync();
+        Assert.Equal("pending", await page.EvaluateAsync<string>("urabaApp.install.state().mode"));
+        Assert.False(await page.EvaluateAsync<bool>("urabaApp.install.state().runningAsApp"));
+
+        await page.EvaluateAsync("window.dispatchEvent(new Event('appinstalled'))");
+        await Expect(invitacion).ToHaveCountAsync(0);
+        Assert.Equal("installed", await page.EvaluateAsync<string>("urabaApp.install.state().mode"));
+    }
+
+    [Fact]
+    public async Task Desktop_native_offer_uses_the_same_real_browser_dialog()
+    {
+        await using var context = await DesktopContext();
+        await context.AddInitScriptAsync(GuionOfertaNativa);
+        var page = await context.NewPageAsync();
+
+        await page.GotoAsync(fixture.BaseUrl);
+        var invitacion = page.GetByTestId("install-invite");
+        await Expect(invitacion).ToBeVisibleAsync(new() { Timeout = 30_000 });
+        Assert.Equal("desktop", await invitacion.GetAttributeAsync("data-plataforma"));
+
+        await invitacion.GetByTestId("install-native").ClickAsync();
+        Assert.True(await page.EvaluateAsync<bool>("window.__dialogoAbierto === true"));
+        await Expect(invitacion.GetByTestId("install-pending")).ToBeVisibleAsync();
+    }
+
+    /// <summary>
+    /// DEFECTO AUDITADO: aceptar el diálogo dejaba "pending" sin salida. Si appinstalled no llega
+    /// nunca —el sistema cancela la instalación, o el navegador no emite el evento— la persona se
+    /// quedaba en "Terminando la instalación…" sin botón, sin "Ahora no" y sin más recurso que
+    /// recargar. La recuperación vence sola, no declara una instalación que nadie confirmó, y
+    /// devuelve una acción y una salida.
+    /// </summary>
+    [Fact]
+    public async Task Accepting_the_dialog_without_appinstalled_stops_being_pending_on_its_own()
+    {
+        await using var context = await AndroidContext();
+        await context.AddInitScriptAsync(GuionOfertaNativa);
+        var page = await context.NewPageAsync();
+        await page.GotoAsync(fixture.BaseUrl);
+
+        var invitacion = page.GetByTestId("install-invite");
+        await Expect(invitacion).ToBeVisibleAsync(new() { Timeout = 30_000 });
+        await invitacion.GetByTestId("install-native").ClickAsync();
+        await Expect(invitacion.GetByTestId("install-pending")).ToBeVisibleAsync();
+        Assert.Equal("pending", await page.EvaluateAsync<string>("urabaApp.install.state().mode"));
+
+        // Nadie emite appinstalled. Lo único que pasa es el tiempo.
+        await Expect(invitacion.GetByTestId("install-pending"))
+            .ToHaveCountAsync(0, new() { Timeout = TopeDeRecuperacion });
+
+        // No se inventa una instalación que no ocurrió, ni un descarte que nadie pidió.
+        Assert.Equal("manual", await page.EvaluateAsync<string>("urabaApp.install.state().mode"));
+        Assert.False(await page.EvaluateAsync<bool>("urabaApp.install.state().runningAsApp"));
+        Assert.False(await page.EvaluateAsync<bool>("urabaApp.install.state().dismissed"));
+
+        // Y la persona recupera con qué actuar y con qué cerrar, sin recargar nada.
+        await Expect(invitacion).ToBeVisibleAsync();
+        await Expect(invitacion.GetByTestId("install-manual")).ToBeVisibleAsync();
+        var descarte = invitacion.GetByTestId("install-dismiss");
+        await Expect(descarte).ToBeVisibleAsync();
+        await descarte.ClickAsync();
+        await Expect(page.GetByTestId("install-invite")).ToHaveCountAsync(0);
+    }
+
+    /// <summary>
+    /// El otro lado del mismo defecto: cuando appinstalled SÍ llega, manda esa señal y no el
+    /// temporizador. La instalación queda confirmada, la invitación se va, y la recuperación no
+    /// puede volver más tarde a contradecir ninguna de las dos cosas.
+    /// </summary>
+    [Fact]
+    public async Task Appinstalled_during_pending_confirms_and_cancels_the_recovery_timer()
+    {
+        await using var context = await AndroidContext();
+        await context.AddInitScriptAsync(GuionOfertaNativa);
+        var page = await context.NewPageAsync();
+        await page.GotoAsync(fixture.BaseUrl);
+
+        var invitacion = page.GetByTestId("install-invite");
+        await Expect(invitacion).ToBeVisibleAsync(new() { Timeout = 30_000 });
+        await invitacion.GetByTestId("install-native").ClickAsync();
+        await Expect(invitacion.GetByTestId("install-pending")).ToBeVisibleAsync();
+
+        await page.EvaluateAsync("window.dispatchEvent(new Event('appinstalled'))");
+        Assert.Equal("installed", await page.EvaluateAsync<string>("urabaApp.install.state().mode"));
+        await Expect(page.GetByTestId("install-invite")).ToHaveCountAsync(0);
+
+        // Pasada la ventana de recuperación, nada resucita la card ni el estado pendiente: el
+        // temporizador se canceló al confirmarse la instalación.
+        await page.WaitForTimeoutAsync(MasAllaDeLaRecuperacion);
+        Assert.Equal("installed", await page.EvaluateAsync<string>("urabaApp.install.state().mode"));
+        await Expect(page.GetByTestId("install-invite")).ToHaveCountAsync(0);
+        await Expect(page.GetByTestId("install-pending")).ToHaveCountAsync(0);
+    }
+
+    [Fact]
+    public async Task Invitation_waits_for_the_courtesy_moment_instead_of_competing_with_first_paint()
+    {
+        await using var context = await AndroidContext();
+        await context.AddInitScriptAsync(GuionOfertaNativa);
+        var page = await context.NewPageAsync();
+
+        await page.GotoAsync(fixture.BaseUrl, new() { WaitUntil = WaitUntilState.DOMContentLoaded });
+        await page.WaitForFunctionAsync("window.urabaApp?.install?.state");
+        Assert.False(await page.EvaluateAsync<bool>("urabaApp.install.state().ready"));
+        await Expect(page.GetByTestId("install-invite")).ToHaveCountAsync(0);
+        await Expect(page.GetByTestId("install-invite")).ToBeVisibleAsync(new() { Timeout = 30_000 });
     }
 
     /// <summary>
@@ -92,11 +249,11 @@ public sealed class PwaInstallJourneyTests(BrowserFixture fixture) : IClassFixtu
     }
 
     /// <summary>
-    /// Una instalación aceptada se recuerda también al volver desde una pestaña: no se repite la
-    /// invitación ni queda otro CTA de instalación en Mi actividad.
+    /// La antigua marca persistente no puede seguir afirmando que la app está instalada. Esa marca
+    /// también podía sobrevivir a una desinstalación o a un diálogo aceptado que nunca terminara.
     /// </summary>
     [Fact]
-    public async Task A_remembered_install_hides_redundant_installation_calls_to_action()
+    public async Task A_legacy_remembered_install_does_not_create_a_permanent_false_positive()
     {
         await using var context = await AndroidContext();
         await context.AddInitScriptAsync(
@@ -104,11 +261,11 @@ public sealed class PwaInstallJourneyTests(BrowserFixture fixture) : IClassFixtu
         var page = await context.NewPageAsync();
 
         await page.GotoAsync(fixture.BaseUrl);
-        await Expect(page.GetByTestId("install-invite")).ToHaveCountAsync(0);
+        await Expect(page.GetByTestId("install-invite")).ToBeVisibleAsync(new() { Timeout = 30_000 });
         await page.GotoAsync($"{fixture.BaseUrl}/seguimiento");
-        await Expect(page.GetByTestId("app-status-app-valor")).ToHaveTextAsync("Instalada",
+        await Expect(page.GetByTestId("app-status-app-valor")).ToHaveTextAsync("Instalar",
             new() { Timeout = 30_000 });
-        await Expect(page.GetByTestId("app-status-install")).ToHaveCountAsync(0);
+        await Expect(page.GetByTestId("app-status-install")).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -132,6 +289,19 @@ public sealed class PwaInstallJourneyTests(BrowserFixture fixture) : IClassFixtu
         await page.GotoAsync($"{fixture.BaseUrl}/seguimiento");
         await Expect(page.GetByTestId("app-status")).ToBeVisibleAsync(new() { Timeout = 30_000 });
         await Expect(page.GetByTestId("app-status-install")).ToHaveCountAsync(0);
+    }
+
+    [Fact]
+    public async Task Dismissal_expires_after_fourteen_days_and_the_invitation_can_return()
+    {
+        await using var context = await AndroidContext();
+        await context.AddInitScriptAsync(
+            "localStorage.setItem('urabaInstalarDescartada', String(Date.now() - 15 * 86400000));");
+        var page = await context.NewPageAsync();
+
+        await page.GotoAsync(fixture.BaseUrl);
+        await Expect(page.GetByTestId("install-invite")).ToBeVisibleAsync(new() { Timeout = 30_000 });
+        Assert.False(await page.EvaluateAsync<bool>("urabaApp.install.state().dismissed"));
     }
 
     /// <summary>
@@ -185,6 +355,140 @@ public sealed class PwaInstallJourneyTests(BrowserFixture fixture) : IClassFixtu
     }
 
     /// <summary>
+    /// DEFECTO AUDITADO: la Home es una pantalla de selva con texto papel, y la invitación trae SU
+    /// propia superficie clara. Sin declarar tinta, la card heredaba el papel de la pantalla: el
+    /// "Ahora no" acababa en rgb(255,253,249) sobre rgb(255,253,249) —contraste 1:1, invisible—.
+    ///
+    /// Se mide sobre estilos calculados por el navegador, no sobre lo que dice la hoja: el fondo de
+    /// la card es un degradado, así que su backgroundColor calculado es transparente y una lectura
+    /// ingenua vería la selva de detrás y daría el defecto por bueno. Por eso se resuelven las dos
+    /// paradas del degradado y se componen sobre la superficie opaca que hay debajo.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task The_invitation_stays_legible_over_the_dark_home(bool temaOscuro)
+    {
+        await using var context = await AndroidContext(temaOscuro ? ColorScheme.Dark : ColorScheme.Light);
+        await context.AddInitScriptAsync(GuionOfertaNativa);
+        var page = await context.NewPageAsync();
+        await page.GotoAsync(fixture.BaseUrl);
+
+        var invitacion = page.GetByTestId("install-invite");
+        await Expect(invitacion).ToBeVisibleAsync(new() { Timeout = 30_000 });
+        var descarte = invitacion.GetByTestId("install-dismiss");
+        await Expect(descarte).ToBeVisibleAsync();
+
+        var medida = await invitacion.EvaluateAsync<Tintas>(SondaDeContraste);
+        var pantalla = LeerTinta(medida.Pantalla);
+
+        // El fallo exacto del informe: la misma tinta delante y detrás.
+        Assert.NotEqual(medida.DescarteColor, medida.DescarteFondo);
+
+        var descarteTexto = Sobre(LeerTinta(medida.DescarteColor), LeerTinta(medida.DescarteFondo));
+        var descarteFondo = Sobre(LeerTinta(medida.DescarteFondo), pantalla);
+        var razonDescarte = Contraste(descarteTexto, descarteFondo);
+        Assert.True(razonDescarte >= 4.5,
+            $"\"Ahora no\": {medida.DescarteColor} sobre {medida.DescarteFondo} = {razonDescarte:0.00}:1");
+
+        // El texto principal se lee sobre las DOS paradas del degradado, no sólo sobre una.
+        var titulo = LeerTinta(medida.TextoColor);
+        foreach (var (parada, crudo) in new[] { ("inicio", medida.CardInicio), ("fin", medida.CardFin) })
+        {
+            var fondo = Sobre(LeerTinta(crudo), pantalla);
+            var razon = Contraste(Sobre(titulo, fondo), fondo);
+            Assert.True(razon >= 4.5,
+                $"título sobre el degradado ({parada}): {medida.TextoColor} sobre {crudo} = {razon:0.00}:1");
+        }
+    }
+
+    /// <summary>
+    /// Resuelve las tintas que de verdad se pintan. Las paradas del degradado se leen inyectando una
+    /// sonda dentro de la propia card: así var() se resuelve con las variables que hereda la card y
+    /// el navegador devuelve rgb()/rgba() canónico en vez del texto del token.
+    /// </summary>
+    private const string SondaDeContraste = """
+        invitacion => {
+          const resolver = valor => {
+            const sonda = document.createElement('span');
+            sonda.style.backgroundColor = valor;
+            invitacion.appendChild(sonda);
+            const tinta = getComputedStyle(sonda).backgroundColor;
+            sonda.remove();
+            return tinta;
+          };
+          // Sólo el canal alfa decide, y sólo cuando el color lo trae: mirar el final del texto
+          // confundiría un rgb(1, 2, 0) opaco con un transparente.
+          const invisible = tinta => {
+            const canales = (tinta.match(/[\d.]+/g) || []).map(Number);
+            return canales.length > 3 && canales[3] === 0;
+          };
+          const opacoDetras = elemento => {
+            for (let nodo = elemento; nodo; nodo = nodo.parentElement) {
+              const tinta = getComputedStyle(nodo).backgroundColor;
+              if (tinta && tinta !== 'transparent' && !invisible(tinta)) return tinta;
+            }
+            return getComputedStyle(document.documentElement).backgroundColor;
+          };
+          const titulo = invitacion.querySelector('strong');
+          const descarte = invitacion.querySelector('[data-testid="install-dismiss"]');
+          return {
+            textoColor: getComputedStyle(titulo).color,
+            descarteColor: getComputedStyle(descarte).color,
+            descarteFondo: getComputedStyle(descarte).backgroundColor,
+            cardInicio: resolver('var(--uc-green-wash)'),
+            cardFin: resolver('var(--superficie-2)'),
+            pantalla: opacoDetras(invitacion.parentElement)
+          };
+        }
+        """;
+
+    private sealed record Tintas
+    {
+        public string TextoColor { get; init; } = "";
+        public string DescarteColor { get; init; } = "";
+        public string DescarteFondo { get; init; } = "";
+        public string CardInicio { get; init; } = "";
+        public string CardFin { get; init; } = "";
+        public string Pantalla { get; init; } = "";
+    }
+
+    private readonly record struct Tinta(double R, double G, double B, double A);
+
+    private static Tinta LeerTinta(string css)
+    {
+        var canales = Regex.Matches(css, @"[\d.]+")
+            .Select(coincidencia => double.Parse(coincidencia.Value, CultureInfo.InvariantCulture))
+            .ToArray();
+        Assert.True(canales.Length >= 3, $"no es un color legible: {css}");
+        return new Tinta(canales[0], canales[1], canales[2], canales.Length > 3 ? canales[3] : 1d);
+    }
+
+    /// <summary>Compone una tinta translúcida sobre la que tiene detrás. Opaca, se devuelve igual.</summary>
+    private static Tinta Sobre(Tinta frente, Tinta fondo) => frente.A >= 1d ? frente : new Tinta(
+        frente.R * frente.A + fondo.R * (1d - frente.A),
+        frente.G * frente.A + fondo.G * (1d - frente.A),
+        frente.B * frente.A + fondo.B * (1d - frente.A),
+        1d);
+
+    /// <summary>Razón de contraste de WCAG 2.1. No es una suite completa: es la evidencia del fallo.</summary>
+    private static double Contraste(Tinta texto, Tinta fondo)
+    {
+        static double Canal(double valor)
+        {
+            var v = valor / 255d;
+            return v <= 0.03928d ? v / 12.92d : Math.Pow((v + 0.055d) / 1.055d, 2.4d);
+        }
+
+        static double Luminancia(Tinta t) =>
+            0.2126d * Canal(t.R) + 0.7152d * Canal(t.G) + 0.0722d * Canal(t.B);
+
+        var uno = Luminancia(texto) + 0.05d;
+        var otro = Luminancia(fondo) + 0.05d;
+        return uno > otro ? uno / otro : otro / uno;
+    }
+
+    /// <summary>
     /// Quien opera el negocio recibe la invitación destacada y sin salida de escape: para esa
     /// persona la aplicación instalada con avisos es la herramienta, no un extra.
     /// </summary>
@@ -197,7 +501,7 @@ public sealed class PwaInstallJourneyTests(BrowserFixture fixture) : IClassFixtu
 
         var invitacion = page.GetByTestId("install-invite");
         await Expect(invitacion).ToBeVisibleAsync(new() { Timeout = 30_000 });
-        await Expect(invitacion).ToContainTextAsync("Instalar UrabáConecta");
+        await Expect(invitacion).ToContainTextAsync("Lleva tu negocio contigo");
         await Expect(invitacion).ToHaveClassAsync(new Regex("is-destacada"));
         await Expect(invitacion.GetByTestId("install-dismiss")).ToHaveCountAsync(0);
     }
@@ -228,8 +532,8 @@ public sealed class PwaInstallJourneyTests(BrowserFixture fixture) : IClassFixtu
 
         var invitacion = page.GetByTestId("install-invite");
         await Expect(invitacion).ToBeVisibleAsync(new() { Timeout = 30_000 });
-        await Expect(invitacion).ToContainTextAsync("Instalar UrabáConecta");
-        await Expect(invitacion).ToContainTextAsync("Ten tus pedidos y seguimiento a la mano");
+        await Expect(invitacion).ToContainTextAsync("Lleva UrabáConecta contigo");
+        await Expect(invitacion).ToContainTextAsync("entra más rápido a tus citas, pedidos y negocios");
 
         var seguimiento = page.Url;
         await invitacion.GetByTestId("install-dismiss").ClickAsync();
@@ -322,6 +626,13 @@ public sealed class PwaInstallJourneyTests(BrowserFixture fixture) : IClassFixtu
           : originalMatchMedia(consulta);
         """;
 
+    private const string GuionIos = """
+        try {
+          Object.defineProperty(navigator, 'standalone',
+            { value: false, configurable: true });
+        } catch {}
+        """;
+
     /// <summary>
     /// Fija el permiso del navegador. Hay que falsificarlo en los dos sentidos: Chromium sin
     /// interfaz responde "denied" a las notificaciones haga lo que haga el permiso concedido del
@@ -345,11 +656,28 @@ public sealed class PwaInstallJourneyTests(BrowserFixture fixture) : IClassFixtu
         };
         """;
 
-    private async Task<IBrowserContext> AndroidContext() =>
+    private async Task<IBrowserContext> AndroidContext(ColorScheme? tema = null) =>
         await fixture.Browser.NewContextAsync(new()
         {
             ViewportSize = new() { Width = 360, Height = 800 },
-            UserAgent = AgenteMovil
+            UserAgent = AgenteMovil,
+            ColorScheme = tema
+        });
+
+    private async Task<IBrowserContext> IosContext() =>
+        await fixture.Browser.NewContextAsync(new()
+        {
+            ViewportSize = new() { Width = 390, Height = 844 },
+            UserAgent = AgenteIos
+        });
+
+    private async Task<IBrowserContext> DesktopContext() =>
+        await fixture.Browser.NewContextAsync(new()
+        {
+            ViewportSize = new() { Width = 1365, Height = 900 },
+            UserAgent =
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         });
 
     private async Task Login(IPage page, string email)

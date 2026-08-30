@@ -2582,23 +2582,59 @@ body:has(.ficha-hero) .back-link { color: rgb(255 253 249 / 78%) }
    variante destacada es para el panel de quien trabaja aquí, donde instalar no es un extra.
    ============================================================================================= */
 .install-invite {
-    display: flex; gap: .85rem; align-items: flex-start; margin: 1rem 0; padding: 1rem;
-    border: 1px solid var(--borde); border-radius: var(--radio); background: var(--superficie-2);
+    position: relative; display: flex; gap: .9rem; align-items: flex-start;
+    margin: 1rem 0; padding: 1rem; overflow: hidden;
+    border: 1px solid var(--borde);
+    border: 1px solid color-mix(in srgb, var(--marca-700) 34%, var(--borde));
+    border-radius: calc(var(--radio) + 2px);
+    background: linear-gradient(135deg, var(--uc-green-wash), var(--superficie-2) 68%);
+    /* La card trae SU propia superficie y aterriza sobre pantallas que no la comparten: la Home
+       pinta selva y reparte texto papel a todo lo que cuelga de ella. Sin esta línea la invitación
+       heredaba ese papel sobre su propio fondo claro y quedaba papel sobre papel. La tinta se
+       declara con el token semántico, no con un color fijo, para que siga al tema igual que hace
+       el fondo de la línea de arriba. */
+    color: var(--texto);
+    box-shadow: 0 12px 28px rgb(7 93 82 / 10%);
+    animation: install-invite-enter .28s ease-out both;
+}
+.install-invite::after {
+    position: absolute; right: -2.1rem; bottom: -2.8rem; width: 7rem; height: 7rem;
+    border-radius: 50%; background: rgb(239 161 39 / 10%); content: ""; pointer-events: none;
 }
 .install-invite.is-destacada {
     border-color: var(--marca-700); background: var(--uc-green-wash);
-    box-shadow: 0 1px 0 rgb(7 93 82 / 8%);
+    box-shadow: 0 12px 28px rgb(7 93 82 / 14%);
 }
 .install-invite-icono {
-    display: grid; flex: 0 0 2rem; width: 2rem; height: 2rem; place-items: center;
-    border-radius: 50%; background: var(--marca-700); color: var(--uc-paper);
+    position: relative; z-index: 1; display: grid; flex: 0 0 2.4rem; width: 2.4rem; height: 2.4rem;
+    place-items: center; border-radius: 50%; background: var(--marca-700); color: var(--uc-paper);
+    box-shadow: 0 6px 14px rgb(7 93 82 / 20%);
 }
-.install-invite-copy { min-width: 0 }
+.install-invite-copy { position: relative; z-index: 1; min-width: 0 }
+.install-invite-copy > strong { display: block; font-size: var(--t-17); line-height: 1.2 }
 .install-invite-copy p { margin: .25rem 0 .65rem }
+.install-invite-plataforma {
+    display: block; margin: -.25rem 0 .65rem; color: var(--texto-suave); font-weight: var(--p-fuerte);
+}
 .install-invite-acciones { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center }
 .install-invite-acciones button { min-height: var(--alto-tocable) }
+/* "Ahora no" es un .inline-button, y ese botón hereda el color a propósito: sirve igual dentro de
+   un aviso de error que sobre el riel oscuro de la Home. Aquí no hay a quién parecerse —la card
+   pone su propia superficie— y heredar dejaba el papel de la Home sobre el papel de var(--superficie).
+   Así que esta salida declara su tinta. La regla global se deja intacta: allí heredar es lo correcto. */
+.install-invite .inline-button { background: var(--superficie); color: var(--texto) }
+.install-pending {
+    display: inline-flex; min-height: var(--alto-tocable); align-items: center; padding: .45rem .8rem;
+    border-radius: var(--radio-pill); background: var(--aviso-100); color: var(--aviso-700);
+    font-weight: var(--p-titular);
+}
 .install-pasos { margin: .7rem 0 .3rem; padding-left: 1.15rem; color: var(--texto-suave) }
 .install-pasos li { margin: .3rem 0 }
+
+@keyframes install-invite-enter {
+    from { opacity: 0; transform: translateY(.45rem) }
+    to { opacity: 1; transform: translateY(0) }
+}
 
 .app-status { margin: 1.5rem 0 0; padding-top: 1rem; border-top: 1px solid var(--borde) }
 .app-status h2 { font-size: var(--t-17) }
@@ -2623,10 +2659,11 @@ body:has(.ficha-hero) .back-link { color: rgb(255 253 249 / 78%) }
 @media (max-width: 520px) {
     .app-status-fila { grid-template-columns: 1fr }
     .install-invite-acciones { width: 100% }
+    .install-invite-acciones .primary { flex: 1 1 9rem }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .portal-home, .municipality-screen, .category-destination-hero { animation: none }
+    .portal-home, .municipality-screen, .category-destination-hero, .install-invite { animation: none }
     .header-search, .portal-municipality, .portal-category, .portal-category-art,
     .portal-business-media img, .destination-category, .category-place-selector a { transition: none }
 }

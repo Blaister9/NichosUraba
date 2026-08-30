@@ -11,7 +11,8 @@ public sealed record AppInstallState
 {
     /// <summary>
     /// <c>installed</c> ya está instalada o corriendo como aplicación; <c>native</c> el navegador
-    /// cedió su diálogo de instalación; <c>manual</c> sólo hay una instrucción manual compatible;
+    /// cedió su diálogo de instalación; <c>pending</c> la persona aceptó y todavía falta la señal
+    /// real de instalación; <c>manual</c> sólo hay una instrucción manual compatible;
     /// <c>unavailable</c> no existe una acción de instalación verificable.
     /// </summary>
     public string Mode { get; init; } = "unavailable";
@@ -20,11 +21,17 @@ public sealed record AppInstallState
     public bool Dismissed { get; init; }
 
     /// <summary>
-    /// Esta pestaña ES la aplicación, comprobado ahora por el modo de presentación. Distinto de
-    /// <see cref="Installed"/>, que también es cierto cuando sólo recordamos una instalación
-    /// anterior: entonces seguimos estando en el navegador y la ayuda para instalar hace falta.
+    /// Esta pestaña ES la aplicación, comprobado ahora por el modo de presentación. Una señal
+    /// <c>appinstalled</c> recién recibida también puede marcar la sesión como instalada sin
+    /// cambiar este indicador.
     /// </summary>
     public bool RunningAsApp { get; init; }
+
+    /// <summary>
+    /// Ya transcurrió el momento de cortesía o hubo una interacción. Sólo gobierna la invitación;
+    /// la ficha explícita de estado puede seguir informando desde el primer render interactivo.
+    /// </summary>
+    public bool Ready { get; init; }
 
     public string Platform { get; init; } = "";
     public string Browser { get; init; } = "";
@@ -37,6 +44,8 @@ public sealed record AppInstallState
 
     public bool Installed => Mode == "installed";
 
-    /// <summary>Hay algo que ofrecer: o el diálogo nativo, o un camino manual que sí existe.</summary>
-    public bool CanOffer => Mode is "native" or "manual";
+    /// <summary>
+    /// Hay algo honesto que mostrar: diálogo nativo, camino manual o instalación aún en curso.
+    /// </summary>
+    public bool CanOffer => Mode is "native" or "manual" or "pending";
 }
