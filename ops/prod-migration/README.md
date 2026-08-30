@@ -25,7 +25,8 @@ Alcance fijo, escrito dentro de `generate.sql`:
 | `fingerprint.sql` | Huella de filas y contenido, para probar idempotencia entre dos ejecuciones |
 | `r2_list.py` | Lista el bucket con `ListObjectsV2` firmado. No imprime credenciales |
 | `check_manifest.py` | Contrasta el manifest contra el bucket vivo |
-| `copy_media.py` | Copia los objetos conservando la `StorageKey`. Simulacro salvo `--confirm` |
+| `copy_media.py` | Copia los objetos conservando la `StorageKey`. Simulacro salvo `--confirm`. Requiere Python y credenciales legibles en local |
+| `copy_media.sh` | La misma copia, en `sh` + `curl` + `openssl`, para correr **dentro** del contenedor de Production. Modos `--check`, `--dry-run`, `--confirm` |
 | `05_target_baseline.sql` | **Sólo ensayo.** Simula prod-real tras el bootstrap. No se ejecuta en el corte |
 | `parity*.sql`, `idx_detail.sql`, `pilot_unchanged.sql` | Diagnósticos de paridad de esquema y de no-modificación del origen |
 
@@ -52,6 +53,30 @@ imágenes borradas y el anillo de Data Protection del piloto.
 
 Los hashes de contraseña sí viajan: son PBKDF2 autocontenidos y no dependen de ese
 anillo, así que las dos Owners entran con las credenciales que ya usan.
+
+## Por qué hay dos copiadores
+
+Las credenciales de R2 de Production son variables **selladas** del servicio: `railway run`
+no las inyecta en un proceso local, así que la copia no puede ejecutarse desde una
+terminal. Tiene que correr dentro del contenedor, y ese contenedor —`aspnet:10.0.11`—
+no lleva Python. De ahí `copy_media.sh`, que sólo necesita `curl` y `openssl`, ya
+presentes en la imagen.
+
+El destino usa las credenciales selladas que el contenedor ya tiene. El origen entra por
+variables aparte, `MigrationSourceR2__*`, con un token temporal de **sólo lectura**
+acotado al bucket del piloto. Las normales `ObjectStorage__*` nunca se tocan: siguen
+representando el destino.
+
+Al terminar la copia real hay que retirar las cuatro `MigrationSourceR2__*` y revocar el
+token en Cloudflare. El detalle está en [CUTOVER.md](CUTOVER.md).
+
+Se sube al contenedor por stdin, que `railway ssh` sí reenvía:
+
+```bash
+base64 -w0 copy_media.sh | railway ssh -s UrabaConecta-prod-real -e prod-real \
+  sh -c 'base64 -d > /tmp/copy_media.sh'
+railway ssh -s UrabaConecta-prod-real -e prod-real sh -c 'sh /tmp/copy_media.sh --check'
+```
 
 ## Uso
 
