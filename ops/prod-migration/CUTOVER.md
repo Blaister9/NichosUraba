@@ -19,9 +19,18 @@ demás se hace antes, sin prisa y sin tocar el piloto.
 | 0.3 | Fijar `DataProtection__KeysPath` con volumen propio. **No copiar `/app/keys` del piloto** | anillo nuevo; las cookies del piloto se invalidan, que es lo deseado |
 | 0.4 | Fijar `URABACONECTA_TRACKING_HMAC_KEY` (y opcionalmente la de invitación) **nuevas** | no se migran operaciones, así que ningún código público depende de las viejas |
 | 0.5 | Variables jurídicas y `DetailedErrors=false`; `DemoSeed/ShowcaseSeed/DemoBootstrap/DemoAccess` ausentes o `false` | `StartupGuard.Validate` sin problemas |
-| 0.6 | `ProductionBootstrap__Enabled=true` + `AdminEmail` + `AdminPassword` (≥16 car.) y **arrancar** `prod-real` | crea los 4 roles y el único `PlatformAdmin`; es de una sola ejecución |
-| 0.7 | Retirar `ProductionBootstrap__AdminPassword` tras el primer arranque | `StartupGuard` lo exige |
+| 0.6 | `ProductionBootstrap__Enabled=true` + `AdminEmail` + `AdminPassword` y **arrancar** `prod-real` | crea los 4 roles y el único `PlatformAdmin`; una sola ejecución, bloqueada después por su propia fila en `platform_access_audits` |
+| 0.7 | Retirar `ProductionBootstrap__AdminPassword` y poner `Enabled=false`; **redesplegar** para que el contenedor deje de verlas | borrar variables no reinicia el servicio por sí solo |
 | 0.8 | Confirmar cabeza de migraciones `20260825014007_AddBusinessLocationAndFulfillment` y las 5 categorías | `00_preflight.sql` lo vuelve a comprobar |
+
+> **Cuidado con el orden en 0.6.** `Program.cs` hace `await BootstrapProductionAdminAsync(...)`
+> **sin try/catch**, y `Validate` lanza si la contraseña no cumple. Poner `Enabled=true`
+> antes que una contraseña válida deja Production sin arrancar. Pon primero el correo y la
+> contraseña, y `Enabled=true` al final.
+>
+> La contraseña exige: **≥16 caracteres**, con mayúscula, minúscula, dígito y al menos un
+> carácter no alfanumérico; y no puede ser `UrabaDemo!2026`, `Password1!` ni `Admin123!`.
+> La cuenta nace con `MustChangePassword=true`.
 
 > `prod-real` no expone proxy TCP. Para aplicar SQL: `railway ssh -s Postgres-84xK -e prod-real`,
 > o crear un proxy temporal y **retirarlo** al terminar.
@@ -85,19 +94,24 @@ python check_manifest.py r2_now.csv     # debe decir MANIFEST VALIDO
 
 ## Fase 5 · Copia de media
 
-```bash
-export DEST_ObjectStorage__AccessKey=...     # bucket productivo
-export DEST_ObjectStorage__SecretKey=...
-export DEST_ObjectStorage__Bucket=urabaconecta-media
-export DEST_ObjectStorage__ServiceUrl=https://<cuenta>.r2.cloudflarestorage.com
-export DEST_ObjectStorage__Region=auto
+Corre **dentro** del contenedor de Production: las credenciales del destino son
+variables selladas y `railway run` no las expone a un proceso local. Se sube el script
+y el manifest por stdin, que `railway ssh` sí reenvía.
 
-railway run --service NichosUraba --environment production -- python copy_media.py            # simulacro
-railway run --service NichosUraba --environment production -- python copy_media.py --confirm  # copia real
+```bash
+SSH="railway ssh -s UrabaConecta-prod-real -e prod-real"
+base64 -w0 copy_media.sh          | $SSH sh -c 'base64 -d > /tmp/copy_media.sh'
+base64 -w0 pkg/media_manifest.csv | $SSH sh -c 'base64 -d > /tmp/media_manifest.csv'
+
+$SSH sh -c 'sh /tmp/copy_media.sh --check'                              # ambos buckets responden
+$SSH sh -c 'sh /tmp/copy_media.sh --dry-run /tmp/media_manifest.csv'    # qué copiaría
+$SSH sh -c 'sh /tmp/copy_media.sh --confirm /tmp/media_manifest.csv'    # copia real
 ```
 
 Conserva la `StorageKey` exacta, así que **ninguna fila de base cambia**. Es
-idempotente: reejecutar salta lo ya presente con el mismo tamaño.
+idempotente: reejecutar salta lo ya presente con el mismo tamaño. Si algún objeto falla,
+el script termina distinto de cero — **aborta antes del apply de base**, que todavía es
+reversible en ese punto.
 
 ---
 
@@ -136,6 +150,46 @@ Además, a mano:
 2. Restaurar réplicas del piloto **sólo si** se quiere dejarlo accesible; lo
    recomendable es dejarlo caído para que nadie siga operando en él.
 3. Avisar a las dos Owners.
+
+---
+
+## Fase 8 bis · Retirar el token temporal de R2  — OBLIGATORIO
+
+El origen se lee con un token de Cloudflare creado **sólo para este corte**: permiso
+`Object Read only`, acotado a `urabaconecta-demo-media`. Comprobado en el preflight: ese
+mismo token recibe **403** contra `urabaconecta-prod-media`, así que no puede escribir en
+Production ni tocar nada más.
+
+En cuanto la copia real termine bien, y antes de dar el corte por cerrado:
+
+1. Borrar las cuatro variables del servicio `UrabaConecta-prod-real`:
+
+```bash
+for v in MigrationSourceR2__AccessKey MigrationSourceR2__SecretKey \
+         MigrationSourceR2__Endpoint MigrationSourceR2__Bucket; do
+  railway variables delete "$v" --service UrabaConecta-prod-real --environment prod-real
+done
+railway variables delete MigrationSourceR2__Region --service UrabaConecta-prod-real --environment prod-real
+railway redeploy --service UrabaConecta-prod-real --environment prod-real --yes
+```
+
+2. Revocar el token en Cloudflare → R2 → API → Manage API Tokens.
+
+3. Demostrar que Production sigue sirviendo su media con sus propias credenciales:
+
+```bash
+railway ssh -s UrabaConecta-prod-real -e prod-real sh -c 'sh /tmp/copy_media.sh --check'
+```
+
+Debe decir `origen SIN CREDENCIALES` y `destino HTTP 200`. Y las fichas públicas de los
+dos negocios deben seguir cargando sus imágenes.
+
+Un despliegue de Railway no arrastra `/tmp`, así que `copy_media.sh` y el manifest
+desaparecen solos del contenedor en el siguiente redespliegue. Aun así conviene borrarlos:
+
+```bash
+railway ssh -s UrabaConecta-prod-real -e prod-real sh -c 'rm -f /tmp/copy_media.sh /tmp/media_manifest.csv'
+```
 
 ---
 
