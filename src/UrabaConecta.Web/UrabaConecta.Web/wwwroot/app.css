@@ -3087,3 +3087,70 @@ body:has(.ahora-home) footer .meta {
     .feed-media:active, .guided-banner:active, .guided-back:active { transform: none }
     .feed-media:hover img, .feed-piece:hover .feed-action { transform: none }
 }
+
+/* =============================================================================================
+   VIDA EN LOS JOURNEYS COMERCIALES
+   Reservar una cita y armar un pedido son las dos cosas por las que alguien entra. Aquí sólo se
+   añade la respuesta a cada toque: qué quedó elegido, qué se está haciendo y qué acabó de pasar.
+   Nada de esto cambia lo que se pide ni lo que cuesta.
+   ============================================================================================= */
+
+/* LA LÍNEA DE DATOS DEL SERVICIO — .catalogo-datos es un <p> dentro de .catalogo-cuerpo, así que
+   le caía encima el recorte a dos líneas de las descripciones: perdía su flex y su gap, y la
+   duración se pegaba al texto del pago ("45 minPagas todo en el establecimiento"). Se le devuelve
+   lo suyo con la especificidad justa para ganarle a esa regla, sin tocarla. */
+.catalogo-cuerpo .catalogo-datos {
+    display: flex; -webkit-line-clamp: none; overflow: visible;
+}
+
+/* HORA ELEGIDA — el relleno verde ya la distingue, pero sólo por color. La marca va fuera del
+   flujo, en la esquina: así no le quita ancho a la hora —en línea le robó el sitio justo a
+   "08:00 a. m." y la partió en dos renglones— y aparecer no mueve nada de sitio. El nowrap
+   remata lo mismo: una hora no se lee partida. */
+.slot { position: relative; white-space: nowrap }
+.slot::before {
+    content: "✓"; position: absolute; top: 2px; right: 5px;
+    font-size: .68em; line-height: 1; opacity: 0;
+    transition: opacity var(--mov-rapido) ease;
+}
+.slot[aria-checked="true"]::before { opacity: 1 }
+
+/* HORAS EN CAMINO — al pedir otra fecha la lista se vaciaba entera y el hueco quedaba en blanco:
+   parecía que no había horas, no que se estaban buscando. Los huecos mantienen la forma de la
+   rejilla mientras llegan. Reutilizan .skeleton, que ya existe y ya sabe pararse sin movimiento. */
+.slot-esqueleto { height: 44px; border-radius: var(--radio-pill) }
+
+/* BOTÓN TRABAJANDO — apagado a media tinta, un botón ocupado se lee igual que uno inhabilitado.
+   Con el aro girando y el cursor de espera se distingue "estoy haciéndolo" de "no puedes". */
+@keyframes uc-gira { to { transform: rotate(1turn) } }
+button[data-cargando="true"]::after, .button-link[data-cargando="true"]::after {
+    content: ""; width: 1em; height: 1em; border-radius: 50%;
+    border: 2px solid currentColor; border-top-color: transparent;
+    animation: uc-gira .7s linear infinite;
+}
+button[data-cargando="true"]:disabled { opacity: 1; cursor: progress }
+
+/* LO QUE LLEVAS — la barra del carrito aparecía de golpe, que es justo cuando hace falta que se
+   note que el producto entró. Entra desde abajo, corto. */
+@keyframes uc-carrito-entra { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
+.carrito-flotante { animation: uc-carrito-entra .25s ease-out both }
+
+/* LA CANTIDAD QUE CAMBIA — el número cambiaba sin decir nada. Un pulso de 200 ms es la diferencia
+   entre "creo que le di" y "entró". Lo enciende site-motion.js al ver cambiar la cifra. */
+@keyframes uc-cifra-pulso { 50% { transform: scale(1.28) } }
+.cantidad.uc-pulso { animation: uc-cifra-pulso .2s ease-out }
+
+/* LO QUE ACABA DE PASAR — el aviso de éxito y el de error aparecían sin más. Entrar los hace
+   mirar, que es lo único que se les pide. */
+@keyframes uc-aviso-entra { from { opacity: 0; transform: translateY(-6px) } to { opacity: 1; transform: none } }
+.success, [data-testid="order-created"],
+.appointment-form .error, .config-form .error { animation: uc-aviso-entra .28s ease-out both }
+
+@media (prefers-reduced-motion: reduce) {
+    .slot::before { transition: none }
+    .carrito-flotante, .success, [data-testid="order-created"],
+    .appointment-form .error, .config-form .error { animation: none }
+    .cantidad.uc-pulso { animation: none }
+    /* El aro deja de girar pero sigue estando: la señal de "trabajando" no depende del giro. */
+    button[data-cargando="true"]::after, .button-link[data-cargando="true"]::after { animation: none }
+}

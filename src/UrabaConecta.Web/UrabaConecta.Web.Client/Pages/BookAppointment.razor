@@ -19,7 +19,9 @@ else
         <fieldset disabled="@(!interactiveReady)">
         <DataAnnotationsValidator /><ValidationSummary />
         <fieldset><legend>1. Servicio y horario</legend>
-            <label>Servicio<InputSelect @bind-Value="request.ServiceId">
+            @* Cambiar de servicio ya no deja en pantalla las horas del anterior esperando a que
+               alguien recuerde pulsar "Ver horas disponibles": se piden solas. *@
+            <label>Servicio<InputSelect @bind-Value="request.ServiceId" @bind-Value:after="ServiceChanged">
                 <option value="@Guid.Empty">Seleccione</option>
                 @foreach (var service in business.Services) { <option value="@service.Id">@service.Name · @service.DurationMinutes min</option> }
             </InputSelect></label>
@@ -69,8 +71,20 @@ else
             }
 
             <label>Fecha<input type="date" value="@dateText" @oninput="e => dateText = e.Value?.ToString() ?? string.Empty" min="@DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd")" /></label>
-            <button type="button" class="secondary" @onclick="LoadSlots" disabled="@(!interactiveReady || loadingSlots)">@(loadingSlots ? "Consultando…" : "Ver horas disponibles")</button>
-            @if (slots is not null && slots.Count == 0) { <p class="notice">No hay horas disponibles para esa fecha. Prueba otro día.</p> }
+            <button type="button" class="secondary" @onclick="() => LoadSlots()" disabled="@(!interactiveReady || loadingSlots)"
+                    data-cargando="@(loadingSlots ? "true" : null)" aria-busy="@(loadingSlots ? "true" : null)">@(loadingSlots ? "Consultando…" : "Ver horas disponibles")</button>
+            @* Mientras llegan, la rejilla conserva su forma. Vaciarla del todo se leía como "no hay
+               horas" en vez de "las estoy buscando". *@
+            @if (loadingSlots)
+            {
+                <div>
+                    <p class="franja">Buscando horas…</p>
+                    <div class="slot-grid" aria-hidden="true">
+                        @for (var i = 0; i < 8; i++) { <div class="skeleton slot-esqueleto"></div> }
+                    </div>
+                </div>
+            }
+            else if (slots is not null && slots.Count == 0) { <p class="notice">No hay horas disponibles para esa fecha. Prueba otro día.</p> }
             else if (slots is not null)
             {
                 @* Cuarenta botones seguidos no se leen. Partidos en mañana, tarde y noche, el
@@ -79,9 +93,10 @@ else
                 {
                     <div>
                         <p class="franja">@titulo</p>
-                        <div class="slot-grid" role="radiogroup" aria-label="Horas disponibles en la @titulo.ToLowerInvariant()">
+                        <div class="slot-grid" role="radiogroup" data-servicio="@slotsService"
+                             aria-label="Horas disponibles en la @titulo.ToLowerInvariant()">
                             @foreach (var slot in horas)
-                            { <button type="button" class="slot @(request.Start == slot.Start ? "selected" : "")" @onclick="() => request.Start = slot.Start">@LocalTime(slot.Start)</button> }
+                            { <button type="button" role="radio" aria-checked="@(request.Start == slot.Start ? "true" : "false")" class="slot @(request.Start == slot.Start ? "selected" : "")" @onclick="() => request.Start = slot.Start">@LocalTime(slot.Start)</button> }
                         </div>
                     </div>
                 }
@@ -112,7 +127,8 @@ else
                 <span class="precio">@resumen.ReferencePrice.ToString("C0", Colombia)</span>
             </p>
         }
-        <button class="primary btn-grande" disabled="@(!interactiveReady || loadingSlots || submitting)">@(submitting ? "Creando cita…" : "Enviar solicitud")</button>
+        <button class="primary btn-grande" disabled="@(!interactiveReady || loadingSlots || submitting)"
+                data-cargando="@(submitting ? "true" : null)" aria-busy="@(submitting ? "true" : null)">@(submitting ? "Creando cita…" : "Enviar solicitud")</button>
         </fieldset>
     </EditForm>
 }
@@ -128,6 +144,17 @@ else
     [SupplyParameterFromForm(FormName = "appointment-request")]
     private CreateAppointmentRequest request { get; set; } = default!;
     private bool loadingSlots, submitting, interactiveReady;
+    /// <summary>
+    /// Cada consulta de horas lleva número y sólo cuenta la última. Si alguien cambia de servicio
+    /// mientras la anterior viaja, la respuesta que llegue tarde se descarta en vez de repintar la
+    /// rejilla con las horas de un servicio que ya nadie tiene elegido.
+    /// </summary>
+    private int slotsRequest;
+    /// <summary>
+    /// El servicio del que salieron las horas que hay en pantalla. Va al DOM para que se pueda
+    /// comprobar que la rejilla es la del servicio elegido y no la que quedó del anterior.
+    /// </summary>
+    private Guid slotsService;
     private string? error;
     protected override async Task OnInitializedAsync()
     {
@@ -144,19 +171,51 @@ else
     {
         if (firstRender) { interactiveReady = true; StateHasChanged(); }
     }
-    private async Task LoadSlots()
+    /// <summary>
+    /// Otro servicio son otras horas: las que estén en pantalla —y la que estuviera elegida— dejan
+    /// de valer en el momento del cambio, no cuando el usuario se acuerde de volver a consultar.
+    /// </summary>
+    private Task ServiceChanged()
     {
-        error = null;
+        InvalidateSlots();
+        return LoadSlots();
+    }
+    /// <summary>
+    /// Retira las horas de la pantalla y la elección hecha sobre ellas. Subir el contador deja
+    /// además huérfana cualquier consulta en vuelo: su respuesta ya no podrá pintar nada.
+    /// </summary>
+    private void InvalidateSlots()
+    {
+        slotsRequest++;
+        loadingSlots = false;
+        request.Start = default;
+        slots = null;
+        slotsService = Guid.Empty;
+    }
+    /// <summary>Consulta las horas del servicio y la fecha que estén elegidos.</summary>
+    /// <param name="conservarAviso">
+    /// La consulta que arranca el usuario limpia lo que hubiera en pantalla. La que dispara un
+    /// choque de horario, no: el aviso recién mostrado es lo único que explica por qué las horas
+    /// cambiaron solas, y borrarlo deja al cliente preguntándose qué acaba de pasar.
+    /// </param>
+    private async Task LoadSlots(bool conservarAviso = false)
+    {
+        if (!conservarAviso) error = null;
         if (request.ServiceId == Guid.Empty) { error = "Seleccione un servicio."; return; }
         if (!DateOnly.TryParseExact(dateText, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
             System.Globalization.DateTimeStyles.None, out var date))
         { error = "Seleccione una fecha válida."; return; }
+        var servicio = request.ServiceId;
+        InvalidateSlots();
+        var pedido = slotsRequest;
         loadingSlots = true;
-        request.Start = default;
-        slots = null;
-        try { slots = (await Api.GetSlotsAsync(Slug, request.ServiceId, date)).Slots.ToList(); }
-        catch (ApiException ex) { error = ex.Message; slots = []; }
-        finally { loadingSlots = false; }
+        try
+        {
+            var horas = (await Api.GetSlotsAsync(Slug, servicio, date)).Slots.ToList();
+            if (pedido == slotsRequest) { slots = horas; slotsService = servicio; }
+        }
+        catch (ApiException ex) { if (pedido == slotsRequest) { error = ex.Message; slots = []; } }
+        finally { if (pedido == slotsRequest) loadingSlots = false; }
     }
     private async Task Submit()
     {
@@ -168,7 +227,12 @@ else
             var created = await Api.CreateAppointmentAsync(Slug, request);
             Navigation.NavigateTo($"/seguimiento/citas/{Uri.EscapeDataString(created.TrackingCode)}?new=true");
         }
-        catch (ApiException ex) { error = ex.Message; if (ex.Code == "SLOT_UNAVAILABLE") await LoadSlots(); }
+        catch (ApiException ex)
+        {
+            error = ex.Message;
+            // La recarga es consecuencia del choque, así que no puede llevarse por delante el motivo.
+            if (ex.Code == "SLOT_UNAVAILABLE") await LoadSlots(conservarAviso: true);
+        }
         finally { submitting = false; }
     }
     private static DateOnly NextBusinessDay()

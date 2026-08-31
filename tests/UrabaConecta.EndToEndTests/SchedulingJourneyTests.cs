@@ -67,6 +67,100 @@ public sealed class SchedulingJourneyTests(BrowserFixture fixture) : IClassFixtu
         await Expect(page.GetByTestId("appointment-card")).ToHaveCountAsync(0);
     }
 
+    /// <summary>
+    /// Cambiar de servicio dejaba en pantalla las horas del anterior —elegibles, y con la que ya
+    /// estuviera elegida todavía marcada— hasta que alguien recordaba pulsar "Ver horas
+    /// disponibles". Aquí se fija lo contrario: la rejilla pertenece siempre al servicio elegido,
+    /// llega sola y no arrastra la elección anterior.
+    /// </summary>
+    [Fact]
+    public async Task Changing_the_service_replaces_the_hours_without_asking()
+    {
+        // Los dos servicios sembrados para Bella: 60 y 45 minutos, ambos con personal asignado.
+        const string corte = "10000000-0000-0000-0000-000000000001";
+        const string cepillado = "10000000-0000-0000-0000-000000000002";
+        await using var context = await fixture.Browser.NewContextAsync(new()
+        { ViewportSize = new() { Width = 390, Height = 844 } });
+        var page = await context.NewPageAsync();
+        await page.GotoAsync($"{fixture.BaseUrl}/negocios/salon-bella-uraba/citas?serviceId={corte}");
+        await Expect(page.Locator($"[data-servicio='{corte}'] button.slot").First)
+            .ToBeVisibleAsync(new() { Timeout = 20_000 });
+        await page.Locator("button.slot").First.ClickAsync();
+        await Expect(page.Locator("button.slot[aria-checked='true']")).ToHaveCountAsync(1);
+        await Expect(page.Locator("p.reserva-resumen")).ToBeVisibleAsync();
+
+        // Sin volver a pulsar "Ver horas disponibles": las horas del servicio nuevo llegan solas.
+        await page.GetByLabel("Servicio")
+            .SelectOptionAsync(new SelectOptionValue { Label = "Cepillado · 45 min" });
+        await Expect(page.Locator($"[data-servicio='{cepillado}'] button.slot").First)
+            .ToBeVisibleAsync(new() { Timeout = 20_000 });
+        await Expect(page.Locator($"[data-servicio='{corte}']")).ToHaveCountAsync(0);
+        // Y la hora elegida para el servicio anterior no sobrevive al cambio: ni marcada en la
+        // rejilla ni en el resumen de lo que se va a enviar.
+        await Expect(page.Locator("button.slot[aria-checked='true']")).ToHaveCountAsync(0);
+        await Expect(page.Locator("p.reserva-resumen")).ToHaveCountAsync(0);
+    }
+
+    /// <summary>
+    /// Dos clientas sobre la misma hora. A la que llega tarde se le recargan las horas solas, y el
+    /// motivo —"Ese horario acaba de ocuparse"— tiene que seguir en pantalla después de esa recarga:
+    /// es lo único que explica por qué la rejilla cambió sin que ella tocara nada. Antes la recarga
+    /// automática borraba ese aviso al empezar y la dejaba sin explicación.
+    /// </summary>
+    [Fact]
+    public async Task A_taken_hour_keeps_explaining_itself_after_the_refresh()
+    {
+        var url = $"{fixture.BaseUrl}/negocios/salon-bella-uraba/citas" +
+                  "?serviceId=10000000-0000-0000-0000-000000000001";
+
+        // La que se quedará sin la hora elige primero y se queda mirando su rejilla, sin enviar.
+        await using var tarde = await fixture.Browser.NewContextAsync(new()
+        { ViewportSize = new() { Width = 390, Height = 844 } });
+        var perdedora = await tarde.NewPageAsync();
+        await perdedora.GotoAsync(url);
+        await Expect(perdedora.Locator("button.slot").First).ToBeVisibleAsync(new() { Timeout = 20_000 });
+        // Una de la tarde, para no disputarle la primera hora a los otros recorridos de esta clase.
+        var disputada = System.Text.RegularExpressions.Regex.Replace(
+            await perdedora.Locator("button.slot").Nth(20).InnerTextAsync(), @"\s+", " ").Trim();
+        await perdedora.Locator("button.slot").Nth(20).ClickAsync();
+        await Expect(perdedora.Locator("button.slot[aria-checked='true']")).ToHaveCountAsync(1);
+
+        // Otra clienta se lleva esa misma hora mientras la primera todavía rellena sus datos.
+        await using var pronto = await fixture.Browser.NewContextAsync(new()
+        { ViewportSize = new() { Width = 390, Height = 844 } });
+        var ganadora = await pronto.NewPageAsync();
+        await ganadora.GotoAsync(url);
+        await Expect(ganadora.Locator("button.slot").First).ToBeVisibleAsync(new() { Timeout = 20_000 });
+        await ganadora.Locator("button.slot").Filter(new() { HasTextString = disputada }).First.ClickAsync();
+        await RellenarYEnviar(ganadora, "E2E Puntual");
+        await Expect(ganadora.GetByText("Solicitud enviada.")).ToBeVisibleAsync(new() { Timeout = 20_000 });
+
+        // La primera envía sobre una hora que ya no existe: 409 SLOT_UNAVAILABLE.
+        await RellenarYEnviar(perdedora, "E2E Tarde");
+        // La hora desaparece de la rejilla, así que la recarga automática ya terminó...
+        await Expect(perdedora.Locator("button.slot").Filter(new() { HasTextString = disputada }))
+            .ToHaveCountAsync(0, new() { Timeout = 20_000 });
+        await Expect(perdedora.Locator("button.slot[aria-checked='true']")).ToHaveCountAsync(0);
+        // ...y el motivo sigue ahí después de esa recarga, que es lo que se perdía.
+        await Expect(perdedora.Locator("p.error[role='alert']"))
+            .ToHaveTextAsync("Ese horario acaba de ocuparse. Elija otro.");
+        await Expect(perdedora.GetByRole(AriaRole.Button, new() { Name = "Enviar solicitud" }))
+            .ToBeEnabledAsync();
+
+        // Y puede elegir otra hora y terminar sin recargar la página ni volver a escribir sus datos.
+        await perdedora.Locator("button.slot").First.ClickAsync();
+        await perdedora.GetByRole(AriaRole.Button, new() { Name = "Enviar solicitud" }).ClickAsync();
+        await Expect(perdedora.GetByText("Solicitud enviada.")).ToBeVisibleAsync(new() { Timeout = 20_000 });
+    }
+
+    private static async Task RellenarYEnviar(IPage page, string alias)
+    {
+        await page.GetByLabel("Nombre o alias").FillAsync(alias);
+        await page.GetByLabel("Teléfono").FillAsync("3004567890");
+        await page.GetByRole(AriaRole.Checkbox).CheckAsync();
+        await page.GetByRole(AriaRole.Button, new() { Name = "Enviar solicitud" }).ClickAsync();
+    }
+
     private static ILocatorAssertions Expect(ILocator locator) => Assertions.Expect(locator);
     private static async Task ClickUntilStatus(ILocator card, string action, string expected)
     {

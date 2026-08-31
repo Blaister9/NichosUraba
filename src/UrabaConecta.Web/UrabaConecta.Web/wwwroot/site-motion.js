@@ -145,3 +145,53 @@
     yaEstaban();
   }
 })();
+
+/* LA CIFRA QUE CAMBIA. Sumar una unidad sólo cambiaba un dígito en una esquina de la tarjeta, y
+   ese es exactamente el momento en el que alguien se pregunta si le dio bien. Un pulso corto sobre
+   el número contesta esa pregunta sin ocupar la pantalla ni interrumpir lo que se está haciendo.
+
+   Va aquí y no en la página porque la cifra la repinta Blazor: no hay un evento propio al que
+   engancharse, pero el texto sí cambia, y eso se puede mirar. Se compara con lo último visto para
+   no celebrar el primer pintado —la hidratación vuelve a escribir el mismo número— y para que un
+   repintado que no cambia nada no encienda nada. */
+(() => {
+  const CIFRA = '.cantidad';
+
+  const pulso = cifra => {
+    const ahora = (cifra.textContent || '').trim();
+    const antes = cifra.dataset.ucCifra;
+    if (antes === ahora) return;
+    cifra.dataset.ucCifra = ahora;
+    // Primera vez que se ve esta cifra: es el valor de partida, no un cambio.
+    if (antes === undefined) return;
+    cifra.classList.remove('uc-pulso');
+    void cifra.offsetWidth; // reinicia la animación si el toque llega antes de que termine
+    cifra.classList.add('uc-pulso');
+  };
+
+  const mirar = new MutationObserver(cambios => {
+    for (const cambio of cambios) {
+      const nodo = cambio.target.nodeType === Node.TEXT_NODE
+        ? cambio.target.parentElement : cambio.target;
+      const cifra = nodo instanceof Element ? nodo.closest(CIFRA) : null;
+      if (cifra) pulso(cifra);
+    }
+  });
+
+  const arrancar = () => {
+    for (const cifra of document.querySelectorAll(CIFRA)) pulso(cifra);
+    mirar.observe(document.body, { subtree: true, childList: true, characterData: true });
+  };
+
+  document.addEventListener('animationend', evento => {
+    if (evento.target instanceof Element && evento.animationName === 'uc-cifra-pulso') {
+      evento.target.classList.remove('uc-pulso');
+    }
+  });
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', arrancar, { once: true });
+  } else {
+    arrancar();
+  }
+})();

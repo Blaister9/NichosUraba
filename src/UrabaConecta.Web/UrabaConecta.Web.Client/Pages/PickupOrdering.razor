@@ -142,7 +142,8 @@ else if (menu is not null && created is null)
             </p>
             <p class="meta">@Fulfillment.PaymentNotice</p>
             @if (!Ready) { <p class="notice" role="status">Preparando el formulario…</p> }
-            <button class="primary btn-grande" disabled="@(!Ready || busy || CartCount == 0 || string.IsNullOrEmpty(selectedSlot))">@(busy ? "Enviando pedido…" : "Confirmar pedido")</button>
+            <button class="primary btn-grande" disabled="@(!Ready || busy || CartCount == 0 || string.IsNullOrEmpty(selectedSlot))"
+                    data-cargando="@(busy ? "true" : null)" aria-busy="@(busy ? "true" : null)">@(busy ? "Enviando pedido…" : "Confirmar pedido")</button>
             </fieldset>
         </EditForm>
     </section>
