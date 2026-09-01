@@ -5,6 +5,7 @@ self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll([
     OFFLINE,
     '/manifest.webmanifest',
+    '/manifest.dev.webmanifest',
     '/icons/icon-192.svg',
     '/icons/icon-512.svg'
   ])).then(() => self.skipWaiting()));

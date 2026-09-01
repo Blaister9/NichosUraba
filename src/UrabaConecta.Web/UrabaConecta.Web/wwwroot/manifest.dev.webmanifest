@@ -1,0 +1,57 @@
+{
+  "id": "/",
+  "name": "UrabáConecta DEV",
+  "short_name": "Urabá DEV",
+  "description": "Entorno de pruebas de UrabáConecta.",
+  "lang": "es-CO",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#5b21b6",
+  "background_color": "#f7f3e9",
+  "categories": ["business", "lifestyle", "shopping"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Explorar negocios DEV",
+      "short_name": "Explorar",
+      "url": "/explorar?source=pwa-shortcut"
+    },
+    {
+      "name": "Ver seguimiento DEV",
+      "short_name": "Seguimiento",
+      "url": "/seguimiento?source=pwa-shortcut"
+    },
+    {
+      "name": "Abrir panel DEV",
+      "short_name": "Panel",
+      "url": "/panel?source=pwa-shortcut"
+    }
+  ]
+}

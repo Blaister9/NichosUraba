@@ -9,10 +9,10 @@
        según la preferencia real antes de la primera pintura. Antes era un verde de una marca
        anterior que ya no existe en la paleta. *@
     <meta name="theme-color" content="#FFFDF9" />
-    <meta name="application-name" content="UrabáConecta" />
+    <meta name="application-name" content="@(EsDev ? "UrabáConecta DEV" : "UrabáConecta")" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="manifest" href="@(EsDev ? "/manifest.dev.webmanifest" : "/manifest.webmanifest")" />
     <link rel="icon" href="/icons/icon-192.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
     @* Síncrono y en el <head> a propósito: si el tema se aplicara después de la primera
@@ -27,6 +27,12 @@
 @* La marca del piloto es una bandera sin nombre. Antes viajaba el nombre del ambiente y quedaba
    escrito en el HTML de cualquier ficha pública; el CSS sólo necesita saber si es piloto o no. *@
 <body data-piloto="@(EsPiloto ? "1" : null)">
+    @if (EsDev)
+    {
+        <div class="dev-environment-badge" role="status" aria-label="Entorno de pruebas DEV">
+            DEV · Entorno de pruebas
+        </div>
+    }
     <Routes @rendermode="PageRenderMode" />
     <ReconnectModal />
     <script src="@Assets["_framework/blazor.web.js"]"></script>
@@ -40,6 +46,7 @@
 </html>
 
 @inject IWebHostEnvironment Environment
+@inject IConfiguration Configuration
 
 @code {
     [CascadingParameter]
@@ -53,4 +60,7 @@
 
     /// <summary>Los ambientes que no son la operación real de los negocios.</summary>
     private bool EsPiloto => Environment.IsEnvironment("Demo") || Environment.IsDevelopment();
+
+    /// <summary>Marca explícita del DEV público; al faltar la variable, Production no cambia.</summary>
+    private bool EsDev => Configuration.GetValue<bool>("EnvironmentMarker:Dev");
 }

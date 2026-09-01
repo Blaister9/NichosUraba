@@ -2909,6 +2909,18 @@ body, .site-header, .page-shell, footer, .nav-inferior {
         border-color var(--mov-panel) ease;
 }
 
+/* El origen DEV debe seguir siendo reconocible cuando la PWA oculta la barra de direcciones. */
+.dev-environment-badge {
+    position: fixed; right: .65rem; bottom: .65rem; z-index: 80; pointer-events: none;
+    padding: .28rem .55rem; border: 1px solid rgb(255 255 255 / 45%); border-radius: 999px;
+    background: rgb(91 33 182 / 92%); color: white; box-shadow: 0 4px 14px rgb(20 10 45 / 24%);
+    font-size: .7rem; font-weight: 800; line-height: 1; letter-spacing: .035em;
+}
+
+@media (max-width: 760px) {
+    .dev-environment-badge { bottom: calc(4.6rem + env(safe-area-inset-bottom)); }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .acciones-panel, .notice, .error, .success { animation: none }
     body, .site-header, .page-shell, footer, .nav-inferior,
