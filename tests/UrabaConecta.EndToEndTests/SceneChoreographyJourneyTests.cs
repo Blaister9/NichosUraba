@@ -58,11 +58,11 @@ public sealed class SceneChoreographyJourneyTests(BrowserFixture fixture)
     }
 
     /// <summary>
-    /// El recorrido cambia la composición, no sólo enseña lo que ya estaba: la media se recorta, el
-    /// contexto se compacta y la oferta entra. Y la cámara se queda donde se la ve.
+    /// El recorrido cambia el capítulo y revela su oferta sin deformar la focal aprobada. La cámara
+    /// se queda donde se la ve y el relevo de imagen ocurre dentro del mismo marco.
     /// </summary>
     [Fact]
-    public async Task Scrolling_recomposes_the_scene_instead_of_only_revealing_it()
+    public async Task Scrolling_advances_the_scene_without_deforming_the_focal_frame()
     {
         await using var context = await Canvas(390, 844);
         var page = await context.NewPageAsync();
@@ -78,16 +78,17 @@ public sealed class SceneChoreographyJourneyTests(BrowserFixture fixture)
         var recorteMedio = await Clip(page);
         var progresoMedio = await Progress(page);
 
-        await GoInto(page, 0, 0.80);
+        await GoInto(page, 0, 0.58);
         await Expect(page.Locator(".stage-step")).ToHaveAttributeAsync("data-fase", "c");
         await FinishAnimations(page);
         var recorteCerrado = await Clip(page);
         var progresoCerrado = await Progress(page);
 
-        Assert.True(recorteAbierto != recorteMedio && recorteMedio != recorteCerrado,
-            $"La media no se recompuso: {recorteAbierto} → {recorteMedio} → {recorteCerrado}");
+        Assert.Equal(recorteAbierto, recorteMedio);
+        Assert.Equal(recorteMedio, recorteCerrado);
+        Assert.Equal("none", recorteCerrado);
         Assert.True(progresoMedio is > 0.20 and < 0.45, $"Progreso medio incoherente: {progresoMedio}");
-        Assert.True(progresoCerrado is > 0.70 and < 0.95, $"Progreso final incoherente: {progresoCerrado}");
+        Assert.True(progresoCerrado is > 0.52 and < 0.68, $"Progreso final incoherente: {progresoCerrado}");
 
         // La cámara sigue fija bajo la cabecera mientras el capítulo pasa, y la oferta ya está dentro.
         var camara = await page.Locator("[data-stage-camera]").BoundingBoxAsync();
@@ -240,9 +241,8 @@ public sealed class SceneChoreographyJourneyTests(BrowserFixture fixture)
         Assert.True(action!.Y + action.Height > 0 && action.Y < height,
             $"La acción dejó de ser utilizable en {width}×{height}: y={action.Y}, h={action.Height}");
 
-        // La escala y la deriva del recorrido viven en la lente, no en la fotografía: la fotografía
-        // sólo se encarga de su fundido. Se mide donde está la propiedad, que es lo mismo que antes
-        // se medía cuando las dos cosas compartían elemento.
+        // El laboratorio aprobado mantiene escala 1: la lente sólo admite el desplazamiento focal
+        // sutil del gesto/scroll y la fotografía se encarga del fundido.
         var compactacion = await page.EvaluateAsync<double[]>("""
             () => {
                 const media = document.querySelector('[data-stage-media]').getBoundingClientRect();
@@ -250,8 +250,9 @@ public sealed class SceneChoreographyJourneyTests(BrowserFixture fixture)
                 return [media.height, parseFloat(getComputedStyle(lente).transform.split(',')[0].replace('matrix(', ''))];
             }
             """);
-        Assert.True(compactacion[0] < height * .5, $"La media ocupa demasiado teléfono: {compactacion[0]}");
-        Assert.True(compactacion[1] > 1, $"La profundidad no respondió al recorrido: {compactacion[1]}");
+        var altoAprobado = Math.Min(height * .5, 416);
+        Assert.InRange(compactacion[0], altoAprobado - 1, altoAprobado + 1);
+        Assert.InRange(compactacion[1], .999, 1.001);
     }
 
     /// <summary>
@@ -268,9 +269,9 @@ public sealed class SceneChoreographyJourneyTests(BrowserFixture fixture)
                 datos => {
                     const paso = document.querySelector('.stage-step');
                     const capitulo = paso.querySelector(`[data-stage-chapter="${datos.chapter}"]`);
-                    const camara = paso.querySelector('[data-stage-camera]').getBoundingClientRect();
                     const caja = capitulo.getBoundingClientRect();
-                    window.scrollTo(0, Math.round(window.scrollY + caja.top - camara.bottom
+                    const linea = window.innerHeight * .24;
+                    window.scrollTo(0, Math.round(window.scrollY + caja.top - linea
                         + caja.height * datos.progress));
                 }
                 """, new { chapter, progress });

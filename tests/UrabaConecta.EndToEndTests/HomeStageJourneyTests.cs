@@ -29,10 +29,12 @@ public sealed class HomeStageJourneyTests(BrowserFixture fixture)
         Assert.False(await HasHorizontalOverflow(page));
 
         // La escena empieza sobre el pliegue y domina la pantalla: es la mecánica de media focal.
-        var stage = await page.Locator("[data-testid=feed-piece]").BoundingBoxAsync();
+        var stage = await page.Locator("[data-stage-media]").BoundingBoxAsync();
         Assert.NotNull(stage);
-        Assert.True(stage!.Y < 240, $"La escena empieza demasiado abajo: {stage.Y}");
-        Assert.True(stage.Height > 480, $"La escena no domina el viewport: {stage.Height}");
+        Assert.InRange(stage!.X, 15.5, 16.5);
+        Assert.InRange(stage.Y, 278, 288);
+        Assert.InRange(stage.Width, 357.5, 358.5);
+        Assert.InRange(stage.Height, 332.5, 334.5);
 
         // Cambiar de negocio reescribe el contexto accionable, no sólo la foto.
         await page.Locator("[data-stage-next]").ClickAsync();
@@ -70,12 +72,12 @@ public sealed class HomeStageJourneyTests(BrowserFixture fixture)
         await WaitForStage(page);
 
         Assert.False(await HasHorizontalOverflow(page));
-        var stage = await page.Locator("[data-testid=feed-piece]").BoundingBoxAsync();
+        var stage = await page.Locator("[data-stage-media]").BoundingBoxAsync();
         Assert.NotNull(stage);
-        Assert.InRange(stage!.X, -0.5, 0.5);
-        Assert.InRange(stage.X + stage.Width, 359.5, 360.5);
-        Assert.True(stage.Y < 240, $"La escena empieza demasiado abajo: {stage.Y}");
-        Assert.True(stage.Height > 480, $"La escena no domina el viewport: {stage.Height}");
+        Assert.InRange(stage!.X, 15.5, 16.5);
+        Assert.InRange(stage.X + stage.Width, 343.5, 344.5);
+        Assert.InRange(stage.Y, 276, 284);
+        Assert.InRange(stage.Height, 291.5, 294.5);
 
         // La acción de la escena sigue estando sobre el pliegue: mirar sin poder actuar no sirve.
         var action = await page.Locator("[data-stage-action]").BoundingBoxAsync();

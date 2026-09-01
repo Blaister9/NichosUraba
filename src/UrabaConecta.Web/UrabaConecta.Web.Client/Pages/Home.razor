@@ -371,6 +371,11 @@
                        aquí es lo que la cámara está enseñando arriba: el capítulo y la media son el mismo
                        estado, no dos listas que coinciden. *@
                     <div class="stage-chapters" data-stage-chapters>
+                        <header class="stage-chapters-heading">
+                            <p class="stage-eyebrow">Un negocio, señales reales</p>
+                            <h2>@opening.Headline, de cerca.</h2>
+                            <p>La imagen cambia con la decisión; el scroll sigue siendo tuyo.</p>
+                        </header>
                         @{ var chapterIndex = 0; }
                         @foreach (var scene in Scenes)
                         {
@@ -429,10 +434,17 @@
                     @* EL CIERRE. La secuencia termina en algún sitio, y ese sitio es lo que suelta la
                        cámara: cuando el track se acaba, sticky deja de sostenerla por geometría y no
                        porque alguien se lo diga. Es la parte estructural de la mecánica. *@
-                    <p class="stage-end">
-                        <span class="eyebrow">Fin de la secuencia</span>
-                        <a href="/explorar">Ver todo el directorio de @PlaceName</a>
-                    </p>
+                    <section class="stage-end" aria-labelledby="stage-handoff-title">
+                        <div>
+                            <p class="stage-eyebrow">Contexto compartido</p>
+                            <h2 id="stage-handoff-title">Cambia de municipio. Conserva tu orientación.</h2>
+                            <p>La misma escena, el mismo lugar para actuar y un nuevo contexto local.</p>
+                        </div>
+                        <a class="stage-next-place" href="@NextPlaceHref"
+                           @onclick="() => GoTo(NextPlaceHref)" @onclick:preventDefault="interactiveReady">
+                            Explorar @NextPlaceName <Icon Name="flecha" Size="16" />
+                        </a>
+                    </section>
                 }
 
             </div>
@@ -516,6 +528,11 @@
     private string EverywhereInCategoryHref
         => $"/?lugar={PlacePreference.Everywhere}&busco={Uri.EscapeDataString(category ?? "")}";
     private string SearchEverywhereHref => $"/explorar?q={Uri.EscapeDataString(search.Trim())}";
+    private PlaceOption NextPlace => Places.Where(x => x.HasBusinesses && x.Slug != place)
+        .FirstOrDefault() ?? Places.FirstOrDefault(x => x.HasBusinesses)
+        ?? new PlaceOption(PlacePreference.Everywhere, "Todo Urabá", MunicipalityLook.For(PlacePreference.Everywhere), true);
+    private string NextPlaceName => NextPlace.Name;
+    private string NextPlaceHref => PlaceHref(NextPlace.Slug);
 
     private sealed record PlaceOption(string Slug, string Name, MunicipalityLook.Look Look, bool HasBusinesses);
     private sealed record CategoryOption(string Slug, string Name);

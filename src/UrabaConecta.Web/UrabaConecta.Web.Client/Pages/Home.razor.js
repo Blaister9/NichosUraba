@@ -77,7 +77,11 @@ function onScroll() {
   // Enfocar o clicar un control puede hacer que el navegador acomode unos píxeles la página antes
   // del gesto. Eso no es recorrer la secuencia y no debe cambiar el negocio bajo el puntero. Rueda,
   // gesto vertical o teclas de desplazamiento limpian este resguardo antes del scroll real.
-  steps.forEach(readChapters);
+  steps.forEach(step => {
+    updateMotionSection(step);
+    updateFocalFromScroll(step);
+    readChapters(step);
+  });
 }
 
 function onResize() {
@@ -85,13 +89,40 @@ function onResize() {
   document.querySelectorAll('.stage-step[data-capitulos="vivo"]').forEach(step => {
     measureCamera(step);
     medirEscena(step);
+    updateMotionSection(step);
+    updateFocalFromScroll(step);
     readChapters(step);
   });
 }
 
-/// La cámara no cambia de tamaño al compactarse —recorta y desplaza, que no son maquetación—, así que
-/// su alto se mide una vez y sirve para dos cosas: saber dónde empieza el campo del capítulo y dónde
-/// tiene que aterrizar uno cuando se salta a él desde los controles.
+// El laboratorio aprobado tiene tres actos geométricos, no tres componentes: hero claro, entrada
+// editorial y capítulos oscuros; el cierre suelta la cámara. Esta señal sólo describe qué parte del
+// documento cruza el viewport. CSS conserva la responsabilidad de componer cada acto.
+function updateMotionSection(step) {
+  const chapters = step.querySelector('[data-stage-chapters]');
+  const first = step.querySelector('[data-stage-chapter]');
+  const end = step.querySelector('.stage-end');
+  if (!chapters || !first || !end) return;
+
+  const vh = window.innerHeight || 1;
+  const chaptersTop = chapters.getBoundingClientRect().top;
+  const firstTop = first.getBoundingClientRect().top;
+  const endTop = end.getBoundingClientRect().top;
+  const stickyTop = matchMedia('(min-width: 760px)').matches ? 120 : 16;
+  step.style.setProperty('--chapter-entry-offset', `${Math.max(0, firstTop - stickyTop).toFixed(2)}px`);
+  const section = chaptersTop > vh * .62 ? 'hero'
+    : firstTop > vh * .58 ? 'heading'
+    : endTop > vh * .64 ? 'chapters'
+    : 'end';
+  const changed = step.dataset.motionSection !== section;
+  step.dataset.motionSection = section;
+  // Cambiar de hero a capítulo cambia la altura intrínseca de la cámara. Una segunda medición en el
+  // siguiente frame toma esa geometría ya asentada y alinea focal y texto sin un salto visible.
+  if (changed) requestAnimationFrame(() => updateMotionSection(step));
+}
+
+/// La cámara mantiene la proporción aprobada dentro de cada acto. Su alto se mide al entrar o cambiar
+/// de viewport para que los atajos de capítulo aterricen en la geometría real.
 function measureCamera(step) {
   const camera = step.querySelector('[data-stage-camera]');
   if (!camera) return;
@@ -110,24 +141,25 @@ function readChapters(step) {
   if (step.dataset.stageManual === 'true') return;
   const chapters = chapterNodes(step);
   if (chapters.length === 0) return;
-  const camera = step.querySelector('[data-stage-camera]');
-  const cameraBox = camera?.getBoundingClientRect();
-  const stickyTop = camera ? parseFloat(getComputedStyle(camera).top) || 0 : 0;
-  // Cuando el último capítulo suelta la cámara, su caja ya está fuera del viewport. La línea de
-  // lectura conserva el borde que tenía fijada para que el estado no rebote entre soltar y fijar.
-  const linea = camera ? Math.max(cameraBox?.bottom || 0, stickyTop + camera.offsetHeight) : 0;
-
-  // Manda el último capítulo cuyo borde ya cruzó la cámara. Esta regla usa una sola línea estable
-  // del layout y no compite con cuántos píxeles casualmente quedan visibles bajo el pliegue.
+  // Equivale al IntersectionObserver del laboratorio: rootMargin -24% 0 -42% y umbrales
+  // 0/.15/.45/.75. Gana el capítulo con mayor presencia en esa franja de lectura, no el que por
+  // casualidad toca el borde de una tarjeta o de la cámara.
+  const vh = window.innerHeight || 1;
+  const bandTop = vh * .24;
+  const bandBottom = vh * .58;
   let elegido = 0;
+  let mejor = -1;
   chapters.forEach((chapter, index) => {
     const caja = chapter.getBoundingClientRect();
-    if (caja.top <= linea + 1) elegido = index;
+    const visible = Math.max(0, Math.min(caja.bottom, bandBottom) - Math.max(caja.top, bandTop));
+    const ratio = visible / Math.max(1, Math.min(caja.height, bandBottom - bandTop));
+    const distancia = Math.abs((caja.top + caja.bottom) / 2 - (bandTop + bandBottom) / 2);
+    const score = ratio * 1000 - distancia / Math.max(1, vh);
+    if (score > mejor) { mejor = score; elegido = index; }
   });
 
-  // El avance dentro del capítulo es lo que hay recorrido de su propio alto: el capítulo dura lo que
-  // mide, ni un milisegundo más.
   const caja = chapters[elegido].getBoundingClientRect();
+  const linea = bandTop;
   const avance = Math.max(0, Math.min(1, (linea - caja.top) / Math.max(1, caja.height)));
   const fase = avance < 0.14 ? 'a' : avance < 0.52 ? 'b' : 'c';
   commitState(step, elegido, fase, avance, { animate: true });
@@ -148,24 +180,17 @@ function commitState(step, chapter, phase, progress, { animate }) {
   step.dataset.progress = normalized.toFixed(3);
   step.dataset.finalChapter = chapter === scenes.length - 1 ? 'true' : 'false';
 
-  // El movimiento fino también sale del mismo progreso. El capítulo cambia por umbrales; recorte,
-  // profundidad y compactación viajan con cada píxel de scroll nativo entre esos umbrales.
+  // El capítulo cambia por umbrales; la imagen aprobada permanece estable dentro de su marco y el
+  // relevo ocurre por crossfade, no mediante un recorte o una compactación inventados.
   const activo = scenes.findIndex(x => x.classList.contains('is-active'));
   if (chapter !== activo) {
     apply(step, chapter, { animate });
     // El capítulo nuevo trae otra altura de panel y otra oferta: la geometría de la que cuelga la
     // composición se vuelve a medir aquí y no en cada fotograma.
     medirEscena(step);
-    // El relevo es el único salto real del recorrido: el progreso vuelve de ~1 a ~0 sin que el dedo
-    // haya recorrido nada. Marcarlo permite recorrer ESE tramo y sólo ese.
-    step.__relevo = true;
   }
 
-  // El movimiento fino sale de un solo número. El capítulo cambia por umbrales; recorte, profundidad,
-  // compactación y sombra son funciones continuas de ese número, así que no pueden desincronizarse.
-  step.__progresoObjetivo = normalized;
-  if (quiet()) { step.__progresoPintado = normalized; pintarEscena(step, normalized); }
-  else programarPintado(step);
+  pintarEscena(step, normalized);
 }
 
 /// La geometría de la que cuelga la composición. Medirla una vez por capítulo y por redimensión
@@ -181,53 +206,42 @@ function medirEscena(step) {
   };
 }
 
-/// Escribe la composición para un progreso dado. Todas las propiedades salen del mismo número: si el
-/// recorte va por la mitad, la profundidad, la sombra y el panel van exactamente por la mitad.
+/// El Motion Lab aprobado no recorta ni encoge la cámara durante un capítulo. Se conserva el progreso
+/// como contrato observable, pero la composición queda estable y el movimiento fino vive dentro de
+/// la imagen (puntero o scroll táctil), exactamente como en el prototipo validado.
 function pintarEscena(step, progreso) {
   const geo = step.__geo || (medirEscena(step), step.__geo);
-  const { desktop, mediaHeight, contextHeight, stickyTop } = geo;
-  const crop = progreso * (desktop ? .56 : .66);
-  const contextShift = desktop ? 0 : -progreso * mediaHeight * .66;
-  const visualBottom = desktop ? mediaHeight
-    : Math.max(mediaHeight * (1 - crop), mediaHeight + contextShift + contextHeight);
   step.style.setProperty('--progreso-escena', progreso.toFixed(4));
-  step.style.setProperty('--recorte-escena', `${(crop * 100).toFixed(2)}%`);
-  step.style.setProperty('--escala-media', (1 + progreso * .045).toFixed(4));
-  step.style.setProperty('--deriva-media', `${(-progreso * 12).toFixed(2)}px`);
-  step.style.setProperty('--desplaza-contexto', `${contextShift.toFixed(2)}px`);
-  step.style.setProperty('--tope-panel', `${Math.round(stickyTop + visualBottom + 12)}px`);
+  step.style.setProperty('--recorte-escena', '0%');
+  step.style.setProperty('--escala-media', '1');
+  step.style.setProperty('--deriva-media', '0px');
+  step.style.setProperty('--desplaza-contexto', '0px');
+  step.style.setProperty('--tope-panel', `${Math.round(geo.stickyTop + geo.mediaHeight + 12)}px`);
 }
 
-/// El único reloj de la escena. No anima nada por su cuenta: acerca lo pintado a lo que el recorrido
-/// ya decidió y se apaga al llegar.
-///
-/// Dos constantes y no una, porque son dos problemas distintos. Mientras se recorre un capítulo el
-/// progreso ya viene continuo del scroll y lo único que hace falta es no ir por detrás del dedo: con
-/// TAU_RECORRIDO el retraso es de un fotograma y no se percibe. En el relevo entre capítulos el
-/// progreso sí salta —vuelve de ~1 a ~0 sin que nadie haya recorrido nada— y ahí se usa TAU_RELEVO,
-/// que convierte ese corte en un tramo de unos 15 fotogramas. Medido: el mayor salto por fotograma
-/// en el relevo baja de ~.57 a ~.10.
-const TAU_RECORRIDO = 26;
-const TAU_RELEVO = 110;
-function programarPintado(step) {
-  if (step.__pintando) return;
-  step.__pintando = true;
-  let anterior = performance.now();
-  const paso = ahora => {
-    const objetivo = step.__progresoObjetivo ?? 0;
-    const actual = step.__progresoPintado ?? objetivo;
-    const dt = Math.min(64, Math.max(1, ahora - anterior));
-    anterior = ahora;
-    const k = 1 - Math.exp(-dt / (step.__relevo ? TAU_RELEVO : TAU_RECORRIDO));
-    const siguiente = actual + (objetivo - actual) * k;
-    const llegado = Math.abs(objetivo - siguiente) < .0005;
-    step.__progresoPintado = llegado ? objetivo : siguiente;
-    if (llegado) step.__relevo = false;
-    pintarEscena(step, step.__progresoPintado);
-    if (llegado || !step.isConnected) { step.__pintando = false; return; }
-    requestAnimationFrame(paso);
-  };
-  requestAnimationFrame(paso);
+function bindFocal(step, media) {
+  media.addEventListener('pointermove', event => {
+    if (event.pointerType !== 'mouse' || quiet()) return;
+    const box = media.getBoundingClientRect();
+    const x = Math.max(-1, Math.min(1, ((event.clientX - box.left) / Math.max(1, box.width) - .5) * 2));
+    const y = Math.max(-1, Math.min(1, ((event.clientY - box.top) / Math.max(1, box.height) - .5) * 2));
+    step.style.setProperty('--focal-x', `${(-x * 7).toFixed(2)}px`);
+    step.style.setProperty('--focal-y', `${(-y * 7).toFixed(2)}px`);
+  }, { passive: true });
+  media.addEventListener('pointerleave', () => {
+    step.style.setProperty('--focal-x', '0px');
+    step.style.setProperty('--focal-y', '0px');
+  }, { passive: true });
+}
+
+function updateFocalFromScroll(step) {
+  if (!matchMedia('(pointer: coarse)').matches || quiet()) return;
+  const media = step.querySelector('[data-stage-media]');
+  if (!media) return;
+  const box = media.getBoundingClientRect();
+  const progress = ((box.top + box.height / 2) / Math.max(1, window.innerHeight) - .5) * 2;
+  step.style.setProperty('--focal-x', '0px');
+  step.style.setProperty('--focal-y', `${Math.max(-6, Math.min(6, progress * -8)).toFixed(2)}px`);
 }
 
 /// Un solo oyente para toda la pantalla: los controles de la escena y la salida hacia un negocio.
@@ -302,6 +316,7 @@ export function syncStage() {
       media.dataset.stageBound = '1';
       bindKeyboard(step, media);
       bindSwipe(step, media);
+      bindFocal(step, media);
     }
 
     const context = step.dataset.stageContext || '';
@@ -328,6 +343,8 @@ export function syncStage() {
     if (step.querySelector('[data-stage-chapter]')) {
       step.dataset.capitulos = 'vivo';
       measureCamera(step);
+      updateMotionSection(step);
+      updateFocalFromScroll(step);
       // Un rerender del mismo feed no es recorrido. Releer aquí pisaría un atajo o la escena que
       // acaba de restaurarse al volver de la ficha; sólo la primera composición necesita inferir el
       // capítulo desde la geometría. Después lo hacen exclusivamente scroll y resize.
@@ -532,7 +549,7 @@ function crossfade(media, src, alt) {
         current.classList.remove('is-leaving');
         current.hidden = current.getAttribute('src') === null;
       }
-    }, quiet() ? 0 : 460);
+    }, quiet() ? 0 : 440);
   };
 
   if (waiting.complete) waiting.decode?.().catch(() => {}).finally(show);

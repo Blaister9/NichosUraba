@@ -3928,3 +3928,327 @@ html[data-escena="continua"] [data-escena-vt] { view-transition-name: uc-escena 
     .stage-context { transform: none }
     .chapter-handoff { transform: none }
 }
+
+/* ==============================================================================================
+   J-MOTION-04 — PORT LITERAL DEL MOTION LAB APROBADO
+
+   La escena vuelve a tener los dos actos de J-MOTION-01: un hero editorial de un viewport y un
+   capítulo oscuro donde una media de 72svh permanece mientras el contenido recorre 72svh. Las
+   tarjetas productizadas dejan de dictar la composición; los datos y acciones reales permanecen.
+   ============================================================================================== */
+:root {
+    --motionlab-paper: #f4f0e5;
+    --motionlab-paper-deep: #e7e1d3;
+    --motionlab-ink: #17251c;
+    --motionlab-ink-soft: #405047;
+    --motionlab-white: #fffdf7;
+    --motionlab-accent: #ff6846;
+    --motionlab-lime: #c9f06b;
+    --motionlab-line: rgb(23 37 28 / 20%);
+    --motionlab-ease-out: cubic-bezier(.2, .8, .2, 1);
+    --motionlab-ease-snap: cubic-bezier(.2, .9, .3, 1);
+}
+
+body:has(.stage-step) { overflow-x: clip; background: var(--motionlab-paper) }
+body:has(.stage-step) .site-header {
+    position: absolute; top: 0; left: 0; width: 100%; z-index: 30;
+    background: transparent; border-bottom-color: transparent; backdrop-filter: none;
+}
+body:has(.stage-step) .page-shell { width: 100%; min-height: 0; padding: 0; background: var(--motionlab-paper) }
+body:has(.stage-step) .ahora-home {
+    width: 100%; max-width: none; margin: 0; padding: 0;
+    color: var(--motionlab-ink); background: var(--motionlab-paper);
+}
+body:has(.stage-step) .install-invite {
+    position: fixed; z-index: 40; right: 1rem; bottom: 1rem; width: min(23rem, calc(100% - 2rem));
+    margin: 0; box-shadow: 0 18px 44px rgb(23 37 28 / 18%);
+}
+
+.stage-step {
+    --focal-x: 0px;
+    --focal-y: 0px;
+    position: relative; display: block; padding: 0; overflow: clip;
+    color: var(--motionlab-ink); background: var(--motionlab-paper);
+}
+.stage-copy {
+    position: absolute; z-index: 8; top: 5.7rem; right: 1rem; left: 1rem;
+    display: grid; gap: .45rem; padding: 0; min-width: 0; max-width: 37rem;
+}
+.stage-chips { position: absolute; top: -2.45rem; left: -.35rem }
+.stage-eyebrow {
+    color: var(--motionlab-ink-soft); font-size: .68rem; font-weight: 760;
+    letter-spacing: .13em; text-transform: uppercase;
+}
+.stage-title {
+    margin: 0; font-family: Georgia, "Times New Roman", serif;
+    font-size: clamp(2.45rem, 12.2vw, 4.4rem); font-weight: 400;
+    line-height: .9; letter-spacing: -.065em;
+}
+.stage-intro {
+    display: block; max-width: 33rem; overflow: visible; color: var(--motionlab-ink-soft);
+    font-size: .9rem; -webkit-line-clamp: unset;
+}
+.stage-switcher { gap: .4rem; margin: .15rem 0 0; padding: .1rem .05rem .2rem }
+.stage-switcher a {
+    min-height: 2.5rem; padding: .55rem .86rem; border-color: var(--motionlab-line);
+    color: var(--motionlab-ink); font-size: .78rem; font-weight: 700;
+}
+.stage-switcher a[aria-current="location"] {
+    border-color: var(--motionlab-ink); background: var(--motionlab-ink); color: var(--motionlab-paper);
+}
+
+.stage-body { display: block; min-width: 0 }
+.stage-track {
+    position: relative; display: flex; min-width: 0; padding-top: 17.65rem;
+    flex-direction: column; gap: 0;
+}
+.stage-camera {
+    position: sticky; z-index: 6; top: 1rem; order: 0; width: 100%;
+    opacity: 1; transition: opacity 300ms var(--motionlab-ease-out),
+        width 420ms var(--motionlab-ease-snap), margin 420ms var(--motionlab-ease-snap);
+}
+.stage-camera, .stage-camera .stage-media-wrap { pointer-events: none }
+.stage-camera .stage-media, .stage-camera .stage-context,
+.stage-camera .stage-scenes-head { pointer-events: auto }
+.stage-media-wrap { position: relative; display: grid; margin: 0 1rem; min-width: 0 }
+.stage-media {
+    position: relative; height: max(13rem, calc(100svh - 31.9rem)); min-height: 0;
+    overflow: hidden; isolation: isolate; clip-path: none; border: 1px solid rgb(23 37 28 / 11%);
+    border-radius: 1.25rem 1.25rem .25rem .25rem; background: var(--motionlab-paper-deep);
+    touch-action: pan-y; transition: none;
+}
+.stage-lens {
+    position: absolute; z-index: 1; inset: 0;
+    transform: translate3d(var(--stage-drag, var(--focal-x, 0px)), var(--focal-y, 0px), 0);
+    transition: none; will-change: transform;
+}
+.stage-image {
+    position: absolute; inset: -1.5%; width: 103%; height: 103%; object-fit: cover;
+    opacity: 0; transform: scale(1.025);
+    transition: opacity 420ms var(--motionlab-ease-out), transform 560ms var(--motionlab-ease-out),
+        filter 420ms ease; will-change: opacity, transform;
+}
+.stage-image.is-current { opacity: 1; transform: scale(1) }
+.stage-image.is-leaving {
+    opacity: 0;
+    transform: translate3d(calc(var(--focal-x, 0px) * -.5), var(--focal-y, 0px), 0) scale(.985);
+}
+.stage-stamp {
+    top: .8rem; left: .8rem; padding: .48rem .68rem; background: var(--motionlab-lime);
+    color: var(--motionlab-ink); font-size: .68rem; font-weight: 800;
+}
+.stage-context {
+    position: relative; z-index: 4; display: grid; gap: .8rem; padding: .95rem;
+    min-height: 11rem;
+    color: var(--motionlab-paper); background: var(--motionlab-ink);
+    border-radius: .25rem .25rem 1.25rem 1.25rem; transform: none;
+    grid-template-columns: 1fr auto; align-items: end;
+}
+.stage-context .context-kicker { margin-bottom: .1rem; color: #c5d0c8; font-size: .65rem; letter-spacing: .1em }
+.stage-context .context-main h2 {
+    overflow: hidden; margin: 0; font-size: 1.35rem; line-height: 1.05;
+    letter-spacing: -.04em; text-overflow: ellipsis; white-space: nowrap;
+}
+.stage-context .context-facts { grid-column: 1 / -1; gap: .12rem; color: #d7ded9; font-size: .73rem }
+.stage-context .context-state { color: var(--motionlab-white); font-size: .73rem }
+.stage-context .primary-action {
+    min-height: 2.8rem; justify-content: space-between; padding: .7rem .9rem;
+    border-radius: .7rem; background: var(--motionlab-accent); color: #3d1309;
+    font-size: .76rem; font-weight: 800;
+}
+.stage-camera .stage-scenes-head {
+    display: flex; align-items: center; justify-content: space-between; gap: .75rem;
+    height: 3.2rem; margin: 0 1rem; padding: .4rem 0; color: var(--motionlab-ink-soft);
+}
+.stage-camera .stage-scenes-head .stage-eyebrow::before { content: "Desliza para mirar de cerca" }
+.stage-camera .stage-scenes-head .stage-eyebrow { font-size: 0 }
+.stage-camera .stage-scenes-head .stage-eyebrow::before { font-size: .68rem }
+.stage-counter { margin-left: auto; font-size: .68rem }
+.stage-arrows button { width: 36px; height: 36px }
+
+.stage-step[data-motion-section="heading"] .stage-camera,
+.stage-step[data-motion-section="end"] .stage-camera { opacity: 0; pointer-events: none }
+.stage-step[data-motion-section="chapters"] .stage-camera { opacity: 1 }
+.stage-step[data-motion-section="chapters"] .stage-media-wrap {
+    display: block; margin: 0 1rem; overflow: hidden; border-radius: 1.1rem;
+    background: #27342c;
+}
+.stage-step[data-motion-section="chapters"] .stage-media {
+    height: min(50svh, 26rem); border-radius: 1.1rem; border-color: rgb(255 255 255 / 18%);
+}
+.stage-step[data-motion-section="chapters"] .stage-context { display: none }
+.stage-step[data-motion-section="chapters"] .stage-stamp,
+.stage-step[data-motion-section="chapters"] .stage-badges { opacity: 0 }
+.stage-step[data-motion-section="chapters"] .stage-camera .stage-scenes-head {
+    position: absolute; z-index: 8; right: 1.7rem; bottom: .7rem; left: 1.7rem;
+    margin: 0; padding: .58rem .65rem; color: var(--motionlab-white);
+    background: rgb(23 37 28 / 82%); border-radius: .5rem; backdrop-filter: blur(8px);
+}
+.stage-step[data-motion-section="chapters"] .stage-camera .stage-scenes-head .stage-eyebrow::before {
+    content: none;
+}
+.stage-step[data-motion-section="chapters"] .stage-camera .stage-scenes-head .stage-eyebrow {
+    color: var(--motionlab-white); font-size: .68rem;
+}
+
+.stage-chapters {
+    order: 1; display: grid; padding: 0 1rem 2rem; background: var(--motionlab-ink);
+    color: var(--motionlab-paper);
+}
+.stage-chapters-heading { display: grid; gap: .7rem; max-width: 42rem; padding: 5rem 0 2.5rem }
+.stage-chapters-heading .stage-eyebrow,
+.stage-chapters-heading > p:last-child { color: #aebcb2 }
+.stage-chapters-heading h2 {
+    margin: 0; font-family: Georgia, "Times New Roman", serif;
+    font-size: clamp(2.15rem, 9vw, 5rem); font-weight: 400;
+    line-height: .98; letter-spacing: -.05em;
+}
+.stage-chapters-heading > p:last-child { max-width: 30rem; margin: 0; font-size: .88rem }
+.stage-chapter {
+    position: relative; display: grid; min-height: 65svh; align-content: end;
+    padding: 2.2rem .25rem 2.5rem; border-top: 1px solid rgb(244 240 229 / 23%);
+    opacity: .52; transition: opacity 260ms ease;
+}
+.stage-chapters-heading + .stage-chapter { margin-top: 24svh }
+.stage-chapter.is-active { opacity: 1 }
+.chapter-panel {
+    position: static; display: grid; align-content: end; gap: .75rem; padding: 0;
+    border: 0; background: transparent; box-shadow: none; backdrop-filter: none;
+}
+.chapter-mark { color: var(--motionlab-lime); font-size: .7rem; font-weight: 800; letter-spacing: .09em }
+.chapter-mark span { color: var(--motionlab-lime) }
+.chapter-name {
+    max-width: 19rem; margin: 0; color: var(--motionlab-paper);
+    font-family: inherit; font-size: clamp(1.7rem, 8vw, 3.6rem);
+    line-height: .98; letter-spacing: -.045em;
+}
+.chapter-state { max-width: 24rem; color: #b8c4bb; font-size: .87rem }
+.chapter-offers { margin-top: .25rem }
+.chapter-offer {
+    border-color: rgb(244 240 229 / 23%); color: var(--motionlab-paper);
+    opacity: .001; transform: translateY(12px);
+    transition: opacity 420ms var(--motionlab-ease-out), transform 420ms var(--motionlab-ease-out);
+    transition-delay: calc(var(--orden, 0) * 70ms);
+}
+.stage-chapter.is-active .chapter-offer { opacity: 1; transform: none }
+.chapter-offer .offer-meta, .chapter-offer.is-focus .offer-name { color: #b8c4bb }
+.chapter-offer.is-focus { border-top-color: var(--motionlab-lime) }
+.chapter-offer.is-focus .offer-name::before { background: var(--motionlab-lime) }
+.chapter-action {
+    width: max-content; margin-top: .25rem; padding: .45rem 0; border: 0;
+    border-bottom: 1px solid currentColor; border-radius: 0;
+    color: var(--motionlab-paper); font-size: .77rem; background: transparent;
+}
+.stage-step[data-fase="c"] .stage-chapter.is-active .chapter-action {
+    color: var(--motionlab-paper); background: transparent;
+}
+.chapter-handoff { border-top-color: rgb(244 240 229 / 23%); color: #b8c4bb }
+.chapter-handoff .eyebrow, .chapter-handoff strong, .chapter-handoff a { color: #b8c4bb }
+
+/* Las escenas siguen siendo el estado navegable del carrusel, pero dejan de presentarse como cards.
+   La captación conserva su lugar editorial y los controles/touch/teclado siguen cambiando escena. */
+.stage-scenes { order: 2; padding: 4rem 1rem; background: var(--motionlab-paper) }
+.stage-scenes:not(:has(.stage-capture)) { display: none }
+.stage-scene-list { display: grid; overflow: visible; max-width: 32rem; margin: auto }
+.stage-scene {
+    position: absolute !important; width: 1px !important; height: 1px !important;
+    padding: 0 !important; overflow: hidden !important; clip: rect(0 0 0 0) !important;
+    white-space: nowrap !important;
+}
+.stage-capture { border-radius: .8rem }
+
+.stage-end {
+    display: grid; min-height: 72svh; align-content: center; justify-items: start;
+    gap: 2.5rem; margin: 0; padding: 5rem 1rem; border: 0;
+    color: var(--motionlab-ink); background: var(--motionlab-paper);
+}
+.stage-end > div { display: grid; gap: .75rem }
+.stage-end h2 {
+    max-width: 59rem; margin: 0; font-family: Georgia, "Times New Roman", serif;
+    font-size: clamp(2.15rem, 9vw, 5rem); font-weight: 400;
+    line-height: .98; letter-spacing: -.05em;
+}
+.stage-end > div > p:last-child { max-width: 29rem; margin: 0; color: var(--motionlab-ink-soft) }
+.stage-next-place {
+    display: inline-flex; width: max-content; max-width: 100%; min-height: 3.1rem;
+    align-items: center; justify-content: space-between; gap: 1rem; padding: .8rem 1rem;
+    border-radius: .7rem; background: var(--motionlab-ink); color: var(--motionlab-paper);
+    font-size: .78rem; font-weight: 780; text-decoration: none;
+}
+.stage-tools {
+    display: grid; gap: 1rem; padding: 4rem 1rem; color: var(--motionlab-ink);
+    background: var(--motionlab-paper);
+}
+body:has(.stage-step) footer {
+    padding: 1.2rem 1rem; color: #aebcb2; background: var(--motionlab-ink);
+    border-top-color: rgb(244 240 229 / 14%); font-size: .66rem;
+    text-transform: uppercase; letter-spacing: .06em;
+}
+body:has(.stage-step) footer strong, body:has(.stage-step) footer a { color: #aebcb2 }
+
+@media (min-width: 760px) {
+    .stage-track { padding-top: 7.7rem }
+    .stage-copy { top: 7.7rem; left: 3rem; right: auto; width: 33.5%; max-width: 37rem }
+    .stage-chips { top: -2.9rem }
+    .stage-title { font-size: clamp(4.6rem, 8vw, 7.3rem) }
+    .stage-intro { font-size: 1rem }
+    .stage-switcher { flex-wrap: wrap; overflow: visible }
+    .stage-camera {
+        top: 7.5rem; width: 56.46%; margin-left: 40.18%;
+    }
+    .stage-media-wrap { margin: 0 }
+    .stage-media {
+        height: calc(100svh - 11.85rem); border-radius: 8rem 1.25rem 1.25rem 1.25rem;
+    }
+    .stage-context {
+        position: absolute; right: 1.2rem; bottom: 1.2rem; left: 1.2rem;
+        min-height: 0; padding: 1.05rem; border-radius: .8rem; background: rgb(23 37 28 / 92%);
+        grid-template-columns: 1.05fr 1fr auto;
+    }
+    .stage-context .context-main h2 { font-size: 1.7rem }
+    .stage-context .context-facts { grid-column: auto; align-self: center }
+    .stage-context .primary-action { min-width: 9.5rem }
+    .stage-camera .stage-scenes-head { height: auto; margin: 0; padding: .8rem 0 1.2rem }
+
+    .stage-step[data-motion-section="chapters"] .stage-camera {
+        position: sticky !important; top: 7.5rem !important; width: 53.24%; margin-left: 3.37%;
+        transform: translateY(var(--chapter-entry-offset, 0px));
+    }
+    .stage-step[data-motion-section="chapters"] .stage-media-wrap { margin: 0 }
+    .stage-step[data-motion-section="chapters"] .stage-media { height: min(72svh, 46rem) }
+    .stage-step[data-motion-section="chapters"] .stage-camera .stage-scenes-head {
+        right: .7rem; bottom: .7rem; left: .7rem;
+    }
+    .stage-chapters { margin-top: -13.5625px; padding: 0 3rem 5rem }
+    .stage-chapters-heading { padding: 8rem 0 12rem }
+    .stage-chapters-heading h2 { font-size: clamp(4rem, 7.5vw, 8rem) }
+    .stage-chapter {
+        width: 34.25%; min-height: 72svh; margin-left: 65.75%; align-content: center;
+        padding: 2.2rem .25rem 2.5rem;
+    }
+    .stage-chapters-heading + .stage-chapter { margin-top: 0 }
+    .chapter-panel { align-content: center }
+    .chapter-name { max-width: 24rem; font-size: clamp(1.7rem, 3vw, 3.6rem) }
+    .stage-end { min-height: 86svh; padding: 8rem 3rem }
+    .stage-end h2 { font-size: clamp(4rem, 7.5vw, 8rem) }
+    .stage-scenes, .stage-tools { padding-right: 3rem; padding-left: 3rem }
+    .stage-tools { grid-template-columns: minmax(18rem, .72fr) minmax(30rem, 1.28fr) }
+}
+
+@media (max-width: 390px) and (max-height: 760px) {
+    .stage-track { padding-top: 16.9rem }
+    .stage-title { font-size: 2.35rem }
+    .stage-context { padding: .75rem }
+}
+
+@media (max-width: 370px) and (min-height: 761px) {
+    .stage-track { padding-top: 17.4625rem }
+    .stage-media { height: max(13rem, calc(100svh - 31.6875rem)) }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .stage-camera, .stage-lens, .stage-context, .stage-chapter, .chapter-offer,
+    .chapter-handoff, .stage-image { transition: none !important; animation: none !important }
+    .stage-lens, .stage-image, .stage-image.is-current, .stage-image.is-leaving { transform: none !important }
+    .chapter-offer { opacity: 1; transform: none }
+}
