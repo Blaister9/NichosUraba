@@ -132,6 +132,15 @@
        para que la diferencia de esquinas entre Home y la ficha sea un dato y no un número suelto. */
     --radio-escena: var(--radio-0);
 
+    /* EL CAPÍTULO. El alto de la media focal y cuánto se recorta en cada fase salen de aquí, y de
+       aquí los lee tanto la cámara como el desplazamiento del contexto: una fase es un estado, no
+       tres animaciones que se parecen. La cabecera fija la mide el guion; 60px es lo que vale
+       mientras tanto. */
+    --alto-escena: clamp(260px, 42svh, 360px);
+    --recorte-escena: 0%;
+    --alto-cabecera: 60px;
+    --mov-capitulo: .5s;
+
     font-family: var(--fuente-ui);
     line-height: 1.5;
     font-synthesis: none;
@@ -3312,9 +3321,17 @@ body:has(.ahora-home) footer strong { color: var(--uc-jungle) }
 
 /* La media es la superficie, no la ilustración de una tarjeta. */
 .stage-media {
-    position: relative; height: clamp(260px, 40svh, 340px); overflow: hidden; isolation: isolate;
+    position: relative; height: var(--alto-escena); overflow: hidden; isolation: isolate;
     border-radius: 0; background: var(--superficie-papel);
-    touch-action: pan-y; transition: transform .42s cubic-bezier(.2,.8,.2,1);
+    touch-action: pan-y;
+    /* El recorte y el desplazamiento son de compositor: la media se compacta sin mover una sola
+       línea del capítulo que está pasando por debajo. Cambiar el alto haría justo lo contrario.
+
+       El recorte NO se interpola en el tiempo: ya viene interpolado por el recorrido. Ponerle una
+       transición encima lo haría ir por detrás del dedo —el clásico "va con retraso"— y convertiría
+       una composición ligada al scroll en una animación que persigue al scroll. */
+    clip-path: inset(0 0 var(--recorte-escena, 0%) 0);
+    transition: transform .42s cubic-bezier(.2,.8,.2,1);
 }
 .stage-media:focus-visible { outline: 3px solid var(--uc-green); outline-offset: -3px }
 .stage-media.is-opening { transform: scale(1.025) }
@@ -3328,7 +3345,11 @@ body:has(.ahora-home) footer strong { color: var(--uc-jungle) }
     transition: opacity .42s cubic-bezier(.2,.8,.2,1), transform .56s cubic-bezier(.2,.8,.2,1);
     will-change: opacity, transform;
 }
-.stage-image.is-current { opacity: 1; transform: translate3d(var(--stage-drag, 0px), 0, 0) scale(1) }
+.stage-image.is-current {
+    opacity: 1;
+    transform: translate3d(var(--stage-drag, 0px), var(--deriva-media, 0px), 0)
+        scale(var(--escala-media, 1));
+}
 .stage-image.is-leaving {
     opacity: 0; transform: translate3d(calc(var(--stage-drag, 0px) - 3%), 0, 0) scale(.985);
 }
@@ -3700,4 +3721,196 @@ html[data-escena="continua"] [data-escena-vt] { view-transition-name: uc-escena 
     ::view-transition-group(root), ::view-transition-old(root), ::view-transition-new(root),
     ::view-transition-group(uc-escena), ::view-transition-old(uc-escena),
     ::view-transition-new(uc-escena) { animation: none !important }
+}
+
+/* ==============================================================================================
+   J-MOTION-03B — EL SISTEMA DE ESCENAS VERTICAL
+
+   Home dejó de ser un carrusel horizontal con una página debajo. Ahora es una secuencia: la cámara
+   —media focal y bloque accionable— se queda fija mientras los capítulos de cada negocio pasan por
+   delante, y lo que se lee abajo es de lo que la cámara está hablando arriba.
+
+   El tramo fijado dura lo que mide el capítulo. No hay temporizador ni scroll secuestrado: el alto
+   del capítulo ES la duración, y cuando el track se acaba la cámara se suelta sola. La mecánica está
+   tomada del scroll pinning de Motion.dev —sticky dentro de un contenedor más alto, progreso ligado
+   al recorrido y liberación estructural—, no de su composición.
+
+   Una fase es UN estado. data-fase gobierna a la vez el recorte de la media, el desplazamiento del
+   contexto, la entrada escalonada de la oferta y quién manda entre las dos acciones. Nada de esto
+   tiene reloj propio.
+   ============================================================================================== */
+.stage-track { display: grid; gap: .9rem; min-width: 0 }
+
+.stage-camera { position: sticky; top: calc(var(--alto-cabecera) + .3rem); z-index: 4 }
+/* Sin guion no hay fases, así que tampoco hay nada que fijar: la pantalla se queda como una pantalla
+   completa y se lee entera. */
+.stage-step:not([data-capitulos="vivo"]) .stage-camera { position: static }
+/* Debajo del contexto la cámara es aire: el capítulo tiene que poder pasar por ahí y poder tocarse. */
+.stage-camera, .stage-camera .stage-media-wrap { pointer-events: none }
+.stage-camera .stage-media, .stage-camera .stage-context { pointer-events: auto }
+
+/* El índice vive dentro de la cámara: se puede tocar en cualquier punto del recorrido y dice en qué
+   escena estás sin que haya que volver arriba a mirarlo. */
+.stage-camera .stage-scenes-head { padding: .55rem 1rem 0; pointer-events: auto }
+.stage-camera .stage-scenes-head .stage-eyebrow { color: var(--tinta-suave) }
+
+/* LAS FASES. A: el negocio manda la pantalla. B: la media se recorta, la identidad se compacta y la
+   oferta entra. C: queda la huella del negocio y la acción toma el protagonismo abajo. El recorte y
+   la deriva no saltan entre tres valores: los escribe el mismo progreso continuo que decide la fase. */
+/* Misma razón que el recorte: la compactación del contexto la escribe el recorrido, píxel a píxel,
+   así que no lleva transición propia. Lo que sí es un cambio de estado —el rótulo que desaparece— la
+   conserva justo debajo. */
+.stage-context { transform: translate3d(0, var(--desplaza-contexto, 0px), 0) }
+.stage-context .context-kicker { transition: opacity var(--mov-capitulo) var(--curva-escena) }
+.stage-step[data-fase="c"] .stage-context .context-kicker { opacity: 0 }
+/* La cámara compactada se despega del papel: es una huella por encima de lo que sigue leyéndose. */
+.stage-camera .stage-media-wrap { transition: box-shadow var(--mov-capitulo) var(--curva-escena) }
+.stage-step[data-fase="c"] .stage-camera .stage-media-wrap { box-shadow: 0 14px 36px rgb(12 22 19 / 22%) }
+/* La última acción ya está completa: la cámara deja de ocupar la pantalla y entrega el recorrido a
+   ese capítulo y a las herramientas que siguen. Cambia position, no scroll; el usuario conserva el
+   control y el sticky vuelve a ser flujo normal en su contenedor. */
+.stage-step[data-final-chapter="true"][data-fase="c"] .stage-camera { position: relative; top: auto }
+.stage-shade, .stage-stamp { transition: opacity var(--mov-capitulo) var(--curva-escena),
+    transform var(--mov-capitulo) var(--curva-escena) }
+.stage-step[data-fase="b"] .stage-shade { opacity: .72 }
+.stage-step[data-fase="c"] .stage-shade { opacity: .38 }
+.stage-step[data-fase="b"] .stage-stamp { transform: translateY(-.2rem) scale(.94) }
+.stage-step[data-fase="c"] .stage-stamp { opacity: .72; transform: translateY(-.35rem) scale(.88) }
+
+/* LOS CAPÍTULOS. Uno por negocio. El alto de más no es relleno: es el recorrido que las fases
+   necesitan para ocurrir mientras la cámara está fija. */
+.stage-chapters { display: grid; padding: 0 1rem }
+.stage-chapter {
+    position: relative; min-height: 76svh; padding: 1.4rem 0 2.6rem;
+    /* Saltar a un capítulo lo deja justo debajo de la cámara, que es donde empieza su fase A. */
+    scroll-margin-top: var(--tope-capitulo, 46svh);
+    transition: opacity var(--mov-capitulo) var(--curva-escena);
+}
+.stage-step[data-capitulos="vivo"] .stage-chapter:not(.is-active) { opacity: .42 }
+.chapter-panel {
+    position: sticky; top: var(--tope-panel, 68svh); z-index: 5;
+    display: grid; align-content: start; gap: .45rem; padding: 1rem;
+    border-top: 1px solid var(--linea); background: rgb(255 253 249 / 94%);
+    box-shadow: 0 18px 34px rgb(12 22 19 / 0%);
+    backdrop-filter: blur(12px);
+    transition: box-shadow var(--mov-capitulo) var(--curva-escena);
+}
+.stage-step[data-fase="b"] .stage-chapter.is-active .chapter-panel {
+    box-shadow: 0 18px 34px rgb(12 22 19 / 8%);
+}
+.stage-step[data-fase="c"] .stage-chapter.is-active .chapter-panel {
+    border-top-color: var(--uc-green); box-shadow: 0 20px 40px rgb(12 22 19 / 13%);
+}
+.chapter-mark {
+    display: flex; align-items: center; gap: .5rem; margin: 0; color: var(--tinta-suave);
+    font-size: var(--t-11); font-weight: var(--p-titular); letter-spacing: .12em; text-transform: uppercase;
+}
+.chapter-mark span { color: var(--uc-green); font-variant-numeric: tabular-nums }
+.chapter-name {
+    margin: 0; font-family: var(--fuente-titular); font-size: clamp(1.5rem, 6.4vw, 2rem);
+    font-weight: var(--p-titular); line-height: 1.04; letter-spacing: -.03em; text-wrap: balance;
+}
+.chapter-state {
+    margin: 0; color: var(--tinta-suave); font-size: var(--t-13); font-variant-numeric: tabular-nums;
+}
+
+/* LA OFERTA. Entra cuando el capítulo es el que manda, escalonada: es la parte del negocio que se
+   puede elegir, no una rejilla de tarjetas debajo del héroe. */
+.chapter-offers { display: grid; gap: 0; margin: .5rem 0 0; padding: 0; list-style: none }
+.chapter-offer {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 1rem;
+    padding: .62rem 0; border-top: 1px solid var(--linea);
+    opacity: .001; transform: translateY(12px);
+    transition: opacity .42s var(--curva-escena), transform .42s var(--curva-escena);
+    transition-delay: calc(var(--orden, 0) * 70ms);
+}
+.stage-chapter.is-active .chapter-offer { opacity: 1; transform: none }
+/* Sin capítulos vivos la oferta no se esconde: la pantalla se lee entera. */
+.stage-step:not([data-capitulos="vivo"]) .chapter-offer { opacity: 1; transform: none }
+.chapter-offer .offer-name { font-weight: var(--p-fuerte); font-size: var(--t-15) }
+/* La pieza de la que habla la escena. Una marca, no un color de alarma: lo que la distingue es que
+   está señalada, y por eso funciona igual cuando el capítulo entero es del negocio y no hay ninguna. */
+.chapter-offer.is-focus { border-top-color: var(--uc-green) }
+.chapter-offer.is-focus .offer-name { color: var(--uc-green-ink) }
+.chapter-offer.is-focus .offer-name::before {
+    content: ""; display: inline-block; width: .42rem; height: .42rem; margin-right: .45rem;
+    border-radius: 50%; background: var(--uc-green); vertical-align: middle;
+}
+.chapter-offer .offer-meta {
+    flex: 0 0 auto; color: var(--tinta-suave); font-size: var(--t-13);
+    font-variant-numeric: tabular-nums; text-align: right;
+}
+
+/* LA ACCIÓN. Acompaña en A y B; en C es la pieza de la pantalla, que es cuando ya se sabe qué se
+   está eligiendo. */
+.chapter-action {
+    justify-self: start; display: inline-flex; min-height: var(--alto-control); margin-top: .9rem;
+    align-items: center; gap: .45rem; padding: .55rem 1.1rem; border: 1px solid var(--uc-jungle);
+    border-radius: var(--radio-pill); background: transparent; color: var(--tinta);
+    font-size: var(--t-15); font-weight: var(--p-titular); text-decoration: none;
+    transition: background-color var(--mov-capitulo) var(--curva-escena),
+        color var(--mov-capitulo) var(--curva-escena), transform .14s ease;
+}
+.chapter-action:active { transform: scale(.98) }
+.stage-step[data-fase="c"] .stage-chapter.is-active .chapter-action {
+    background: var(--uc-jungle); color: var(--uc-paper);
+}
+.chapter-handoff {
+    display: flex; align-items: baseline; gap: .5rem; margin: 1.1rem 0 0;
+    padding-top: .8rem; border-top: 1px solid var(--linea); min-width: 0;
+    opacity: .3; transform: translateY(8px);
+    transition: opacity var(--mov-capitulo) var(--curva-escena),
+        transform var(--mov-capitulo) var(--curva-escena);
+}
+.stage-step[data-fase="c"] .stage-chapter.is-active .chapter-handoff { opacity: 1; transform: none }
+.chapter-handoff .eyebrow {
+    color: var(--tinta-tenue); font-size: var(--t-11); font-weight: var(--p-titular);
+    letter-spacing: .12em; text-transform: uppercase;
+}
+.chapter-handoff strong, .chapter-handoff a {
+    overflow: hidden; color: var(--tinta); font-size: var(--t-13); white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* EL CIERRE. Además de terminar la lectura, es el tramo que deja pasar el borde del track por debajo
+   de la línea de fijación: la cámara se suelta por geometría, en el mismo fotograma y sin que ningún
+   guion tenga que enterarse. */
+.stage-end {
+    display: grid; gap: .5rem; justify-items: start; min-height: 190px;
+    margin: 0; padding: 2.6rem 1rem 3.4rem; border-top: 1px solid var(--linea); align-content: start;
+}
+.stage-end .eyebrow {
+    color: var(--tinta-tenue); font-size: var(--t-11); font-weight: var(--p-titular);
+    letter-spacing: .12em; text-transform: uppercase;
+}
+.stage-end a { color: var(--tinta); font-size: var(--t-15); font-weight: var(--p-fuerte) }
+
+/* ESCRITORIO. La cámara vive en su columna y el capítulo cabe a su lado: el recorrido es el mismo,
+   la escala no. El contexto va montado sobre la fotografía, así que ahí no se desplaza: le basta
+   con que la media se recorte debajo de él. */
+@media (min-width: 900px) {
+    .stage-camera { top: calc(var(--alto-cabecera) + .8rem) }
+    .stage-camera .stage-scenes-head { padding: .7rem 0 0 }
+    .stage-chapters { padding: 0 }
+    .stage-chapter { min-height: 62svh; padding: 1.6rem 0 2.4rem }
+    .stage-end { padding-inline: 0; min-height: 220px }
+    .chapter-panel { padding: 1.1rem 1.2rem }
+    .chapter-name { font-size: clamp(1.6rem, 2.1vw, 2.2rem) }
+}
+
+/* Sin movimiento la secuencia sigue existiendo —la cámara sigue fija, el capítulo sigue mandando y
+   la oferta sigue estando— pero nada se desplaza para llegar. */
+@media (prefers-reduced-motion: reduce) {
+    .stage-step {
+        --recorte-escena: 0% !important;
+        --deriva-media: 0px !important;
+        --escala-media: 1 !important;
+        --desplaza-contexto: 0px !important;
+    }
+    .stage-context, .stage-chapter, .chapter-offer, .chapter-action,
+    .stage-camera .stage-media-wrap, .stage-shade, .stage-stamp, .chapter-handoff,
+    .chapter-panel { transition: none }
+    .chapter-offer { opacity: 1; transform: none }
+    .stage-context { transform: none }
+    .chapter-handoff { transform: none }
 }

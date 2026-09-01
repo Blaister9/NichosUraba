@@ -230,6 +230,12 @@
                     @* La media focal ES la pantalla, no la ilustración de una tarjeta. Las dos
                        imágenes se turnan para que cambiar de negocio sea un fundido y la foto que
                        venías mirando siga ahí mientras entra la siguiente. *@
+                    @* EL SISTEMA DE ESCENAS. La cámara —media focal y contexto accionable— se queda fija
+                       mientras los capítulos de cada negocio pasan por delante. El alto del track es lo
+                       que dura el tramo fijado: no hay temporizador, hay recorrido. Cuando el track se
+                       acaba, la cámara se suelta sola. *@
+                    <div class="stage-track" data-stage-track>
+                    <div class="stage-camera" data-stage-camera>
                     @* data-escena-vt: el negocio del que habla esta escena. Es la identidad que la ficha
                        tiene que repetir para que el contenedor viaje entre las dos pantallas; sin
                        coincidencia no hay transición, hay corte limpio. Va en la envoltura porque lo
@@ -284,21 +290,25 @@
                         </div>
                     </div>
 
+                    @* DÓNDE ESTÁS. El contador y las flechas viajan con la cámara y no con la lista:
+                       son la posición dentro de la secuencia, así que tienen que seguir ahí cuando la
+                       lista ya se fue hacia arriba. Las flechas siguen siendo un atajo, no el camino. *@
+                    <div class="stage-scenes-head" data-stage-index>
+                        <p class="stage-eyebrow">Negocios en @PlaceName</p>
+                        <p class="stage-counter" data-stage-counter aria-live="polite">1 / @Scenes.Count</p>
+                        <div class="stage-arrows">
+                            <button type="button" data-stage-prev aria-label="Negocio anterior"
+                                    disabled="@(Scenes.Count <= 1)"><Icon Name="atras" Size="18" /></button>
+                            <button type="button" data-stage-next aria-label="Siguiente negocio"
+                                    disabled="@(Scenes.Count <= 1)"><Icon Name="flecha" Size="18" /></button>
+                        </div>
+                    </div>
+                    </div>
+
                     @* La lista de escenas: los negocios de este contexto. La captación conserva su
                        sitio editorial dentro de la misma secuencia, pero no es una escena —no entra
                        en el contador ni en las flechas— porque no es un negocio. *@
                     <div class="stage-scenes">
-                        <div class="stage-scenes-head">
-                            <p class="stage-eyebrow">Negocios en @PlaceName</p>
-                            <p class="stage-counter" data-stage-counter aria-live="polite">1 / @Scenes.Count</p>
-                            <div class="stage-arrows">
-                                <button type="button" data-stage-prev aria-label="Negocio anterior"
-                                        disabled="@(Scenes.Count <= 1)"><Icon Name="atras" Size="18" /></button>
-                                <button type="button" data-stage-next aria-label="Siguiente negocio"
-                                        disabled="@(Scenes.Count <= 1)"><Icon Name="flecha" Size="18" /></button>
-                            </div>
-                        </div>
-
                         <div class="stage-scene-list" data-stage-list>
                             @{ var sceneIndex = 0; }
                             @foreach (var piece in VisiblePieces)
@@ -344,6 +354,71 @@
                             <button type="button" class="feed-more" @onclick="() => showAll = true">Ver más</button>
                         }
                     </div>
+
+                    @* LOS CAPÍTULOS. Uno por negocio y en vertical. Cada uno trae lo que el feed sabe de
+                       verdad —servicios con su precio y su duración, la fila con sus cifras, el producto
+                       del día, los horarios que quedan— y termina entregando el siguiente. Lo que se lee
+                       aquí es lo que la cámara está enseñando arriba: el capítulo y la media son el mismo
+                       estado, no dos listas que coinciden. *@
+                    <div class="stage-chapters" data-stage-chapters>
+                        @{ var chapterIndex = 0; }
+                        @foreach (var scene in Scenes)
+                        {
+                            var index = chapterIndex++;
+                            var offers = ChapterOffers(scene);
+                            var next = index + 1 < Scenes.Count ? Scenes[index + 1] : null;
+                            <section class="stage-chapter @(index == 0 ? "is-active" : null)"
+                                     data-stage-chapter="@index" data-stage-business="@SceneSlug(scene.Url)"
+                                     data-stage-piece="@scene.Headline" aria-label="@scene.Headline">
+                                <div class="chapter-panel">
+                                <p class="chapter-mark">
+                                    <span>@((index + 1).ToString("00"))</span>
+                                    @ChapterMark(scene)
+                                </p>
+                                <h3 class="chapter-name">@scene.Headline</h3>
+                                <p class="chapter-state">@scene.State</p>
+                                @if (offers.Count > 0)
+                                {
+                                    <ul class="chapter-offers">
+                                        @for (var offerIndex = 0; offerIndex < offers.Count; offerIndex++)
+                                        {
+                                            <li class="chapter-offer @(offers[offerIndex].Focus ? "is-focus" : null)"
+                                                style="--orden: @offerIndex">
+                                                <span class="offer-name">@offers[offerIndex].Name</span>
+                                                <span class="offer-meta">@offers[offerIndex].Meta</span>
+                                            </li>
+                                        }
+                                    </ul>
+                                }
+                                <a class="chapter-action feed-business-link" href="@scene.Url"
+                                   data-enhance-nav="false" data-stage-chapter-action>
+                                    <span>@scene.CtaLabel</span> <Icon Name="flecha" Size="16" />
+                                </a>
+                                <p class="chapter-handoff">
+                                    @if (next is not null)
+                                    {
+                                        <span class="eyebrow">Sigue</span>
+                                        <strong>@next.Headline</strong>
+                                    }
+                                    else
+                                    {
+                                        <span class="eyebrow">Última escena</span>
+                                        <a href="/explorar">Ver todo el directorio</a>
+                                    }
+                                </p>
+                                </div>
+                            </section>
+                        }
+                    </div>
+                    </div>
+
+                    @* EL CIERRE. La secuencia termina en algún sitio, y ese sitio es lo que suelta la
+                       cámara: cuando el track se acaba, sticky deja de sostenerla por geometría y no
+                       porque alguien se lo diga. Es la parte estructural de la mecánica. *@
+                    <p class="stage-end">
+                        <span class="eyebrow">Fin de la secuencia</span>
+                        <a href="/explorar">Ver todo el directorio de @PlaceName</a>
+                    </p>
                 }
 
             </div>
@@ -502,6 +577,81 @@
         var corte = resto.IndexOfAny(['/', '?', '#']);
         return corte < 0 ? resto : resto[..corte];
     }
+
+    /// <summary>Lo que un capítulo puede enseñar de un negocio. Sale del feed o no sale.</summary>
+    private sealed record SceneOffer(string Name, string Meta, bool Focus = false);
+
+    /// <summary>
+    /// De qué negocio es este capítulo. La escena puede llamarse "Cepillado" —es un servicio— así que
+    /// el nombre del negocio es lo que le da sitio; sin negocio resuelto queda la categoría.
+    /// </summary>
+    private string ChapterMark(FeedPiece piece)
+    {
+        var slug = SceneSlug(piece.Url);
+        var business = feed?.Businesses.FirstOrDefault(x => x.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase));
+        return business is null ? CategoryNameOf(piece.CategorySlug) ?? CategoryName : CleanName(business.Name);
+    }
+
+    /// <summary>Lo que la escena está enseñando, si es una pieza concreta y no el negocio entero.</summary>
+    private static Guid? SceneFocus(string url)
+    {
+        var marca = url.Contains("serviceId=", StringComparison.Ordinal) ? "serviceId=" :
+            url.Contains("#producto-", StringComparison.Ordinal) ? "#producto-" : null;
+        if (marca is null) return null;
+        var resto = url[(url.IndexOf(marca, StringComparison.Ordinal) + marca.Length)..];
+        var corte = resto.IndexOfAny(['&', '#', '/']);
+        return Guid.TryParse(corte < 0 ? resto : resto[..corte], out var id) ? id : null;
+    }
+
+    /// <summary>
+    /// Las dos o tres piezas reales del capítulo, en el orden en que importan: primero lo que está
+    /// pasando ahora —la fila abierta—, después lo que se puede elegir —servicios, producto— y al
+    /// final lo que queda del día. Un negocio sin nada de eso dice su horario, que también es un dato.
+    /// </summary>
+    private IReadOnlyList<SceneOffer> ChapterOffers(FeedPiece piece)
+    {
+        var slug = SceneSlug(piece.Url);
+        var business = feed?.Businesses.FirstOrDefault(x => x.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase));
+        if (business is null) return [];
+
+        var offers = new List<SceneOffer>();
+        // Las acciones de un negocio con fila llevan a /turnos aunque la pieza editorial sea un
+        // servicio. En ese caso la URL no puede conservar serviceId; el nombre de la pieza sí sale
+        // del mismo DTO y permite que el capítulo siga liderando con SU servicio.
+        var focus = SceneFocus(piece.Url) ?? business.Services.FirstOrDefault(x =>
+            x.Name.Equals(piece.Headline, StringComparison.OrdinalIgnoreCase))?.Id;
+        if (business.Queue is { IsOpen: true } queue)
+        {
+            offers.Add(new(queue.WaitingCount == 1 ? "1 persona esperando" : $"{queue.WaitingCount} personas esperando",
+                queue.ApproximateWaitMinutes == 0 ? "pasa ahora" : $"~{queue.ApproximateWaitMinutes} min", true));
+        }
+        // La pieza que la escena está enseñando va primero y marcada: el capítulo habla de ella, y las
+        // otras acompañan. Si la escena es el negocio entero, no hay ninguna marcada y el orden es el
+        // de la ficha.
+        foreach (var service in business.Services.OrderByDescending(x => x.Id == focus))
+        {
+            if (offers.Count == 3) break;
+            offers.Add(new(service.Name, $"{Money(service.ReferencePrice)} · {Duration(service.DurationMinutes)}",
+                service.Id == focus));
+        }
+        if (business.Product is { } product && offers.Count < 3)
+        {
+            offers.Insert(product.Id == focus ? 0 : offers.Count, new(product.Name, product.IsAvailable
+                ? Money(product.ReferencePrice) : $"{Money(product.ReferencePrice)} · agotado por ahora",
+                product.Id == focus));
+        }
+        var availability = Availability(business, Today);
+        if (availability.Count > 0 && offers.Count < 3)
+        {
+            offers.Add(new(availability.Count == 1 ? "1 horario libre" : $"{availability.Count} horarios libres",
+                availability.When));
+        }
+        if (offers.Count == 0) offers.Add(new("Horario", CalmState(business)));
+        return offers;
+    }
+
+    private static DateOnly Today
+        => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Colombia).Date);
 
     /// <summary>La ficha de ese negocio, que es a donde abre la fotografía de la escena.</summary>
     private static string SceneProfile(string url)

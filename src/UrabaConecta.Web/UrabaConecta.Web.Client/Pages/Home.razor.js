@@ -24,6 +24,13 @@ export function initialize() {
       sessionStorage.removeItem(retired[1]);
     } catch { /* almacenamiento bloqueado: nada que limpiar */ }
     document.addEventListener('click', onDocumentClick, true);
+    // El recorrido es la fuente del estado, así que se escucha donde ocurre y sin retenerlo: nada
+    // aquí cambia la posición del scroll, sólo la lee.
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onResize, { passive: true });
+    window.addEventListener('wheel', onTraversalIntent, { passive: true });
+    window.addEventListener('touchmove', onTraversalIntent, { passive: true });
+    window.addEventListener('keydown', onTraversalIntent);
     window.addEventListener('popstate', onReturn);
     window.addEventListener('pageshow', onReturn);
     document.addEventListener('enhancedload', onReturn);
@@ -35,6 +42,120 @@ export function initialize() {
 function onReturn() {
   syncStage();
   queueScrollRestore();
+}
+
+const chapterNodes = step => [...step.querySelectorAll('[data-stage-chapter]')];
+
+/// EL ESTADO DE LA SECUENCIA. Una sola lectura del recorrido decide dos cosas —qué capítulo manda y
+/// en qué fase va— y de ahí cuelga todo lo demás: el recorte de la media, el sitio del contexto, la
+/// identidad que viaja a la ficha, la oferta que entra y cuál de las dos acciones es la protagonista.
+/// No hay seis animaciones con relojes distintos: hay un estado y una hoja de estilos que lo lee.
+let ultimoDesplazamiento = -1;
+let restaurandoRecorrido = false;
+let atajoActivo = null;
+
+function onTraversalIntent(event) {
+  if (event.type === 'keydown'
+    && !['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) return;
+  atajoActivo = null;
+}
+
+function onScroll() {
+  if (restaurandoRecorrido) return;
+  const y = window.scrollY;
+  if (Math.abs(y - ultimoDesplazamiento) < 4) return;
+  ultimoDesplazamiento = y;
+  // Enfocar o clicar un control puede hacer que el navegador acomode unos píxeles la página antes
+  // del gesto. Eso no es recorrer la secuencia y no debe cambiar el negocio bajo el puntero. Rueda,
+  // gesto vertical o teclas de desplazamiento limpian este resguardo antes del scroll real.
+  if (atajoActivo?.isConnected) return;
+  atajoActivo = null;
+  document.querySelectorAll('.stage-step[data-capitulos="vivo"]').forEach(readChapters);
+}
+
+function onResize() {
+  ultimoDesplazamiento = -1;
+  document.querySelectorAll('.stage-step[data-capitulos="vivo"]').forEach(step => {
+    measureCamera(step);
+    readChapters(step);
+  });
+}
+
+/// La cámara no cambia de tamaño al compactarse —recorta y desplaza, que no son maquetación—, así que
+/// su alto se mide una vez y sirve para dos cosas: saber dónde empieza el campo del capítulo y dónde
+/// tiene que aterrizar uno cuando se salta a él desde los controles.
+function measureCamera(step) {
+  const camera = step.querySelector('[data-stage-camera]');
+  if (!camera) return;
+  const header = document.querySelector('.site-header');
+  if (header?.offsetHeight) {
+    document.documentElement.style.setProperty('--alto-cabecera', `${Math.round(header.offsetHeight)}px`);
+  }
+  const alto = Math.round(camera.getBoundingClientRect().height);
+  if (alto > 0) step.style.setProperty('--tope-capitulo', `${alto + 12}px`);
+}
+
+function readChapters(step) {
+  const chapters = chapterNodes(step);
+  if (chapters.length === 0) return;
+  const camera = step.querySelector('[data-stage-camera]');
+  const cameraBox = camera?.getBoundingClientRect();
+  const stickyTop = camera ? parseFloat(getComputedStyle(camera).top) || 0 : 0;
+  // Cuando el último capítulo suelta la cámara, su caja ya está fuera del viewport. La línea de
+  // lectura conserva el borde que tenía fijada para que el estado no rebote entre soltar y fijar.
+  const linea = camera ? Math.max(cameraBox?.bottom || 0, stickyTop + camera.offsetHeight) : 0;
+
+  // Manda el último capítulo cuyo borde ya cruzó la cámara. Esta regla usa una sola línea estable
+  // del layout y no compite con cuántos píxeles casualmente quedan visibles bajo el pliegue.
+  let elegido = 0;
+  chapters.forEach((chapter, index) => {
+    const caja = chapter.getBoundingClientRect();
+    if (caja.top <= linea + 1) elegido = index;
+  });
+
+  // El avance dentro del capítulo es lo que hay recorrido de su propio alto: el capítulo dura lo que
+  // mide, ni un milisegundo más.
+  const caja = chapters[elegido].getBoundingClientRect();
+  const avance = Math.max(0, Math.min(1, (linea - caja.top) / Math.max(1, caja.height)));
+  const fase = avance < 0.14 ? 'a' : avance < 0.52 ? 'b' : 'c';
+  commitState(step, elegido, fase, avance, { animate: true });
+}
+
+/// El único punto que publica el estado y deriva la composición. Los atributos son también el
+/// contrato observable de la escena: negocio, capítulo, fase y progreso siempre avanzan juntos.
+function commitState(step, chapter, phase, progress, { animate }) {
+  const scenes = sceneNodes(step);
+  const scene = scenes[chapter];
+  if (!scene) return;
+
+  const normalized = Math.max(0, Math.min(1, Number(progress) || 0));
+  step.dataset.activeBusiness = scene.dataset.sceneVt || '';
+  step.dataset.activeChapter = String(chapter);
+  step.dataset.activePhase = phase;
+  step.dataset.fase = phase;
+  step.dataset.progress = normalized.toFixed(3);
+  step.dataset.finalChapter = chapter === scenes.length - 1 ? 'true' : 'false';
+
+  // El movimiento fino también sale del mismo progreso. El capítulo cambia por umbrales; recorte,
+  // profundidad y compactación viajan con cada píxel de scroll nativo entre esos umbrales.
+  const desktop = matchMedia('(min-width: 900px)').matches;
+  const media = step.querySelector('[data-stage-media]');
+  const mediaHeight = media?.getBoundingClientRect().height || 0;
+  const crop = normalized * (desktop ? .56 : .66);
+  const contextHeight = step.querySelector('[data-stage-context]')?.offsetHeight || 0;
+  const camera = step.querySelector('[data-stage-camera]');
+  const stickyTop = camera ? parseFloat(getComputedStyle(camera).top) || 0 : 0;
+  const contextShift = desktop ? 0 : -normalized * mediaHeight * .66;
+  const visualBottom = desktop ? mediaHeight
+    : Math.max(mediaHeight * (1 - crop), mediaHeight + contextShift + contextHeight);
+  step.style.setProperty('--recorte-escena', `${(crop * 100).toFixed(2)}%`);
+  step.style.setProperty('--escala-media', (1 + normalized * .045).toFixed(4));
+  step.style.setProperty('--deriva-media', `${(-normalized * 12).toFixed(2)}px`);
+  step.style.setProperty('--desplaza-contexto', `${contextShift.toFixed(2)}px`);
+  step.style.setProperty('--tope-panel', `${Math.round(stickyTop + visualBottom + 12)}px`);
+
+  const activo = scenes.findIndex(x => x.classList.contains('is-active'));
+  if (chapter !== activo) apply(step, chapter, { animate });
 }
 
 /// Un solo oyente para toda la pantalla: los controles de la escena y la salida hacia un negocio.
@@ -109,10 +230,11 @@ export function syncStage() {
     }
 
     const context = step.dataset.stageContext || '';
-    if (step.dataset.stageSynced !== context) {
+    const contextChanged = step.dataset.stageSynced !== context;
+    if (contextChanged) {
       const handoff = step.dataset.stageSynced !== undefined;
       step.dataset.stageSynced = context;
-      apply(step, 0, { animate: false });
+      commitState(step, 0, 'a', 0, { animate: false });
       // Cambiar de municipio transforma la escena dentro del mismo marco. Tres elementos y no más:
       // el título, su entrada y el bloque accionable. Un fade-up general convertiría el cambio en
       // una recarga disfrazada.
@@ -124,6 +246,16 @@ export function syncStage() {
         ]);
         step.querySelector('[data-stage-title]')?.focus({ preventScroll: true });
       }
+    }
+    // La secuencia se declara viva sólo cuando hay quien la lleve: hasta entonces el CSS deja la
+    // pantalla completa y legible, sin cámara fija y sin oferta escondida.
+    if (step.querySelector('[data-stage-chapter]')) {
+      step.dataset.capitulos = 'vivo';
+      measureCamera(step);
+      // Un rerender del mismo feed no es recorrido. Releer aquí pisaría un atajo o la escena que
+      // acaba de restaurarse al volver de la ficha; sólo la primera composición necesita inferir el
+      // capítulo desde la geometría. Después lo hacen exclusivamente scroll y resize.
+      if (contextChanged) readChapters(step);
     }
     media.dataset.stageReady = 'true';
   });
@@ -180,10 +312,21 @@ function bindSwipe(step, media) {
   }, { passive: true });
 }
 
+/// Las flechas, el gesto y la lista siguen estando, pero ya no son la experiencia: son un acceso
+/// rápido a otra escena sin mover la página bajo la mano. Cuando la persona vuelve a desplazar, el
+/// recorrido nativo retoma el mando y alinea el estado con el capítulo que está atravesando.
 function select(step, wanted) {
   const scenes = sceneNodes(step);
   if (scenes.length === 0) return;
-  apply(step, Math.max(0, Math.min(scenes.length - 1, wanted)), { animate: true });
+  const index = Math.max(0, Math.min(scenes.length - 1, wanted));
+  commitState(step, index, 'a', 0, { animate: true });
+  // El atajo mueve el recorrido, no sólo el estado. Medido: si sólo cambia el estado, la pantalla se
+  // queda diciendo "capítulo 2" mientras el recorrido sigue en el 1, y en cuanto vuelve a haber
+  // geometría —al desplazarse, o al volver de un negocio— gana la geometría y la elección se deshace
+  // sola. La secuencia y sus controles tienen que estar de acuerdo sobre dónde estamos.
+  landOnChapter(step, index);
+  ultimoDesplazamiento = window.scrollY;
+  atajoActivo = step;
 }
 
 /// Pinta una escena: la foto se funde, el contexto se reescribe y los controles dicen dónde está.
@@ -196,6 +339,13 @@ function apply(step, index, { animate }) {
     const active = position === index;
     node.classList.toggle('is-active', active);
     if (active) node.setAttribute('aria-current', 'true');
+    else node.removeAttribute('aria-current');
+  });
+  // El capítulo y la cámara son el mismo estado: lo que se lee abajo es de lo que se está hablando
+  // arriba, y por eso lo enciende la misma línea de código y no un segundo mecanismo.
+  chapterNodes(step).forEach((node, position) => node.classList.toggle('is-active', position === index));
+  chapterNodes(step).forEach((node, position) => {
+    if (position === index) node.setAttribute('aria-current', 'true');
     else node.removeAttribute('aria-current');
   });
 
@@ -326,13 +476,23 @@ function queueScrollRestore() {
       else sessionStorage.removeItem(returnKey);
       return;
     }
-    restoreScene();
+    restaurandoRecorrido = true;
+    const escena = restoreScene();
     let restoreAttempt = 0;
     const restore = () => {
-      window.scrollTo({ top, behavior: 'instant' });
+      // Volver devuelve el CAPÍTULO que se estaba mirando, no un número de píxeles. La pantalla se
+      // rehace al llegar —tipografía, fotografía, alto de los capítulos— y ese número deja de
+      // significar lo mismo; el capítulo sí sigue siendo el mismo, y colocarlo con la regla de la
+      // secuencia impide que el estado y la geometría acaben diciendo cosas distintas.
+      if (escena) landOnChapter(escena.step, escena.index);
+      else window.scrollTo({ top, behavior: 'instant' });
       restoreAttempt++;
       if (restoreAttempt < 6) setTimeout(restore, restoreAttempt * 90);
-      else sessionStorage.removeItem(returnKey);
+      else {
+        ultimoDesplazamiento = window.scrollY;
+        restaurandoRecorrido = false;
+        sessionStorage.removeItem(returnKey);
+      }
     };
     restore();
   };
@@ -343,17 +503,32 @@ function queueScrollRestore() {
   setTimeout(waitForFeed, 0);
 }
 
+/// Coloca un capítulo justo encima de la línea de lectura: el punto exacto en el que la secuencia lo
+/// habría hecho suyo por sí sola. Volver lo usa para que el capítulo restaurado y la geometría —que
+/// es de donde sale el estado— no puedan acabar diciendo cosas distintas.
+function landOnChapter(step, index) {
+  const chapter = step.querySelector(`[data-stage-chapter="${index}"]`);
+  const camera = step.querySelector('[data-stage-camera]');
+  if (!chapter || !camera) return;
+  const linea = camera.getBoundingClientRect().bottom;
+  const destino = window.scrollY + chapter.getBoundingClientRect().top - linea + 6;
+  window.scrollTo({ top: Math.max(0, Math.round(destino)), behavior: 'instant' });
+}
+
 /// Volver de un negocio devuelve la escena que se estaba mirando, no la primera: el contexto es
 /// lo que se estaba explorando, y perderlo obliga a rehacer el camino.
 function restoreScene() {
   try {
     const saved = JSON.parse(sessionStorage.getItem(sceneKey) || 'null');
-    if (!saved) return;
+    if (!saved) return null;
     const step = document.querySelector('.stage-step');
-    if (!step || step.dataset.stageContext !== saved.context) return;
+    if (!step || step.dataset.stageContext !== saved.context) return null;
     syncStage();
-    apply(step, Number(saved.index) || 0, { animate: false });
-  } catch { /* El scroll vertical sigue restaurándose. */ }
+    const index = Number(saved.index) || 0;
+    commitState(step, index, 'a', 0, { animate: false });
+    atajoActivo = step;
+    return { step, index };
+  } catch { return null; /* El scroll vertical sigue restaurándose. */ }
 }
 
 // Escribir la cookie es lo único que el servidor no puede hacer por su cuenta: cuando la pantalla
