@@ -52,12 +52,14 @@ const chapterNodes = step => [...step.querySelectorAll('[data-stage-chapter]')];
 /// No hay seis animaciones con relojes distintos: hay un estado y una hoja de estilos que lo lee.
 let ultimoDesplazamiento = -1;
 let restaurandoRecorrido = false;
-let atajoActivo = null;
 
 function onTraversalIntent(event) {
   if (event.type === 'keydown'
     && !['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) return;
-  atajoActivo = null;
+  document.querySelectorAll('.stage-step').forEach(step => {
+    step.removeAttribute('data-stage-manual');
+    step.dataset.stageTraversing = 'true';
+  });
 }
 
 function onScroll() {
@@ -65,12 +67,17 @@ function onScroll() {
   const y = window.scrollY;
   if (Math.abs(y - ultimoDesplazamiento) < 4) return;
   ultimoDesplazamiento = y;
+  const steps = [...document.querySelectorAll('.stage-step[data-capitulos="vivo"]')];
+  steps.forEach(step => {
+    if (step.dataset.stageTraversing === 'true') {
+      step.dataset.stageTraversalY = String(y);
+      step.removeAttribute('data-stage-traversing');
+    }
+  });
   // Enfocar o clicar un control puede hacer que el navegador acomode unos píxeles la página antes
   // del gesto. Eso no es recorrer la secuencia y no debe cambiar el negocio bajo el puntero. Rueda,
   // gesto vertical o teclas de desplazamiento limpian este resguardo antes del scroll real.
-  if (atajoActivo?.isConnected) return;
-  atajoActivo = null;
-  document.querySelectorAll('.stage-step[data-capitulos="vivo"]').forEach(readChapters);
+  steps.forEach(readChapters);
 }
 
 function onResize() {
@@ -96,6 +103,10 @@ function measureCamera(step) {
 }
 
 function readChapters(step) {
+  // Toda lectura geométrica —venga de scroll, resize o una resincronización— respeta el atajo hasta
+  // que exista una intención vertical real. Mantener la puerta aquí evita que dos entradas distintas
+  // puedan contradecirse y deshabiliten las flechas entre dos clics rápidos.
+  if (step.dataset.stageManual === 'true') return;
   const chapters = chapterNodes(step);
   if (chapters.length === 0) return;
   const camera = step.querySelector('[data-stage-camera]');
@@ -181,7 +192,10 @@ function onDocumentClick(event) {
   if (!link) return;
   const step = link.closest('.stage-step');
   try {
-    sessionStorage.setItem(scrollKey, String(window.scrollY));
+    const returnTop = step?.dataset.stageManual === 'true'
+      ? Number(step.dataset.stageManualTop || step.dataset.stageTraversalY || 0)
+      : window.scrollY;
+    sessionStorage.setItem(scrollKey, String(returnTop));
     sessionStorage.setItem(returnKey, '1');
     if (step) sessionStorage.setItem(sceneKey, JSON.stringify({
       context: step.dataset.stageContext,
@@ -230,6 +244,7 @@ export function syncStage() {
     }
 
     const context = step.dataset.stageContext || '';
+    if (step.dataset.stageTraversalY === undefined) step.dataset.stageTraversalY = String(window.scrollY);
     const contextChanged = step.dataset.stageSynced !== context;
     if (contextChanged) {
       const handoff = step.dataset.stageSynced !== undefined;
@@ -257,7 +272,17 @@ export function syncStage() {
       // capítulo desde la geometría. Después lo hacen exclusivamente scroll y resize.
       if (contextChanged) readChapters(step);
     }
-    media.dataset.stageReady = 'true';
+    // El primer OnAfterRender todavía va a sustituir este árbol al habilitar la interacción. Publicar
+    // ready en ese mismo ciclo permitiría tocar un control que ya no será el nodo vigente. Esperar
+    // una tarea y comprobar isConnected convierten la señal en un contrato del árbol final, no del transitorio.
+    media.dataset.stageReady = 'pending';
+    if (step.dataset.stageInteractive === 'true') {
+      setTimeout(() => {
+        if (media.isConnected && step.isConnected && step.dataset.stageInteractive === 'true') {
+          media.dataset.stageReady = 'true';
+        }
+      }, 0);
+    }
   });
 }
 
@@ -320,13 +345,10 @@ function select(step, wanted) {
   if (scenes.length === 0) return;
   const index = Math.max(0, Math.min(scenes.length - 1, wanted));
   commitState(step, index, 'a', 0, { animate: true });
-  // El atajo mueve el recorrido, no sólo el estado. Medido: si sólo cambia el estado, la pantalla se
-  // queda diciendo "capítulo 2" mientras el recorrido sigue en el 1, y en cuanto vuelve a haber
-  // geometría —al desplazarse, o al volver de un negocio— gana la geometría y la elección se deshace
-  // sola. La secuencia y sus controles tienen que estar de acuerdo sobre dónde estamos.
-  landOnChapter(step, index);
+  // Los ajustes de foco/clic no son recorrido; una intención vertical real retira esta marca.
   ultimoDesplazamiento = window.scrollY;
-  atajoActivo = step;
+  step.dataset.stageManual = 'true';
+  step.dataset.stageManualTop = step.dataset.stageTraversalY || String(window.scrollY);
 }
 
 /// Pinta una escena: la foto se funde, el contexto se reescribe y los controles dicen dónde está.
@@ -466,32 +488,35 @@ function reveal(nodes) {
   });
 }
 
+let restorationToken = 0;
 function queueScrollRestore() {
   if (sessionStorage.getItem(returnKey) !== '1' || location.pathname !== '/') return;
+  const token = ++restorationToken;
   const top = Number(sessionStorage.getItem(scrollKey) || 0);
   let waitAttempt = 0;
   const waitForFeed = () => {
+    if (token !== restorationToken) return;
     if (!document.querySelector('[data-testid="feed-piece"]')) {
       if (waitAttempt++ < 600) setTimeout(waitForFeed, 100);
       else sessionStorage.removeItem(returnKey);
       return;
     }
     restaurandoRecorrido = true;
-    const escena = restoreScene();
     let restoreAttempt = 0;
     const restore = () => {
-      // Volver devuelve el CAPÍTULO que se estaba mirando, no un número de píxeles. La pantalla se
-      // rehace al llegar —tipografía, fotografía, alto de los capítulos— y ese número deja de
-      // significar lo mismo; el capítulo sí sigue siendo el mismo, y colocarlo con la regla de la
-      // secuencia impide que el estado y la geometría acaben diciendo cosas distintas.
-      if (escena) landOnChapter(escena.step, escena.index);
-      else window.scrollTo({ top, behavior: 'instant' });
+      if (token !== restorationToken) return;
+      // Cada intento vuelve a resolver la escena: el primer árbol puede ser el prerenderizado que
+      // Blazor sustituye al habilitar la interacción. Guardar su referencia restauraría un nodo
+      // desconectado y dejaría la pantalla nueva en el capítulo inicial.
+      restoreScene();
+      window.scrollTo({ top, behavior: 'instant' });
       restoreAttempt++;
       if (restoreAttempt < 6) setTimeout(restore, restoreAttempt * 90);
       else {
         ultimoDesplazamiento = window.scrollY;
         restaurandoRecorrido = false;
         sessionStorage.removeItem(returnKey);
+        finishFiniteAnimations();
       }
     };
     restore();
@@ -503,16 +528,15 @@ function queueScrollRestore() {
   setTimeout(waitForFeed, 0);
 }
 
-/// Coloca un capítulo justo encima de la línea de lectura: el punto exacto en el que la secuencia lo
-/// habría hecho suyo por sí sola. Volver lo usa para que el capítulo restaurado y la geometría —que
-/// es de donde sale el estado— no puedan acabar diciendo cosas distintas.
-function landOnChapter(step, index) {
-  const chapter = step.querySelector(`[data-stage-chapter="${index}"]`);
-  const camera = step.querySelector('[data-stage-camera]');
-  if (!chapter || !camera) return;
-  const linea = camera.getBoundingClientRect().bottom;
-  const destino = window.scrollY + chapter.getBoundingClientRect().top - linea + 6;
-  window.scrollTo({ top: Math.max(0, Math.round(destino)), behavior: 'instant' });
+/// Una página recuperada del historial puede volver sin ticks del compositor (ocurre en pestañas en
+/// segundo plano y en navegadores sin cabeza). En ese caso las transiciones finitas quedan vivas en
+/// currentTime=0 y el navegador considera inestable cualquier control. Terminar sólo las finitas
+/// conserva los pulsos de estado y deja la pantalla en el mismo estado visual al que ya iba.
+function finishFiniteAnimations() {
+  document.getAnimations().forEach(animation => {
+    if (animation.effect?.getTiming().iterations === Infinity) return;
+    try { animation.finish(); } catch { animation.cancel(); }
+  });
 }
 
 /// Volver de un negocio devuelve la escena que se estaba mirando, no la primera: el contexto es
@@ -526,7 +550,8 @@ function restoreScene() {
     syncStage();
     const index = Number(saved.index) || 0;
     commitState(step, index, 'a', 0, { animate: false });
-    atajoActivo = step;
+    step.dataset.stageManual = 'true';
+    step.dataset.stageManualTop = sessionStorage.getItem(scrollKey) || '0';
     return { step, index };
   } catch { return null; /* El scroll vertical sigue restaurándose. */ }
 }

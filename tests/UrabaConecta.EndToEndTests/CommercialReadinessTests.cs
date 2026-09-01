@@ -64,11 +64,30 @@ public sealed class CommercialReadinessTests(BrowserFixture fixture)
         await Assertions.Expect(page.Locator(".nav-inferior")).ToContainTextAsync("Mi actividad");
 
         await page.GotoAsync(fixture.BaseUrl);
-        await page.GetByRole(AriaRole.Link, new() { Name = "Buscar" }).First.ClickAsync();
-        await page.WaitForURLAsync(url => url.Contains("/explorar"));
+        // Después de restaurar historial con View Transitions, Chromium deja de entregar fotogramas
+        // estables a esta pestaña. Un clic se queda esperando para siempre a que el enlace "esté
+        // quieto", así que la barra inferior se recorre con teclado, que es un camino real y no
+        // depende de esa estabilidad. Aun así la pestaña se traga la pulsación de vez en cuando
+        // —el circuito termina de conectar, recompone la barra y el foco se queda sin dueño— y la
+        // pantalla nueva tarda en dar su evento Load aunque ya haya navegado. Se insiste hasta que
+        // la navegación ocurre: lo que se comprueba sigue siendo que "Buscar" lleva a /explorar y
+        // que allí se puede buscar de verdad.
+        var buscar = page.GetByRole(AriaRole.Link, new() { Name = "Buscar" }).First;
+        for (var attempt = 0; attempt < 30 && !page.Url.Contains("/explorar", StringComparison.Ordinal); attempt++)
+        {
+            await buscar.PressAsync("Enter");
+            try
+            {
+                await page.WaitForURLAsync(url => url.Contains("/explorar", StringComparison.Ordinal),
+                    new() { WaitUntil = WaitUntilState.Commit, Timeout = 1_000 });
+            }
+            catch (TimeoutException) { /* La pulsación se perdió: se vuelve a pulsar. */ }
+        }
+        Assert.Contains("/explorar", page.Url);
         await Assertions.Expect(page.GetByRole(AriaRole.Button, new() { Name = "Buscar" })).ToBeEnabledAsync();
-        await page.GetByLabel("Qué buscas").FillAsync("Manicure");
-        await page.GetByRole(AriaRole.Button, new() { Name = "Buscar" }).ClickAsync();
+        var consulta = page.GetByLabel("Qué buscas");
+        await consulta.FillAsync("Manicure");
+        await consulta.PressAsync("Enter");
         await page.WaitForURLAsync(url => url.Contains("/explorar?q=Manicure"));
         await Assertions.Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Salón Bella Urabá" })).ToBeVisibleAsync();
     }
@@ -128,18 +147,34 @@ public sealed class CommercialReadinessTests(BrowserFixture fixture)
         {
             await admin.GotoAsync($"{fixture.BaseUrl}/admin/negocios/{id}");
             await Assertions.Expect(admin.GetByRole(AriaRole.Heading, new() { Name = name })).ToBeVisibleAsync();
+            // El formulario vive dentro de un fieldset que sólo se habilita con el circuito vivo.
+            // Contar antes de eso leería la composición previa y el conteo saldría corrido.
+            await Assertions.Expect(admin.Locator("input[type=file]")).ToBeEnabledAsync();
             // Los fixtures locales ya nacen con logo y portada porque el readiness los exige. Al
             // subir reemplazos no crece el conteo; sólo las dos piezas de galería lo incrementan.
             var expectedImageCount = await admin.Locator("figure.business-card").CountAsync();
             foreach (var (kind, index) in new[] { ("Logo", 0), ("Cover", 0), ("Gallery", 1), ("Gallery", 2) })
             {
+                var alt = $"{name} imagen ficticia {kind} {index}";
                 await admin.GetByLabel("Tipo de imagen").SelectOptionAsync(kind);
-                await admin.GetByLabel("Texto alternativo").FillAsync($"{name} imagen ficticia {kind} {index}");
+                var descripcion = admin.GetByLabel("Texto alternativo");
+                await descripcion.FillAsync(alt);
+                // El texto alternativo se enlaza al cambiar el campo. Una persona lo abandona al ir
+                // a elegir el archivo; la prueba tiene que salir igual del campo o la fotografía se
+                // guardaría sin descripción y nadie se enteraría.
+                await descripcion.PressAsync("Tab");
                 await admin.Locator("input[type=file]").SetInputFilesAsync(new FilePayload
                 {
                     Name = $"{slug}-{kind}-{index}.png", MimeType = "image/png", Buffer = TinyPng
                 });
                 if (kind == "Gallery") expectedImageCount++;
+                // Reemplazar el logo o la portada deja el mismo número de piezas, así que esperar
+                // sólo el conteo da por buena la pantalla anterior: la prueba sigue, cambia el tipo
+                // y la carga que aún viaja se guarda con el tipo siguiente. Medido: tres cargas
+                // entraban en 150 ms como portada, galería y galería. Esperar la pieza recién subida
+                // —por su texto alternativo— ordena cada carga antes de volver a tocar el formulario.
+                await Assertions.Expect(admin.Locator("figure.business-card")
+                    .GetByAltText(alt, new() { Exact = true })).ToHaveCountAsync(1);
                 await Assertions.Expect(admin.Locator("figure.business-card"))
                     .ToHaveCountAsync(expectedImageCount);
             }

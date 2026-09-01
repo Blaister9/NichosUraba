@@ -157,6 +157,7 @@
            Todo lo que se pinta sale del feed real. No hay valoraciones, distancias, popularidad ni
            cuánta gente hay: esos datos no existen y fingirlos sería inventarlos. *@
         <section class="stage-step" data-testid="guided-results"
+                 data-stage-interactive="@(interactiveReady ? "true" : "false")"
                  data-stage-context="@($"{place}|{category}|{search}|{showAll}")">
             <h1 class="visually-hidden">@CategoryName en @PlaceName</h1>
 

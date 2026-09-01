@@ -3805,7 +3805,7 @@ html[data-escena="continua"] [data-escena-vt] { view-transition-name: uc-escena 
     display: flex; align-items: center; gap: .5rem; margin: 0; color: var(--tinta-suave);
     font-size: var(--t-11); font-weight: var(--p-titular); letter-spacing: .12em; text-transform: uppercase;
 }
-.chapter-mark span { color: var(--uc-green); font-variant-numeric: tabular-nums }
+.chapter-mark span { color: var(--uc-green-ink); font-variant-numeric: tabular-nums }
 .chapter-name {
     margin: 0; font-family: var(--fuente-titular); font-size: clamp(1.5rem, 6.4vw, 2rem);
     font-weight: var(--p-titular); line-height: 1.04; letter-spacing: -.03em; text-wrap: balance;
@@ -3864,7 +3864,7 @@ html[data-escena="continua"] [data-escena-vt] { view-transition-name: uc-escena 
 }
 .stage-step[data-fase="c"] .stage-chapter.is-active .chapter-handoff { opacity: 1; transform: none }
 .chapter-handoff .eyebrow {
-    color: var(--tinta-tenue); font-size: var(--t-11); font-weight: var(--p-titular);
+    color: var(--tinta-suave); font-size: var(--t-11); font-weight: var(--p-titular);
     letter-spacing: .12em; text-transform: uppercase;
 }
 .chapter-handoff strong, .chapter-handoff a {
@@ -3880,7 +3880,7 @@ html[data-escena="continua"] [data-escena-vt] { view-transition-name: uc-escena 
     margin: 0; padding: 2.6rem 1rem 3.4rem; border-top: 1px solid var(--linea); align-content: start;
 }
 .stage-end .eyebrow {
-    color: var(--tinta-tenue); font-size: var(--t-11); font-weight: var(--p-titular);
+    color: var(--tinta-suave); font-size: var(--t-11); font-weight: var(--p-titular);
     letter-spacing: .12em; text-transform: uppercase;
 }
 .stage-end a { color: var(--tinta); font-size: var(--t-15); font-weight: var(--p-fuerte) }

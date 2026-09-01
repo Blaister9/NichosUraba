@@ -49,7 +49,9 @@ public sealed class HomeStageJourneyTests(BrowserFixture fixture)
         await Expect(page.Locator("[data-stage-counter]")).ToHaveTextAsync("2 / 4");
 
         // El municipio transforma la escena conservando la categoría, y el foco viaja al titular.
-        await page.Locator("[data-stage-place][href*='lugar=apartado']").ClickAsync();
+        var apartado = page.Locator("[data-stage-place][href*='lugar=apartado']");
+        await apartado.FocusAsync();
+        await page.Keyboard.PressAsync("Enter");
         await page.WaitForURLAsync(url => url.Contains("lugar=apartado", StringComparison.Ordinal)
             && url.Contains("busco=belleza-cuidado-personal", StringComparison.Ordinal));
         await Expect(page.Locator("[data-stage-place][aria-current=location]")).ToHaveTextAsync("Apartadó");
