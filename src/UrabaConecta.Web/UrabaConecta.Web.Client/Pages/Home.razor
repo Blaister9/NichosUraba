@@ -1,6 +1,8 @@
 @page "/"
 @rendermode InteractiveServer
 @implements IAsyncDisposable
+@using System.Globalization
+@using System.Text
 @using UrabaConecta.Web.Client.Services
 @inject IUrabaConectaApi Api
 @inject IJSRuntime JS
@@ -247,17 +249,24 @@
                              aria-roledescription="Escenas de negocios"
                              aria-label="Desliza o usa las flechas para cambiar de negocio">
                             <span class="stage-art" aria-hidden="true"><Icon Name="@opening.Icon" Size="72" /></span>
-                            @if (opening.ImageUrl is { Length: > 0 } cover)
-                            {
-                                <img class="stage-image is-current" data-stage-image src="@cover"
-                                     alt="@opening.ImageAlt" width="1280" height="960"
-                                     loading="eager" fetchpriority="high" />
-                            }
-                            else
-                            {
-                                <img class="stage-image is-current" data-stage-image alt="" hidden />
-                            }
-                            <img class="stage-image" data-stage-image alt="" aria-hidden="true" hidden />
+                            @* LA LENTE. Lo que sigue al dedo y al recorrido —deriva, escala, arrastre—
+                               vive aquí y sin transición: es composición ligada al scroll. El fundido
+                               entre negocios sigue viviendo en cada fotografía, que sí es un cambio de
+                               estado y sí se anima. Separarlos es lo que evita que una foto persiga al
+                               scroll medio segundo por detrás mientras el recorte ya llegó. *@
+                            <div class="stage-lens" data-stage-lens>
+                                @if (opening.ImageUrl is { Length: > 0 } cover)
+                                {
+                                    <img class="stage-image is-current" data-stage-image src="@cover"
+                                         alt="@opening.ImageAlt" width="1280" height="960"
+                                         loading="eager" fetchpriority="high" />
+                                }
+                                else
+                                {
+                                    <img class="stage-image is-current" data-stage-image alt="" hidden />
+                                }
+                                <img class="stage-image" data-stage-image alt="" aria-hidden="true" hidden />
+                            </div>
                             <span class="stage-shade" aria-hidden="true"></span>
                             <span class="stage-stamp" data-stage-stamp>@PlaceName</span>
                             <span class="stage-badges" data-stage-badges>
@@ -367,6 +376,10 @@
                         {
                             var index = chapterIndex++;
                             var offers = ChapterOffers(scene);
+                            // El capítulo no repite lo que ya dijo: la fila de la pieza que da nombre al
+                            // capítulo sobra, y la que sólo reescribe el estado también. Lo que queda es
+                            // lo que todavía no se ha dicho.
+                            var rest = NewsOnly(scene, offers);
                             var next = index + 1 < Scenes.Count ? Scenes[index + 1] : null;
                             <section class="stage-chapter @(index == 0 ? "is-active" : null)"
                                      data-stage-chapter="@index" data-stage-business="@SceneSlug(scene.Url)"
@@ -378,15 +391,15 @@
                                 </p>
                                 <h3 class="chapter-name">@scene.Headline</h3>
                                 <p class="chapter-state">@scene.State</p>
-                                @if (offers.Count > 0)
+                                @if (rest.Count > 0)
                                 {
                                     <ul class="chapter-offers">
-                                        @for (var offerIndex = 0; offerIndex < offers.Count; offerIndex++)
+                                        @for (var offerIndex = 0; offerIndex < rest.Count; offerIndex++)
                                         {
-                                            <li class="chapter-offer @(offers[offerIndex].Focus ? "is-focus" : null)"
+                                            <li class="chapter-offer @(rest[offerIndex].Focus ? "is-focus" : null)"
                                                 style="--orden: @offerIndex">
-                                                <span class="offer-name">@offers[offerIndex].Name</span>
-                                                <span class="offer-meta">@offers[offerIndex].Meta</span>
+                                                <span class="offer-name">@rest[offerIndex].Name</span>
+                                                <span class="offer-meta">@rest[offerIndex].Meta</span>
                                             </li>
                                         }
                                     </ul>
@@ -590,7 +603,36 @@
     {
         var slug = SceneSlug(piece.Url);
         var business = feed?.Businesses.FirstOrDefault(x => x.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase));
-        return business is null ? CategoryNameOf(piece.CategorySlug) ?? CategoryName : CleanName(business.Name);
+        if (business is null) return CategoryNameOf(piece.CategorySlug) ?? CategoryName;
+        // Cuando el titular del capítulo ya nombra al negocio, repetirlo aquí no sitúa nada: el sitio
+        // lo da la categoría, que es el dato que en ese caso todavía no está dicho.
+        var name = CleanName(business.Name);
+        return piece.Headline.Contains(name, StringComparison.OrdinalIgnoreCase)
+            ? CategoryNameOf(piece.CategorySlug) ?? CategoryName
+            : name;
+    }
+
+    /// <summary>
+    /// Las filas del capítulo que aportan algo. Se caen dos: la de la pieza que ya da nombre al
+    /// capítulo —el titular ya la nombró y su precio ya está en el estado— y la que no dice ni una
+    /// palabra que el estado no diga ya, como "0 personas esperando · pasa ahora" debajo de un
+    /// estado que es exactamente "0 esperando · pasa ahora".
+    /// </summary>
+    private static IReadOnlyList<SceneOffer> NewsOnly(FeedPiece piece, IReadOnlyList<SceneOffer> offers)
+    {
+        var state = Tokens(piece.State);
+        return offers.Where(offer =>
+            !offer.Name.Equals(piece.Headline, StringComparison.OrdinalIgnoreCase)
+            && !(state.Count > 0 && state.IsSubsetOf(Tokens($"{offer.Name} {offer.Meta}")))).ToArray();
+    }
+
+    /// <summary>Las palabras y las cifras de un texto, sin acentos ni puntuación: lo que dice.</summary>
+    private static HashSet<string> Tokens(string? text)
+    {
+        var flat = new string((text ?? "").Normalize(NormalizationForm.FormD)
+            .Where(c => CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
+            .Select(c => char.IsLetterOrDigit(c) ? char.ToLowerInvariant(c) : ' ').ToArray());
+        return [.. flat.Split(' ', StringSplitOptions.RemoveEmptyEntries)];
     }
 
     /// <summary>Lo que la escena está enseñando, si es una pieza concreta y no el negocio entero.</summary>

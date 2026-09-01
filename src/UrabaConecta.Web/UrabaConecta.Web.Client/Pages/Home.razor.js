@@ -84,6 +84,7 @@ function onResize() {
   ultimoDesplazamiento = -1;
   document.querySelectorAll('.stage-step[data-capitulos="vivo"]').forEach(step => {
     measureCamera(step);
+    medirEscena(step);
     readChapters(step);
   });
 }
@@ -149,24 +150,84 @@ function commitState(step, chapter, phase, progress, { animate }) {
 
   // El movimiento fino también sale del mismo progreso. El capítulo cambia por umbrales; recorte,
   // profundidad y compactación viajan con cada píxel de scroll nativo entre esos umbrales.
-  const desktop = matchMedia('(min-width: 900px)').matches;
+  const activo = scenes.findIndex(x => x.classList.contains('is-active'));
+  if (chapter !== activo) {
+    apply(step, chapter, { animate });
+    // El capítulo nuevo trae otra altura de panel y otra oferta: la geometría de la que cuelga la
+    // composición se vuelve a medir aquí y no en cada fotograma.
+    medirEscena(step);
+    // El relevo es el único salto real del recorrido: el progreso vuelve de ~1 a ~0 sin que el dedo
+    // haya recorrido nada. Marcarlo permite recorrer ESE tramo y sólo ese.
+    step.__relevo = true;
+  }
+
+  // El movimiento fino sale de un solo número. El capítulo cambia por umbrales; recorte, profundidad,
+  // compactación y sombra son funciones continuas de ese número, así que no pueden desincronizarse.
+  step.__progresoObjetivo = normalized;
+  if (quiet()) { step.__progresoPintado = normalized; pintarEscena(step, normalized); }
+  else programarPintado(step);
+}
+
+/// La geometría de la que cuelga la composición. Medirla una vez por capítulo y por redimensión
+/// —y no en cada fotograma— deja el bucle de pintado en escrituras puras, sin forzar maquetación.
+function medirEscena(step) {
   const media = step.querySelector('[data-stage-media]');
-  const mediaHeight = media?.getBoundingClientRect().height || 0;
-  const crop = normalized * (desktop ? .56 : .66);
-  const contextHeight = step.querySelector('[data-stage-context]')?.offsetHeight || 0;
   const camera = step.querySelector('[data-stage-camera]');
-  const stickyTop = camera ? parseFloat(getComputedStyle(camera).top) || 0 : 0;
-  const contextShift = desktop ? 0 : -normalized * mediaHeight * .66;
+  step.__geo = {
+    desktop: matchMedia('(min-width: 900px)').matches,
+    mediaHeight: media?.getBoundingClientRect().height || 0,
+    contextHeight: step.querySelector('[data-stage-context]')?.offsetHeight || 0,
+    stickyTop: camera ? parseFloat(getComputedStyle(camera).top) || 0 : 0
+  };
+}
+
+/// Escribe la composición para un progreso dado. Todas las propiedades salen del mismo número: si el
+/// recorte va por la mitad, la profundidad, la sombra y el panel van exactamente por la mitad.
+function pintarEscena(step, progreso) {
+  const geo = step.__geo || (medirEscena(step), step.__geo);
+  const { desktop, mediaHeight, contextHeight, stickyTop } = geo;
+  const crop = progreso * (desktop ? .56 : .66);
+  const contextShift = desktop ? 0 : -progreso * mediaHeight * .66;
   const visualBottom = desktop ? mediaHeight
     : Math.max(mediaHeight * (1 - crop), mediaHeight + contextShift + contextHeight);
+  step.style.setProperty('--progreso-escena', progreso.toFixed(4));
   step.style.setProperty('--recorte-escena', `${(crop * 100).toFixed(2)}%`);
-  step.style.setProperty('--escala-media', (1 + normalized * .045).toFixed(4));
-  step.style.setProperty('--deriva-media', `${(-normalized * 12).toFixed(2)}px`);
+  step.style.setProperty('--escala-media', (1 + progreso * .045).toFixed(4));
+  step.style.setProperty('--deriva-media', `${(-progreso * 12).toFixed(2)}px`);
   step.style.setProperty('--desplaza-contexto', `${contextShift.toFixed(2)}px`);
   step.style.setProperty('--tope-panel', `${Math.round(stickyTop + visualBottom + 12)}px`);
+}
 
-  const activo = scenes.findIndex(x => x.classList.contains('is-active'));
-  if (chapter !== activo) apply(step, chapter, { animate });
+/// El único reloj de la escena. No anima nada por su cuenta: acerca lo pintado a lo que el recorrido
+/// ya decidió y se apaga al llegar.
+///
+/// Dos constantes y no una, porque son dos problemas distintos. Mientras se recorre un capítulo el
+/// progreso ya viene continuo del scroll y lo único que hace falta es no ir por detrás del dedo: con
+/// TAU_RECORRIDO el retraso es de un fotograma y no se percibe. En el relevo entre capítulos el
+/// progreso sí salta —vuelve de ~1 a ~0 sin que nadie haya recorrido nada— y ahí se usa TAU_RELEVO,
+/// que convierte ese corte en un tramo de unos 15 fotogramas. Medido: el mayor salto por fotograma
+/// en el relevo baja de ~.57 a ~.10.
+const TAU_RECORRIDO = 26;
+const TAU_RELEVO = 110;
+function programarPintado(step) {
+  if (step.__pintando) return;
+  step.__pintando = true;
+  let anterior = performance.now();
+  const paso = ahora => {
+    const objetivo = step.__progresoObjetivo ?? 0;
+    const actual = step.__progresoPintado ?? objetivo;
+    const dt = Math.min(64, Math.max(1, ahora - anterior));
+    anterior = ahora;
+    const k = 1 - Math.exp(-dt / (step.__relevo ? TAU_RELEVO : TAU_RECORRIDO));
+    const siguiente = actual + (objetivo - actual) * k;
+    const llegado = Math.abs(objetivo - siguiente) < .0005;
+    step.__progresoPintado = llegado ? objetivo : siguiente;
+    if (llegado) step.__relevo = false;
+    pintarEscena(step, step.__progresoPintado);
+    if (llegado || !step.isConnected) { step.__pintando = false; return; }
+    requestAnimationFrame(paso);
+  };
+  requestAnimationFrame(paso);
 }
 
 /// Un solo oyente para toda la pantalla: los controles de la escena y la salida hacia un negocio.

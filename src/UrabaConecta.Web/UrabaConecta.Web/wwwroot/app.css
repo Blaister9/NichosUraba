@@ -137,6 +137,7 @@
        tres animaciones que se parecen. La cabecera fija la mide el guion; 60px es lo que vale
        mientras tanto. */
     --alto-escena: clamp(260px, 42svh, 360px);
+    --progreso-escena: 0;
     --recorte-escena: 0%;
     --alto-cabecera: 60px;
     --mov-capitulo: .5s;
@@ -3339,20 +3340,24 @@ body:has(.ahora-home) footer strong { color: var(--uc-jungle) }
     position: absolute; z-index: 0; inset: 0; display: grid; place-items: center;
     color: rgb(12 22 19 / 30%);
 }
+/* LA LENTE. Aquí vive lo que sigue al dedo y al recorrido: el arrastre horizontal y la deriva y la
+   escala que escribe el progreso. Sin transición, a propósito: una composición ligada al scroll que
+   además se interpola en el tiempo va siempre por detrás, y esa es exactamente la sensación que se
+   quiere evitar. El fundido entre negocios —que sí es un cambio de estado— se queda en cada foto. */
+.stage-lens {
+    position: absolute; z-index: 1; inset: 0;
+    transform: translate3d(var(--stage-drag, 0px), var(--deriva-media, 0px), 0)
+        scale(var(--escala-media, 1));
+    will-change: transform;
+}
 .stage-image {
-    position: absolute; z-index: 1; inset: -1.5%; width: 103%; height: 103%; object-fit: cover;
-    opacity: 0; transform: translate3d(var(--stage-drag, 0px), 0, 0) scale(1.03);
+    position: absolute; inset: -1.5%; width: 103%; height: 103%; object-fit: cover;
+    opacity: 0; transform: scale(1.03);
     transition: opacity .42s cubic-bezier(.2,.8,.2,1), transform .56s cubic-bezier(.2,.8,.2,1);
     will-change: opacity, transform;
 }
-.stage-image.is-current {
-    opacity: 1;
-    transform: translate3d(var(--stage-drag, 0px), var(--deriva-media, 0px), 0)
-        scale(var(--escala-media, 1));
-}
-.stage-image.is-leaving {
-    opacity: 0; transform: translate3d(calc(var(--stage-drag, 0px) - 3%), 0, 0) scale(.985);
-}
+.stage-image.is-current { opacity: 1; transform: none }
+.stage-image.is-leaving { opacity: 0; transform: translate3d(-3%, 0, 0) scale(.985) }
 .stage-shade {
     position: absolute; z-index: 2; inset: auto 0 0; height: 45%; pointer-events: none;
     background: linear-gradient(rgb(12 22 19 / 0), rgb(12 22 19 / 34%));
@@ -3763,19 +3768,24 @@ html[data-escena="continua"] [data-escena-vt] { view-transition-name: uc-escena 
 .stage-context { transform: translate3d(0, var(--desplaza-contexto, 0px), 0) }
 .stage-context .context-kicker { transition: opacity var(--mov-capitulo) var(--curva-escena) }
 .stage-step[data-fase="c"] .stage-context .context-kicker { opacity: 0 }
-/* La cámara compactada se despega del papel: es una huella por encima de lo que sigue leyéndose. */
-.stage-camera .stage-media-wrap { transition: box-shadow var(--mov-capitulo) var(--curva-escena) }
-.stage-step[data-fase="c"] .stage-camera .stage-media-wrap { box-shadow: 0 14px 36px rgb(12 22 19 / 22%) }
+/* La cámara compactada se despega del papel: es una huella por encima de lo que sigue leyéndose. La
+   profundidad la escribe el progreso, así que crece con el recorte en vez de aparecer de golpe. */
+.stage-camera .stage-media-wrap {
+    box-shadow: 0 calc(var(--progreso-escena, 0) * 14px) calc(var(--progreso-escena, 0) * 36px)
+        rgb(12 22 19 / calc(var(--progreso-escena, 0) * 22%));
+}
 /* La última acción ya está completa: la cámara deja de ocupar la pantalla y entrega el recorrido a
    ese capítulo y a las herramientas que siguen. Cambia position, no scroll; el usuario conserva el
    control y el sticky vuelve a ser flujo normal en su contenedor. */
 .stage-step[data-final-chapter="true"][data-fase="c"] .stage-camera { position: relative; top: auto }
-.stage-shade, .stage-stamp { transition: opacity var(--mov-capitulo) var(--curva-escena),
-    transform var(--mov-capitulo) var(--curva-escena) }
-.stage-step[data-fase="b"] .stage-shade { opacity: .72 }
-.stage-step[data-fase="c"] .stage-shade { opacity: .38 }
-.stage-step[data-fase="b"] .stage-stamp { transform: translateY(-.2rem) scale(.94) }
-.stage-step[data-fase="c"] .stage-stamp { opacity: .72; transform: translateY(-.35rem) scale(.88) }
+/* La veladura y el sello no saltan entre tres valores: viajan con el mismo progreso que escribe el
+   recorte. La fase sigue existiendo —es la semántica del capítulo— pero ya no es quien dibuja. */
+.stage-shade { opacity: calc(1 - var(--progreso-escena, 0) * .62) }
+.stage-stamp {
+    opacity: calc(1 - var(--progreso-escena, 0) * .28);
+    transform: translateY(calc(var(--progreso-escena, 0) * -.35rem))
+        scale(calc(1 - var(--progreso-escena, 0) * .12));
+}
 
 /* LOS CAPÍTULOS. Uno por negocio. El alto de más no es relleno: es el recorrido que las fases
    necesitan para ocurrir mientras la cámara está fija. */
@@ -3793,14 +3803,16 @@ html[data-escena="continua"] [data-escena-vt] { view-transition-name: uc-escena 
     border-top: 1px solid var(--linea); background: rgb(255 253 249 / 94%);
     box-shadow: 0 18px 34px rgb(12 22 19 / 0%);
     backdrop-filter: blur(12px);
-    transition: box-shadow var(--mov-capitulo) var(--curva-escena);
+    transition: border-top-color var(--mov-capitulo) var(--curva-escena);
 }
-.stage-step[data-fase="b"] .stage-chapter.is-active .chapter-panel {
-    box-shadow: 0 18px 34px rgb(12 22 19 / 8%);
+/* El panel gana cuerpo a la vez que la cámara lo pierde, con el mismo número. Sólo el capítulo que
+   manda lo hace: los demás siguen planos porque no son el que se está leyendo. */
+.stage-chapter.is-active .chapter-panel {
+    box-shadow: 0 calc(var(--progreso-escena, 0) * 20px) calc(var(--progreso-escena, 0) * 40px)
+        rgb(12 22 19 / calc(var(--progreso-escena, 0) * 13%));
 }
-.stage-step[data-fase="c"] .stage-chapter.is-active .chapter-panel {
-    border-top-color: var(--uc-green); box-shadow: 0 20px 40px rgb(12 22 19 / 13%);
-}
+/* Que la acción esté lista sí es un estado, no un tramo: eso se dice con el filo, de una vez. */
+.stage-step[data-fase="c"] .stage-chapter.is-active .chapter-panel { border-top-color: var(--uc-green) }
 .chapter-mark {
     display: flex; align-items: center; gap: .5rem; margin: 0; color: var(--tinta-suave);
     font-size: var(--t-11); font-weight: var(--p-titular); letter-spacing: .12em; text-transform: uppercase;
@@ -3902,11 +3914,13 @@ html[data-escena="continua"] [data-escena-vt] { view-transition-name: uc-escena 
    la oferta sigue estando— pero nada se desplaza para llegar. */
 @media (prefers-reduced-motion: reduce) {
     .stage-step {
+        --progreso-escena: 0 !important;
         --recorte-escena: 0% !important;
         --deriva-media: 0px !important;
         --escala-media: 1 !important;
         --desplaza-contexto: 0px !important;
     }
+    .stage-lens { transform: none }
     .stage-context, .stage-chapter, .chapter-offer, .chapter-action,
     .stage-camera .stage-media-wrap, .stage-shade, .stage-stamp, .chapter-handoff,
     .chapter-panel { transition: none }

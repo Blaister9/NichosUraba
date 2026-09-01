@@ -240,11 +240,14 @@ public sealed class SceneChoreographyJourneyTests(BrowserFixture fixture)
         Assert.True(action!.Y + action.Height > 0 && action.Y < height,
             $"La acción dejó de ser utilizable en {width}×{height}: y={action.Y}, h={action.Height}");
 
+        // La escala y la deriva del recorrido viven en la lente, no en la fotografía: la fotografía
+        // sólo se encarga de su fundido. Se mide donde está la propiedad, que es lo mismo que antes
+        // se medía cuando las dos cosas compartían elemento.
         var compactacion = await page.EvaluateAsync<double[]>("""
             () => {
                 const media = document.querySelector('[data-stage-media]').getBoundingClientRect();
-                const imagen = document.querySelector('.stage-image.is-current');
-                return [media.height, parseFloat(getComputedStyle(imagen).transform.split(',')[0].replace('matrix(', ''))];
+                const lente = document.querySelector('[data-stage-lens]');
+                return [media.height, parseFloat(getComputedStyle(lente).transform.split(',')[0].replace('matrix(', ''))];
             }
             """);
         Assert.True(compactacion[0] < height * .5, $"La media ocupa demasiado teléfono: {compactacion[0]}");
