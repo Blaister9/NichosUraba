@@ -147,137 +147,215 @@
     }
     else
     {
-        @* PASO 3 — el trabajo del feed actual, intacto: fotografía, estado en vivo y una acción.
-           Lo único nuevo es que llega filtrado por el municipio y la categoría que la persona
-           eligió, en vez de por una vertical escrita a mano. *@
-        <section class="guided-step guided-results-step" data-testid="guided-results">
-            <h1 class="visually-hidden">@CategoryName en @PlaceName</h1>
-            <div class="guided-toolbar">
-            <nav class="guided-context" aria-label="Qué estás viendo">
-                <a class="guided-back" href="@BackToCategoriesHref" aria-label="Volver a categorías"
-                   @onclick="() => GoTo(BackToCategoriesHref)" @onclick:preventDefault="true">
-                    <Icon Name="atras" Size="16" />
-                </a>
-                <a class="guided-chip" href="@ChangePlaceHref" data-testid="place-chip"
-                   @onclick="() => GoTo(ChangePlaceHref)" @onclick:preventDefault="true">
-                    <Icon Name="ubicacion" Size="16" /><strong>@PlaceName</strong><Icon Name="chevron" Size="14" />
-                </a>
-                <a class="guided-chip" href="@BackToCategoriesHref" data-testid="category-chip"
-                   @onclick="() => GoTo(BackToCategoriesHref)" @onclick:preventDefault="true">
-                    <Icon Name="@CategoryLook.Icon(category)" Size="16" /><strong>@CategoryName</strong><Icon Name="chevron" Size="14" />
-                </a>
-            </nav>
+        @* PASO 3 — la escena del territorio.
 
-            @* La búsqueda acelera, no gobierna: filtra lo que ya está en pantalla y nadie está
-               obligado a escribir nada para ver resultados. *@
-            <label class="guided-search">
-                <Icon Name="explorar" Size="18" />
-                <input type="search" @bind-value="search" @bind-value:event="oninput"
-                       placeholder="@SearchPlaceholder" autocomplete="off" disabled="@(!interactiveReady)"
-                       aria-label="@SearchPlaceholder" data-testid="results-search" />
-            </label>
+           El lenguaje es el del Motion Lab aprobado: una media focal que manda la pantalla, el
+           contexto accionable pegado a ella, y el municipio como conmutador que transforma la
+           escena sin sacar a nadie del marco. Los negocios son escenas de esa misma media: pasar
+           de uno a otro es un fundido, no un salto de tarjeta a tarjeta.
+
+           Todo lo que se pinta sale del feed real. No hay valoraciones, distancias, popularidad ni
+           cuánta gente hay: esos datos no existen y fingirlos sería inventarlos. *@
+        <section class="stage-step" data-testid="guided-results"
+                 data-stage-context="@($"{place}|{category}|{search}|{showAll}")">
+            <h1 class="visually-hidden">@CategoryName en @PlaceName</h1>
+
+            <div class="stage-copy">
+                <nav class="stage-chips" aria-label="Qué estás viendo">
+                    <a class="stage-back" href="@BackToCategoriesHref" aria-label="Volver a categorías"
+                       @onclick="() => GoTo(BackToCategoriesHref)" @onclick:preventDefault="interactiveReady">
+                        <Icon Name="atras" Size="16" />
+                    </a>
+                    <a class="stage-chip" href="@ChangePlaceHref" data-testid="place-chip"
+                       @onclick="() => GoTo(ChangePlaceHref)" @onclick:preventDefault="interactiveReady">
+                        <Icon Name="ubicacion" Size="14" /><strong>@PlaceName</strong>
+                    </a>
+                    <a class="stage-chip" href="@BackToCategoriesHref" data-testid="category-chip"
+                       @onclick="() => GoTo(BackToCategoriesHref)" @onclick:preventDefault="interactiveReady">
+                        <Icon Name="@CategoryLook.Icon(category)" Size="14" /><strong>@CategoryName</strong>
+                    </a>
+                </nav>
+
+                <p class="stage-eyebrow">@CategoryName en @PlaceName</p>
+                <h2 class="stage-title" data-stage-title tabindex="-1">@PlaceName, ahora</h2>
+                @* La entrada editorial es la pregunta que ya escribe el compositor para cada pieza:
+                   cambia con la escena y es texto real, no un relleno. *@
+                <p class="stage-intro" data-stage-intro>@(FirstScene?.Question ?? "")</p>
+
+                @* El municipio cambia la escena conservando la categoría. Enlaces reales: en el
+                   prerender navegan solos, y cancelar la navegación del navegador sólo se puede
+                   cuando ya hay circuito que la sustituya. *@
+                <nav class="stage-switcher" aria-label="Cambiar municipio conservando la categoría">
+                    @foreach (var option in Places.Where(x => x.HasBusinesses))
+                    {
+                        <a href="@PlaceHref(option.Slug)" data-stage-place
+                           aria-current="@(place == option.Slug ? "location" : null)"
+                           @onclick="() => GoTo(PlaceHref(option.Slug))"
+                           @onclick:preventDefault="interactiveReady">@option.Name</a>
+                    }
+                    <a href="@PlaceHref(PlacePreference.Everywhere)" data-stage-place
+                       aria-current="@(place == PlacePreference.Everywhere ? "location" : null)"
+                       @onclick="() => GoTo(PlaceHref(PlacePreference.Everywhere))"
+                       @onclick:preventDefault="interactiveReady">Todo Urabá</a>
+                </nav>
             </div>
 
-            <div class="ahora-layout">
-                <main class="feed-column" aria-label="Qué puedes hacer ahora" data-testid="live-feed"
-                      @key="@($"{place}|{category}")" data-swap="@lastSwap">
-                    @if (VisiblePieces.Count == 0 && search.Length > 0)
-                    {
-                        <section class="quiet-feed" data-testid="guided-empty">
-                            <Icon Name="explorar" Size="30" />
-                            <h2>Nada con «@search» aquí</h2>
-                            <p>Puedes buscarlo en todo el directorio de Urabá.</p>
-                            <a class="button-link secondary" href="@SearchEverywhereHref">Buscar en todo Urabá</a>
-                        </section>
-                    }
-                    else if (VisiblePieces.Count == 0)
-                    {
-                        @* No se inventa disponibilidad ni se rellena con negocios de otra categoría:
-                           se dice qué falta y se ofrecen las dos salidas que sí existen. *@
-                        <section class="quiet-feed" data-testid="guided-empty">
-                            <Icon Name="reloj" Size="30" />
-                            <h2>Todavía no tenemos @CategoryName.ToLowerInvariant() en @PlaceName</h2>
-                            <p>Es una categoría que ya existe en Urabá; aquí todavía no hay negocios publicados.</p>
-                            @if (place != PlacePreference.Everywhere)
-                            {
-                                <a class="button-link secondary" href="@EverywhereInCategoryHref">Ver en todo Urabá</a>
-                            }
-                            <a class="tertiary" href="@ChangePlaceHref">Cambiar municipio</a>
-                        </section>
-                    }
-                    else
-                    {
-                        @foreach (var piece in VisiblePieces)
+            <div class="stage-body" data-testid="live-feed" data-swap="@lastSwap">
+                @if (VisiblePieces.Count == 0 && search.Length > 0)
+                {
+                    <section class="quiet-feed" data-testid="guided-empty">
+                        <Icon Name="explorar" Size="30" />
+                        <h2>Nada con «@search» aquí</h2>
+                        <p>Puedes buscarlo en todo el directorio de Urabá.</p>
+                        <a class="button-link secondary" href="@SearchEverywhereHref">Buscar en todo Urabá</a>
+                    </section>
+                }
+                else if (VisiblePieces.Count == 0)
+                {
+                    @* No se inventa disponibilidad ni se rellena con negocios de otra categoría:
+                       se dice qué falta y se ofrecen las dos salidas que sí existen. *@
+                    <section class="quiet-feed" data-testid="guided-empty">
+                        <Icon Name="reloj" Size="30" />
+                        <h2>Todavía no tenemos @CategoryName.ToLowerInvariant() en @PlaceName</h2>
+                        <p>Es una categoría que ya existe en Urabá; aquí todavía no hay negocios publicados.</p>
+                        @if (place != PlacePreference.Everywhere)
                         {
-                            if (piece.Kind == FeedKind.Capture)
+                            <a class="button-link secondary" href="@EverywhereInCategoryHref">Ver en todo Urabá</a>
+                        }
+                        <a class="tertiary" href="@ChangePlaceHref">Cambiar municipio</a>
+                    </section>
+                }
+                else if (FirstScene is { } opening)
+                {
+                    @* La media focal ES la pantalla, no la ilustración de una tarjeta. Las dos
+                       imágenes se turnan para que cambiar de negocio sea un fundido y la foto que
+                       venías mirando siga ahí mientras entra la siguiente. *@
+                    <div class="stage-media-wrap" data-testid="feed-piece" data-categoria="@opening.CategorySlug">
+                        <div class="stage-media" data-stage-media tabindex="0" role="group"
+                             aria-roledescription="Escenas de negocios"
+                             aria-label="Desliza o usa las flechas para cambiar de negocio">
+                            <span class="stage-art" aria-hidden="true"><Icon Name="@opening.Icon" Size="72" /></span>
+                            @if (opening.ImageUrl is { Length: > 0 } cover)
                             {
-                                <article class="capture-piece feed-entry" data-testid="business-capture">
-                                    <span class="capture-mark"><Icon Name="tienda" Size="28" /></span>
-                                    <div><p class="eyebrow">Para negocios</p><h2>¿Tienes un negocio en Urabá?</h2>
-                                    <p>Así podría verse aquí: con fotos, estado y una acción clara.</p></div>
-                                    <a class="button-link secondary" href="/para-negocios">Quiero aparecer</a>
-                                </article>
+                                <img class="stage-image is-current" data-stage-image src="@cover"
+                                     alt="@opening.ImageAlt" width="1280" height="960"
+                                     loading="eager" fetchpriority="high" />
                             }
                             else
                             {
-                                <article class="feed-piece feed-entry @(piece.IsPrimary ? "feed-primary" : null)"
-                                         data-categoria="@piece.CategorySlug" data-testid="feed-piece">
-                                    <a class="feed-media feed-business-link @(piece.ImageUrl is null ? "feed-art" : null)"
-                                       href="@piece.Url" aria-label="@piece.CtaLabel" data-enhance-nav="false">
-                                        @if (piece.ImageUrl is { Length: > 0 } image)
-                                        {
-                                            <img src="@image" alt="@piece.ImageAlt" width="760" height="620"
-                                                 loading="@(piece.IsPrimary ? "eager" : "lazy")"
-                                                 fetchpriority="@(piece.IsPrimary ? "high" : "auto")" />
-                                        }
-                                        else
-                                        {
-                                            <span class="feed-art-icon"><Icon Name="@piece.Icon" Size="72" /></span>
-                                        }
-                                        <span class="feed-shade" aria-hidden="true"></span>
-                                        @* Tres distintivos y no hay un cuarto. "Promoción" decía qué
-                                           era la pieza, no qué le pasa a quien la mira: lo que importa
-                                           de una promoción es que se puede aprovechar hoy. *@
-                                        <span class="feed-badges">
-                                            @if (piece.IsLive) { <span class="live-badge"><i></i> EN VIVO</span> }
-                                            @if (piece.IsSponsored) { <span class="sponsored-badge">Patrocinado</span> }
-                                            @if (piece.IsPromotion) { <span class="promotion-badge">Hoy</span> }
-                                        </span>
-                                        <span class="feed-overlay-copy">
-                                            <small>@piece.BusinessLine</small>
-                                            <strong>@piece.VisualStatus</strong>
-                                        </span>
-                                    </a>
-                                    <div class="feed-copy">
-                                        <p class="feed-question">@piece.Question</p>
-                                        <h2>@piece.Headline</h2>
-                                        <p class="feed-state @(piece.IsLive ? "is-live" : null)">@piece.State</p>
-                                        @if (!string.IsNullOrWhiteSpace(piece.Detail)) { <p class="feed-detail">@piece.Detail</p> }
-                                        <a class="feed-action feed-business-link" href="@piece.Url" data-enhance-nav="false">
-                                            @piece.CtaLabel <Icon Name="flecha" Size="16" />
-                                        </a>
-                                    </div>
-                                </article>
+                                <img class="stage-image is-current" data-stage-image alt="" hidden />
                             }
-                        }
+                            <img class="stage-image" data-stage-image alt="" aria-hidden="true" hidden />
+                            <span class="stage-shade" aria-hidden="true"></span>
+                            <span class="stage-stamp" data-stage-stamp>@PlaceName</span>
+                            <span class="stage-badges" data-stage-badges>
+                                @if (opening.IsLive) { <span class="live-badge"><i></i> EN VIVO</span> }
+                                @if (opening.IsSponsored) { <span class="sponsored-badge">Patrocinado</span> }
+                                @if (opening.IsPromotion) { <span class="promotion-badge">Hoy</span> }
+                            </span>
+                            <a class="stage-open feed-business-link" data-stage-open href="@opening.Url"
+                               data-enhance-nav="false" aria-label="@opening.CtaLabel"></a>
+                        </div>
+
+                        @* Lo accionable vive pegado a la media, no en una tarjeta aparte debajo. *@
+                        <div class="stage-context" data-stage-context>
+                            <div class="context-main">
+                                <p class="context-kicker" data-stage-kicker>@ContextLine(opening)</p>
+                                <h2 data-stage-name>@opening.Headline</h2>
+                            </div>
+                            <div class="context-facts">
+                                <p class="context-state @(opening.IsLive ? "is-live" : null)" data-stage-state>
+                                    <span class="state-dot" aria-hidden="true"></span><span>@opening.State</span>
+                                </p>
+                            </div>
+                            <a class="primary-action feed-business-link" data-stage-action href="@opening.Url"
+                               data-enhance-nav="false">
+                                <span data-stage-cta>@opening.CtaLabel</span> <Icon Name="flecha" Size="16" />
+                            </a>
+                        </div>
+                    </div>
+
+                    @* La lista de escenas: los negocios de este contexto. La captación conserva su
+                       sitio editorial dentro de la misma secuencia, pero no es una escena —no entra
+                       en el contador ni en las flechas— porque no es un negocio. *@
+                    <div class="stage-scenes">
+                        <div class="stage-scenes-head">
+                            <p class="stage-eyebrow">Negocios en @PlaceName</p>
+                            <p class="stage-counter" data-stage-counter aria-live="polite">1 / @Scenes.Count</p>
+                            <div class="stage-arrows">
+                                <button type="button" data-stage-prev aria-label="Negocio anterior"
+                                        disabled="@(Scenes.Count <= 1)"><Icon Name="atras" Size="18" /></button>
+                                <button type="button" data-stage-next aria-label="Siguiente negocio"
+                                        disabled="@(Scenes.Count <= 1)"><Icon Name="flecha" Size="18" /></button>
+                            </div>
+                        </div>
+
+                        <div class="stage-scene-list" data-stage-list>
+                            @{ var sceneIndex = 0; }
+                            @foreach (var piece in VisiblePieces)
+                            {
+                                @if (piece.Kind == FeedKind.Capture)
+                                {
+                                    <article class="capture-piece stage-capture" data-testid="business-capture">
+                                        <span class="capture-mark"><Icon Name="tienda" Size="24" /></span>
+                                        <div>
+                                            <p class="eyebrow">Para negocios</p>
+                                            <h3>¿Tienes un negocio en Urabá?</h3>
+                                            <p>Así podría verse aquí: con fotos, estado y una acción clara.</p>
+                                        </div>
+                                        <a class="button-link secondary" href="/para-negocios">Quiero aparecer</a>
+                                    </article>
+                                }
+                                else
+                                {
+                                    var index = sceneIndex++;
+                                    <a class="stage-scene @(index == 0 ? "is-active" : null)" href="@piece.Url"
+                                       data-stage-scene="@index" data-enhance-nav="false"
+                                       aria-current="@(index == 0 ? "true" : null)"
+                                       data-scene-image="@piece.ImageUrl" data-scene-alt="@piece.ImageAlt"
+                                       data-scene-icon="@piece.Icon" data-scene-question="@piece.Question"
+                                       data-scene-name="@piece.Headline" data-scene-state="@piece.State"
+                                       data-scene-line="@ContextLine(piece)" data-scene-cta="@piece.CtaLabel"
+                                       data-scene-url="@piece.Url" data-scene-categoria="@piece.CategorySlug"
+                                       data-scene-live="@(piece.IsLive ? "1" : null)"
+                                       data-scene-sponsored="@(piece.IsSponsored ? "1" : null)"
+                                       data-scene-promo="@(piece.IsPromotion ? "1" : null)">
+                                        <p class="scene-number">@((index + 1).ToString("00"))</p>
+                                        <h3>@piece.Headline</h3>
+                                        <p class="scene-state">@piece.State</p>
+                                        @if (piece.IsSponsored) { <span class="scene-tag">Patrocinado</span> }
+                                    </a>
+                                }
+                            }
+                        </div>
+
                         @if (!showAll && MatchingPieces.Count > InitialCount)
                         {
                             <button type="button" class="feed-more" @onclick="() => showAll = true">Ver más</button>
                         }
-                    }
-                </main>
+                    </div>
+                }
 
-                <aside class="ahora-rail" aria-label="Contexto local">
-                    <section><p class="eyebrow">En vivo</p><strong>@LiveCount</strong><span>@(LiveCount == 1 ? "estado activo" : "estados activos")</span></section>
-                    <section><p class="eyebrow">Hoy</p><strong>@ActionableCount</strong><span>opciones con acción directa</span></section>
-                    @* El nombre del municipio no es un dato operativo, así que no se pinta de ámbar:
-                       el ámbar es para el número que se verifica. *@
-                    <section><p class="eyebrow">Tu lugar</p><strong class="rail-place">@PlaceName</strong>
-                        <a class="inline-button" href="@ChangePlaceHref">Cambiar</a></section>
-                    @* "Turnos, citas y pedidos" se leía como una lista de lo tuyo, y la pantalla es una
-                       consulta por código: no hay historial. El subtítulo dice lo que de verdad hace. *@
-                    <a class="rail-activity" href="/seguimiento"><Icon Name="actividad" Size="22" /><span><strong>Mi actividad</strong><small>Consulta con tu código</small></span></a>
-                </aside>
+            </div>
+            @* La búsqueda acelera, no gobierna: filtra lo que ya está en pantalla y nadie está
+               obligado a escribir nada para ver resultados. *@
+            <div class="stage-tools">
+                <label class="stage-search">
+                    <Icon Name="explorar" Size="18" />
+                    <input type="search" @bind-value="search" @bind-value:event="oninput"
+                           placeholder="@SearchPlaceholder" autocomplete="off" disabled="@(!interactiveReady)"
+                           aria-label="@SearchPlaceholder" data-testid="results-search" />
+                </label>
+                <div class="stage-rail" aria-label="Contexto local">
+                    <p><span class="eyebrow">En vivo</span><strong>@LiveCount</strong>
+                        <span>@(LiveCount == 1 ? "estado activo" : "estados activos")</span></p>
+                    <p><span class="eyebrow">Hoy</span><strong>@ActionableCount</strong>
+                        <span>opciones con acción directa</span></p>
+                    <a class="rail-activity" href="/seguimiento">
+                        <Icon Name="actividad" Size="20" />
+                        <span><strong>Mi actividad</strong><small>Consulta con tu código</small></span>
+                    </a>
+                </div>
             </div>
         </section>
     }
@@ -388,6 +466,31 @@
         ? ResultPieces.Where(x => x.Kind == FeedKind.Business && Mentions(x, term)).ToArray()
         : ResultPieces;
     private IReadOnlyList<FeedPiece> VisiblePieces => MatchingPieces.Take(showAll ? 20 : InitialCount).ToArray();
+
+    /// <summary>
+    /// Las escenas de la media focal. Sólo negocios: la captación acompaña a los resultados en su
+    /// sitio editorial, pero no se cuenta ni se navega como si fuera uno.
+    /// </summary>
+    private IReadOnlyList<FeedPiece> Scenes => VisiblePieces.Where(x => x.Kind == FeedKind.Business).ToArray();
+    private FeedPiece? FirstScene => Scenes.Count > 0 ? Scenes[0] : null;
+
+    /// <summary>
+    /// La línea de contexto de una escena. Studio Laura Usuga tiene el municipio en disputa
+    /// —DATA_QUALITY_GAP abierto—, así que mientras no se resuelva su línea dice la categoría y
+    /// calla el lugar: no afirmar un dato dudoso cuesta menos que publicarlo mal.
+    /// </summary>
+    private static string ContextLine(FeedPiece piece)
+    {
+        if (!AwaitsMunicipality(piece)) return piece.Detail;
+        var cut = piece.Detail.LastIndexOf(" · ", StringComparison.Ordinal);
+        return cut > 0 ? piece.Detail[..cut] : piece.Detail;
+    }
+
+    private static bool AwaitsMunicipality(FeedPiece piece)
+        => piece.Headline.Contains("Studio Laura", StringComparison.OrdinalIgnoreCase)
+        || piece.Detail.Contains("Studio Laura", StringComparison.OrdinalIgnoreCase)
+        || piece.Url.Contains("studio-laura", StringComparison.OrdinalIgnoreCase);
+
     private int LiveCount => ResultPieces.Count(x => x.IsLive);
     private int ActionableCount => ResultPieces.Count(x => x.Kind == FeedKind.Business);
 
@@ -503,6 +606,14 @@
             catch (JSException) { }
             interactiveReady = true;
             StateHasChanged();
+        }
+        // Cada render puede haber cambiado la escena —otro municipio, otra categoría, otra
+        // búsqueda—, así que el módulo se vuelve a mirar el DOM. La señal de "escena montada" es
+        // explícita porque el HTML prerenderizado existe antes que el módulo.
+        if (module is not null)
+        {
+            try { await module.InvokeVoidAsync("syncStage"); }
+            catch (JSException) { }
         }
         await Remember();
     }

@@ -3166,3 +3166,453 @@ button[data-cargando="true"]:disabled { opacity: 1; cursor: progress }
     /* El aro deja de girar pero sigue estando: la señal de "trabajando" no depende del giro. */
     button[data-cargando="true"]::after, .button-link[data-cargando="true"]::after { animation: none }
 }
+
+/* ==============================================================================================
+   J-MOTION-DEV-01 — HOME / DISCOVERY EN EL LENGUAJE DEL MOTION LAB
+
+   Descubrir dejó de ser un pasillo oscuro de fotografías apiladas para ser una escena: papel,
+   una entrada editorial que nombra el lugar, y una media focal que manda la pantalla con lo
+   accionable pegado a ella. El municipio conmuta la escena sin sacar a nadie del marco; los
+   negocios son escenas de esa misma media y pasar de uno a otro es un fundido.
+
+   El papel entra aquí y sólo aquí: Explorar, la ficha y el panel siguen como estaban.
+   ============================================================================================== */
+body:has(.ahora-home) { background: var(--uc-paper) }
+body:has(.ahora-home) .site-header {
+    background: rgb(255 253 249 / 88%); border-bottom-color: rgb(12 22 19 / 10%);
+}
+body:has(.ahora-home) .brand { color: var(--uc-jungle) }
+body:has(.ahora-home) .site-header nav a { color: rgb(12 22 19 / 72%) }
+body:has(.ahora-home) .site-header nav a:hover { background: rgb(12 22 19 / 7%); color: var(--uc-jungle) }
+body:has(.ahora-home) .nav-escritorio a.activo { background: rgb(12 22 19 / 9%); color: var(--uc-jungle) }
+body:has(.ahora-home) .boton-identidad { border-color: rgb(12 22 19 / 22%); color: var(--uc-jungle) }
+body:has(.ahora-home) .boton-identidad:hover { border-color: var(--uc-green); background: rgb(12 22 19 / 6%) }
+body:has(.ahora-home) .header-search { color: var(--uc-jungle) }
+body:has(.ahora-home) .header-search:hover { background: rgb(12 22 19 / 7%) }
+body:has(.ahora-home) .page-shell { background: var(--uc-paper) }
+body:has(.ahora-home) footer {
+    background: var(--uc-paper); border-top-color: rgb(12 22 19 / 10%); color: rgb(12 22 19 / 60%);
+}
+body:has(.ahora-home) footer a { color: rgb(12 22 19 / 60%) }
+body:has(.ahora-home) footer strong { color: var(--uc-jungle) }
+
+.ahora-home {
+    /* Tinta y papel del descubrimiento. Son alfas de los dos colores que ya existen: no entra un
+       séptimo color a la paleta por cambiar de fondo. */
+    --tinta: var(--uc-jungle);
+    --tinta-suave: rgb(12 22 19 / 64%);
+    --tinta-tenue: rgb(12 22 19 / 42%);
+    --linea: rgb(12 22 19 / 14%);
+    --superficie-papel: var(--uc-stone);
+    color: var(--tinta); background: var(--uc-paper);
+}
+.footer-home { background: var(--uc-paper) }
+.guided-boot .skeleton {
+    background: linear-gradient(90deg, var(--uc-stone) 25%, #E4E2D8 50%, var(--uc-stone) 75%);
+    background-size: 200% 100%;
+}
+.guided-ask { color: var(--tinta) }
+
+/* PASOS 1 y 2 sobre papel. Mismo comportamiento y misma jerarquía: sólo cambia de qué lado está
+   la tinta. */
+.guided-banner { background: var(--uc-jungle); color: var(--uc-paper) }
+@media (hover: hover) { .guided-banner:hover { background: var(--uc-jungle-soft) } }
+.guided-place, .guided-category { background: var(--superficie-papel); color: var(--tinta) }
+.guided-place:hover, .guided-category:hover { background: #E7E5DC }
+.guided-place-icon { background: rgb(12 22 19 / 8%); color: var(--tinta) }
+.guided-place-all { border-color: var(--linea); background: transparent }
+.guided-place.proximamente { background: transparent; color: var(--tinta-tenue) }
+.guided-place.proximamente .guided-place-icon { background: rgb(12 22 19 / 5%); color: var(--tinta-tenue) }
+.guided-place.proximamente small { color: var(--tinta-tenue) }
+.guided-category-art { color: var(--uc-green); opacity: 1 }
+.guided-locate { color: var(--tinta-suave) }
+.guided-locate:hover:not(:disabled) { color: var(--tinta) }
+.guided-note { color: var(--tinta-suave) }
+.guided-empty, .quiet-feed { color: var(--tinta) }
+.guided-empty h2, .quiet-feed h2 { color: var(--tinta) }
+.guided-empty p, .quiet-feed p { color: var(--tinta-suave) }
+.guided-empty .button-link, .quiet-feed .button-link {
+    border-color: var(--uc-jungle); background: var(--uc-jungle); color: var(--uc-paper);
+}
+.guided-empty .tertiary, .quiet-feed .tertiary { color: var(--tinta-suave) }
+.ahora-home .install-invite {
+    border-color: var(--linea); background: var(--superficie-papel); color: var(--tinta);
+}
+
+/* LA ESCENA ------------------------------------------------------------------------------------
+   Móvil primero: entrada editorial compacta, media focal y contexto. En escritorio el texto se va
+   a una columna y la media ocupa la otra, que es la composición aprobada. */
+.stage-step { display: grid; padding: .2rem 0 1.5rem; gap: .4rem }
+.stage-copy { display: grid; gap: .2rem; padding: 0 1rem; min-width: 0 }
+
+.stage-chips { display: flex; align-items: center; gap: .3rem; min-width: 0 }
+.stage-back {
+    display: inline-grid; width: 36px; height: 36px; place-items: center; flex: 0 0 auto;
+    border-radius: 50%; color: var(--tinta-suave); text-decoration: none;
+    transition: background .14s ease, transform .12s ease;
+}
+.stage-back:hover { background: rgb(12 22 19 / 8%); color: var(--tinta) }
+.stage-back:active { transform: scale(.94) }
+.stage-chip {
+    display: inline-flex; min-height: 34px; align-items: center; gap: .35rem; min-width: 0;
+    padding: .25rem .6rem; border: 1px solid var(--linea); border-radius: var(--radio-pill);
+    color: var(--tinta); text-decoration: none; transition: background .14s ease, border-color .14s ease;
+}
+.stage-chip:hover { border-color: var(--tinta); background: rgb(12 22 19 / 5%) }
+.stage-chip strong {
+    max-width: 9rem; overflow: hidden; font-size: var(--t-13); font-weight: var(--p-fuerte);
+    white-space: nowrap; text-overflow: ellipsis;
+}
+
+.stage-eyebrow {
+    margin: 0; color: var(--tinta-suave); font-size: var(--t-11); font-weight: var(--p-titular);
+    letter-spacing: .13em; text-transform: uppercase;
+}
+/* El nombre del lugar es el titular de la pantalla. Archivo en su peso alto y muy apretado: es la
+   pieza que da la escala editorial de la que cuelga todo lo demás. */
+.stage-title {
+    margin: 0; font-family: var(--fuente-titular); font-size: clamp(2.1rem, 10.5vw, 3rem);
+    font-weight: var(--p-titular); line-height: .94; letter-spacing: -.045em; text-wrap: balance;
+}
+.stage-title:focus-visible { outline: 2px solid var(--uc-green); outline-offset: 6px }
+.stage-intro {
+    display: -webkit-box; margin: 0; max-width: 34rem; overflow: hidden; color: var(--tinta-suave);
+    font-size: var(--t-13); -webkit-box-orient: vertical; -webkit-line-clamp: 1;
+}
+
+.stage-switcher {
+    display: flex; gap: .35rem; margin: .1rem 0 0; overflow-x: auto; padding-bottom: .1rem;
+    scrollbar-width: none; overscroll-behavior-inline: contain;
+}
+.stage-switcher::-webkit-scrollbar, .stage-scene-list::-webkit-scrollbar { display: none }
+.stage-switcher a {
+    display: inline-flex; flex: 0 0 auto; min-height: 38px; align-items: center; padding: .35rem .8rem;
+    border: 1px solid var(--linea); border-radius: var(--radio-pill); color: var(--tinta-suave);
+    font-size: var(--t-13); font-weight: var(--p-fuerte); text-decoration: none;
+    transition: color .16s ease, background-color .16s ease, border-color .16s ease;
+}
+.stage-switcher a:hover { border-color: var(--tinta); color: var(--tinta) }
+.stage-switcher a[aria-current="location"] {
+    border-color: var(--uc-jungle); background: var(--uc-jungle); color: var(--uc-paper);
+}
+
+.stage-body { display: grid; gap: .9rem; min-width: 0 }
+.stage-media-wrap { display: grid; min-width: 0 }
+
+/* La media es la superficie, no la ilustración de una tarjeta. */
+.stage-media {
+    position: relative; height: clamp(260px, 40svh, 340px); overflow: hidden; isolation: isolate;
+    border-radius: 0; background: var(--superficie-papel);
+    touch-action: pan-y; transition: transform .42s cubic-bezier(.2,.8,.2,1);
+}
+.stage-media:focus-visible { outline: 3px solid var(--uc-green); outline-offset: -3px }
+.stage-media.is-opening { transform: scale(1.025) }
+.stage-art {
+    position: absolute; z-index: 0; inset: 0; display: grid; place-items: center;
+    color: rgb(12 22 19 / 30%);
+}
+.stage-image {
+    position: absolute; z-index: 1; inset: -1.5%; width: 103%; height: 103%; object-fit: cover;
+    opacity: 0; transform: translate3d(var(--stage-drag, 0px), 0, 0) scale(1.03);
+    transition: opacity .42s cubic-bezier(.2,.8,.2,1), transform .56s cubic-bezier(.2,.8,.2,1);
+    will-change: opacity, transform;
+}
+.stage-image.is-current { opacity: 1; transform: translate3d(var(--stage-drag, 0px), 0, 0) scale(1) }
+.stage-image.is-leaving {
+    opacity: 0; transform: translate3d(calc(var(--stage-drag, 0px) - 3%), 0, 0) scale(.985);
+}
+.stage-shade {
+    position: absolute; z-index: 2; inset: auto 0 0; height: 45%; pointer-events: none;
+    background: linear-gradient(rgb(12 22 19 / 0), rgb(12 22 19 / 34%));
+}
+.stage-stamp {
+    position: absolute; z-index: 3; top: .8rem; left: 1rem; padding: .38rem .66rem;
+    border-radius: var(--radio-pill); background: var(--uc-paper); color: var(--uc-jungle);
+    font-size: var(--t-11); font-weight: var(--p-titular); letter-spacing: .05em; text-transform: uppercase;
+}
+.stage-badges { position: absolute; z-index: 3; top: .8rem; right: 1rem; display: flex; gap: .3rem }
+.stage-open { position: absolute; z-index: 4; inset: 0; display: block }
+.stage-open:focus-visible { outline: 3px solid var(--uc-green); outline-offset: -3px }
+
+/* El contexto accionable, pegado a la media. Oscuro sobre papel: es la pieza que hay que tocar. */
+.stage-context {
+    display: grid; gap: .5rem; padding: .9rem 1rem 1rem; background: var(--uc-jungle);
+    color: var(--uc-paper);
+}
+.stage-context .context-kicker {
+    margin: 0; color: rgb(255 253 249 / 62%); font-size: var(--t-11); font-weight: var(--p-titular);
+    letter-spacing: .07em; text-transform: uppercase;
+}
+.stage-context .context-main h2 {
+    margin: .1rem 0 0; font-family: var(--fuente-titular); font-size: var(--t-21);
+    font-weight: var(--p-titular); letter-spacing: -.025em; text-wrap: balance;
+}
+.stage-context .context-facts { display: grid; gap: .1rem; min-width: 0 }
+.stage-context .context-state {
+    display: flex; align-items: center; gap: .4rem; margin: 0; color: var(--uc-amber);
+    font-size: var(--t-13); font-weight: var(--p-fuerte); font-variant-numeric: tabular-nums;
+}
+.stage-context .context-state .state-dot {
+    width: .5rem; height: .5rem; flex: 0 0 auto; border-radius: 50%; background: var(--uc-amber);
+}
+.stage-context .context-state.is-live { color: var(--uc-live) }
+.stage-context .context-state.is-live .state-dot { background: var(--uc-live) }
+.stage-context .context-detail {
+    margin: 0; overflow: hidden; color: rgb(255 253 249 / 70%); font-size: var(--t-13);
+    white-space: nowrap; text-overflow: ellipsis;
+}
+.stage-context .primary-action {
+    display: inline-flex; min-height: var(--alto-control); align-items: center; justify-content: center;
+    gap: .45rem; padding: .6rem 1.1rem; border-radius: var(--radio-pill); background: var(--uc-paper);
+    color: var(--uc-jungle); font-size: var(--t-15); font-weight: var(--p-titular); text-decoration: none;
+    transition: transform .13s ease, background-color .14s ease;
+}
+.stage-context .primary-action:hover { background: #FFFFFF }
+.stage-context .primary-action:active { transform: scale(.98) }
+
+/* LA LISTA DE ESCENAS — los negocios de este contexto. La captación conserva su sitio editorial
+   dentro de la misma secuencia; no es una escena y por eso no entra en el contador. */
+.stage-scenes { display: grid; gap: .5rem; padding: 0 1rem }
+.stage-scenes-head { display: flex; align-items: center; gap: .6rem }
+.stage-scenes-head .stage-eyebrow {
+    flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.stage-counter {
+    margin: 0; color: var(--tinta); font-size: var(--t-13); font-weight: var(--p-titular);
+    font-variant-numeric: tabular-nums;
+}
+.stage-arrows { display: flex; gap: .3rem }
+.stage-arrows button {
+    display: grid; width: 40px; height: 40px; place-items: center; border: 1px solid var(--linea);
+    border-radius: 50%; background: transparent; color: var(--tinta); cursor: pointer;
+    transition: background-color .16s ease, transform .14s ease, opacity .14s ease;
+}
+.stage-arrows button:hover:not(:disabled) { background: rgb(12 22 19 / 7%) }
+.stage-arrows button:active:not(:disabled) { transform: scale(.94) }
+.stage-arrows button:disabled { opacity: .3; cursor: default }
+
+.stage-scene-list {
+    display: flex; gap: .45rem; overflow-x: auto; padding-bottom: .2rem;
+    scroll-snap-type: x proximity; scrollbar-width: none; overscroll-behavior-inline: contain;
+}
+.stage-scene {
+    position: relative; display: grid; flex: 0 0 min(74vw, 17rem); align-content: start; gap: .05rem;
+    padding: .6rem .75rem; border: 1px solid var(--linea); border-radius: 14px;
+    background: transparent; color: var(--tinta-suave); text-decoration: none;
+    scroll-snap-align: start; cursor: pointer;
+    transition: color .18s ease, background-color .18s ease, border-color .18s ease;
+}
+.stage-scene .scene-number {
+    margin: 0; color: var(--tinta-tenue); font-size: var(--t-11); font-weight: var(--p-titular);
+    letter-spacing: .1em; font-variant-numeric: tabular-nums;
+}
+.stage-scene h3 {
+    display: -webkit-box; margin: 0; overflow: hidden; font-family: var(--fuente-titular);
+    font-size: var(--t-15); font-weight: var(--p-titular); letter-spacing: -.02em;
+    -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+}
+.stage-scene .scene-state {
+    margin: 0; overflow: hidden; font-size: var(--t-11); white-space: nowrap; text-overflow: ellipsis;
+    font-variant-numeric: tabular-nums;
+}
+.stage-scene .scene-tag {
+    margin-top: .2rem; color: var(--tinta-tenue); font-size: var(--t-11); font-weight: var(--p-fuerte);
+}
+.stage-scene:hover { border-color: rgb(12 22 19 / 30%); color: var(--tinta) }
+.stage-scene.is-active {
+    border-color: var(--uc-jungle); background: var(--uc-jungle); color: rgb(255 253 249 / 72%);
+}
+.stage-scene.is-active .scene-number, .stage-scene.is-active .scene-tag { color: rgb(255 253 249 / 55%) }
+.stage-scene.is-active h3 { color: var(--uc-paper) }
+.stage-capture {
+    display: grid; flex: 0 0 min(74vw, 17rem); align-content: center; gap: .3rem; margin: 0;
+    padding: .7rem .75rem; border: 1px dashed rgb(12 22 19 / 26%); border-radius: 14px;
+    background: transparent; color: var(--tinta); scroll-snap-align: start;
+}
+.stage-capture .capture-mark { color: var(--uc-green) }
+.stage-capture .eyebrow {
+    color: var(--tinta-suave); font-size: var(--t-11); font-weight: var(--p-titular);
+    letter-spacing: .1em; text-transform: uppercase;
+}
+.stage-capture h3 {
+    margin: 0; font-family: var(--fuente-titular); font-size: var(--t-15); font-weight: var(--p-titular);
+}
+.stage-capture p { margin: 0; color: var(--tinta-suave); font-size: var(--t-11) }
+.stage-capture .button-link {
+    justify-self: start; min-height: 38px; margin-top: .25rem; padding: .35rem .8rem;
+    border-color: var(--uc-jungle); background: var(--uc-jungle); color: var(--uc-paper);
+}
+
+/* HERRAMIENTAS — la búsqueda y el contexto local. Debajo de la escena porque aceleran, no gobiernan. */
+.stage-tools { display: grid; gap: .7rem; padding: .2rem 1rem 0 }
+.stage-search {
+    display: flex; align-items: center; gap: .55rem; padding: 0 .9rem; border: 1px solid var(--linea);
+    border-radius: var(--radio-pill); background: transparent; color: var(--tinta-suave);
+}
+.stage-search:focus-within { border-color: var(--tinta) }
+.stage-search input {
+    flex: 1; min-width: 0; min-height: var(--alto-tocable); border: 0; background: transparent;
+    color: var(--tinta); font-size: var(--t-15);
+}
+.stage-search input::placeholder { color: var(--tinta-tenue) }
+.stage-search input:focus { outline: 0 }
+.stage-search input:disabled { cursor: default }
+.stage-rail { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.4rem }
+.stage-rail p { display: flex; align-items: baseline; gap: .35rem; margin: 0; font-size: var(--t-13) }
+.stage-rail .eyebrow {
+    color: var(--tinta-suave); font-size: var(--t-11); font-weight: var(--p-titular);
+    letter-spacing: .1em; text-transform: uppercase;
+}
+.stage-rail strong { color: var(--uc-green); font-size: var(--t-17); font-variant-numeric: tabular-nums }
+.stage-rail p > span:last-child { color: var(--tinta-suave) }
+.stage-rail .rail-activity {
+    display: inline-flex; min-height: var(--alto-tocable); align-items: center; gap: .5rem;
+    color: var(--tinta); text-decoration: none;
+}
+.stage-rail .rail-activity span { display: grid }
+.stage-rail .rail-activity small { color: var(--tinta-suave); font-size: var(--t-11) }
+.stage-body .feed-more {
+    justify-self: start; min-height: var(--alto-tocable); padding: .5rem 1rem;
+    border: 1px solid var(--linea); border-radius: var(--radio-pill); background: transparent;
+    color: var(--tinta); font-weight: var(--p-fuerte); cursor: pointer;
+}
+
+/* ESCRITORIO — la composición aprobada: la editorial a la izquierda, la escena a la derecha y el
+   contexto accionable montado sobre la fotografía. */
+@media (min-width: 900px) {
+    .stage-step {
+        align-items: start; padding: 1.2rem 1.5rem 2rem;
+        grid-template-columns: minmax(17rem, .72fr) minmax(28rem, 1.28fr);
+        column-gap: clamp(1.5rem, 4vw, 3.5rem); row-gap: 1rem;
+    }
+    .stage-copy { padding: 0; gap: .5rem; grid-column: 1; grid-row: 1; align-self: end }
+    .stage-title { font-size: clamp(3.4rem, 5.2vw, 4.6rem) }
+    .stage-intro { font-size: var(--t-15); -webkit-line-clamp: 3 }
+    .stage-switcher { flex-wrap: wrap; margin-top: .5rem; overflow: visible }
+    .stage-body { gap: 1rem; grid-column: 2; grid-row: 1 / span 2 }
+    .stage-media-wrap { position: relative }
+    .stage-media { height: min(66svh, 620px); border-radius: var(--radio-lg) var(--radio-lg) 0 0 }
+    .stage-context {
+        position: absolute; right: 1rem; bottom: 1rem; left: 1rem; align-items: center; gap: 1rem;
+        padding: 1rem; border-radius: var(--radio); background: rgb(12 22 19 / 93%);
+        backdrop-filter: blur(12px); grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) auto;
+    }
+    .stage-context .context-main h2 { font-size: var(--t-27) }
+    .stage-scenes, .stage-tools { padding: 0 }
+    .stage-scene, .stage-capture { flex-basis: 15rem }
+    /* La escena manda: las herramientas se quedan en la columna de texto, bajo la editorial. */
+    .stage-tools { grid-column: 1; grid-row: 2; align-self: start }
+}
+
+@media (max-width: 899px) {
+    /* Los chips ya dicen dónde y qué: repetirlo encima del titular sólo empuja la escena hacia
+       abajo, y lo que no puede caer bajo el pliegue es la fotografía con su acción. */
+    .stage-copy > .stage-eyebrow { display: none }
+    .stage-chip { min-height: 32px }
+}
+
+@media (min-width: 1200px) {
+    .stage-step { padding-inline: 2.5rem }
+}
+
+@media (max-width: 380px) {
+    .stage-title { font-size: 1.95rem }
+    .stage-media { height: clamp(260px, 40svh, 330px) }
+    .stage-scene, .stage-capture { flex-basis: min(80vw, 15rem) }
+}
+
+/* Sin movimiento: la escena sigue cambiando, sólo que sin transición. Nada de esto es decorativo,
+   así que nada de esto desaparece. */
+@media (prefers-reduced-motion: reduce) {
+    .stage-image, .stage-media { transition: none }
+    .stage-image, .stage-image.is-current, .stage-image.is-leaving { transform: none }
+    .stage-media.is-opening { transform: none }
+    .ahora-home { animation: none }
+}
+
+/* --- Contraste del armazón de papel ------------------------------------------------------------
+   El descubrimiento es papel en los DOS temas, así que los tokens que dependen del tema tienen que
+   quedarse en su escala clara aquí dentro: si no, un componente pintado en esta pantalla —un .tag,
+   una meta del pie— cree que tiene selva detrás y se pinta con la tinta equivocada. Antes existía
+   el problema simétrico, con el armazón oscuro forzando papel sobre tema claro. */
+body:has(.ahora-home) {
+    color-scheme: light;
+
+    --fondo: var(--uc-paper);
+    --superficie: var(--uc-paper);
+    --superficie-2: var(--uc-stone);
+    --superficie-3: #E7E5DB;
+    --superficie-inversa: var(--uc-jungle);
+    --texto-inverso: var(--uc-paper);
+
+    --texto: var(--uc-jungle);
+    --texto-suave: #55635E;
+    --texto-tenue: #66726D;
+    --borde: #E4E2D8;
+    --borde-fuerte: #CFCDC0;
+
+    --uc-green-ink: #0A6247;
+    --uc-green-wash: #E6F2ED;
+    --uc-amber-ink: #7A5310;
+    --uc-amber-wash: #FFF4DC;
+    --uc-live-ink: #C1341F;
+    --uc-live-wash: #FFE8E4;
+    --uc-green-solid: #0D7C57;
+    --uc-green-solid-hover: #0A6247;
+    --texto-sobre-verde: var(--uc-paper);
+
+    --peligro-700: #9B2C1B;
+    --peligro-100: #FFE8E4;
+    --exito-700: #0A6247;
+    --exito-100: #E6F2ED;
+    --aviso-700: #7A5310;
+    --aviso-100: #FFF4DC;
+    --info-700: #1B4F6B;
+    --info-100: #DEEAF0;
+    --velo: rgb(255 253 249 / 92%);
+    /* La familia de marca se declara en :root a partir de los tokens de arriba, así que redefinir
+       el token base aquí no la reescribe: ya quedó resuelta. Se fija entera o no se fija. */
+    --marca-900: var(--uc-jungle);
+    --marca-800: #0A6247;
+    --marca-700: #0D7C57;
+    --marca-600: var(--uc-green-lift);
+    --marca-100: #E6F2ED;
+    --marca-050: #E6F2ED;
+}
+/* El selector de tema del pie seguía vestido para el armazón oscuro. */
+body:has(.ahora-home) .tema-selector {
+    border-color: var(--linea-pie, #E4E2D8); background: var(--uc-stone);
+}
+body:has(.ahora-home) .tema-selector button { color: #55635E }
+body:has(.ahora-home) .tema-selector button.activo {
+    background: var(--uc-paper); color: var(--uc-jungle);
+}
+/* Los grises que el armazón oscuro había subido a la escala clara vuelven a la suya: ahora el pie
+   del descubrimiento es papel y esa tinta era invisible encima. */
+body:has(.ahora-home) .pie-tema-etiqueta,
+body:has(.ahora-home) footer .meta { color: #55635E }
+
+/* Un destino sin negocios se anuncia, no se apaga hasta desaparecer: con la tinta al 42% el
+   nombre se quedaba en 2.73:1 y hace falta pasar de 4.5. */
+.guided-place[aria-disabled="true"] small,
+.guided-place.proximamente,
+.guided-place.proximamente small,
+.guided-place small.proximamente { color: var(--tinta-suave) }
+
+/* El contexto del paso 2 comparte tinta con el paso 3: era papel sobre papel. */
+.guided-context .guided-chip {
+    border: 1px solid var(--linea); background: transparent; color: var(--tinta);
+}
+.guided-context .guided-chip:hover { border-color: var(--tinta); background: rgb(12 22 19 / 5%) }
+.guided-context .guided-back { color: var(--tinta-suave) }
+.guided-context .guided-back:hover { background: rgb(12 22 19 / 8%); color: var(--tinta) }
+.guided-context .guided-back:active { background: rgb(12 22 19 / 12%) }
+
+/* La captación dentro de la secuencia: su párrafo lo pintaba la regla del feed oscuro, que gana
+   por especificidad si aquí no se le responde con la misma. */
+.stage-capture p:not(.eyebrow) { margin: 0; color: var(--tinta-suave); font-size: var(--t-11) }
+.stage-capture h3 { color: var(--tinta) }
+
+/* El verde de marca da 4.28:1 sobre papel en texto pequeño. La cifra del contexto local se pinta
+   con tinta: lo que la distingue es el peso y su etiqueta, no el color. */
+.stage-rail strong { color: var(--tinta) }
