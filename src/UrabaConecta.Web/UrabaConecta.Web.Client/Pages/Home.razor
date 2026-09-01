@@ -230,7 +230,12 @@
                     @* La media focal ES la pantalla, no la ilustración de una tarjeta. Las dos
                        imágenes se turnan para que cambiar de negocio sea un fundido y la foto que
                        venías mirando siga ahí mientras entra la siguiente. *@
-                    <div class="stage-media-wrap" data-testid="feed-piece" data-categoria="@opening.CategorySlug">
+                    @* data-escena-vt: el negocio del que habla esta escena. Es la identidad que la ficha
+                       tiene que repetir para que el contenedor viaje entre las dos pantallas; sin
+                       coincidencia no hay transición, hay corte limpio. Va en la envoltura porque lo
+                       que se abre es la escena entera —fotografía y bloque accionable—, no la foto. *@
+                    <div class="stage-media-wrap" data-testid="feed-piece" data-categoria="@opening.CategorySlug"
+                         data-escena-vt="@SceneSlug(opening.Url)">
                         <div class="stage-media" data-stage-media tabindex="0" role="group"
                              aria-roledescription="Escenas de negocios"
                              aria-label="Desliza o usa las flechas para cambiar de negocio">
@@ -253,8 +258,12 @@
                                 @if (opening.IsSponsored) { <span class="sponsored-badge">Patrocinado</span> }
                                 @if (opening.IsPromotion) { <span class="promotion-badge">Hoy</span> }
                             </span>
-                            <a class="stage-open feed-business-link" data-stage-open href="@opening.Url"
-                               data-enhance-nav="false" aria-label="@opening.CtaLabel"></a>
+                            @* La fotografía ES el negocio, así que tocarla abre su ficha —igual que la
+                               portada de una tarjeta en Explorar—, y el botón de abajo conserva la acción
+                               operativa. Antes las dos cosas llevaban al mismo sitio y la escena no tenía
+                               ninguna manera de convertirse en el negocio que estaba enseñando. *@
+                            <a class="stage-open feed-business-link" data-stage-open href="@SceneProfile(opening.Url)"
+                               data-enhance-nav="false" aria-label="Ver el negocio"></a>
                         </div>
 
                         @* Lo accionable vive pegado a la media, no en una tarjeta aparte debajo. *@
@@ -317,6 +326,7 @@
                                        data-scene-name="@piece.Headline" data-scene-state="@piece.State"
                                        data-scene-line="@ContextLine(piece)" data-scene-cta="@piece.CtaLabel"
                                        data-scene-url="@piece.Url" data-scene-categoria="@piece.CategorySlug"
+                                       data-scene-vt="@SceneSlug(piece.Url)" data-scene-ficha="@SceneProfile(piece.Url)"
                                        data-scene-live="@(piece.IsLive ? "1" : null)"
                                        data-scene-sponsored="@(piece.IsSponsored ? "1" : null)"
                                        data-scene-promo="@(piece.IsPromotion ? "1" : null)">
@@ -479,6 +489,24 @@
     /// —DATA_QUALITY_GAP abierto—, así que mientras no se resuelva su línea dice la categoría y
     /// calla el lugar: no afirmar un dato dudoso cuesta menos que publicarlo mal.
     /// </summary>
+    /// <summary>
+    /// El negocio del que habla una escena. Es la identidad que Home y la ficha comparten para que
+    /// el contenedor viaje entre las dos: la escena puede llevar a la fila, a los horarios o a la
+    /// carta, pero el objeto que se está mirando siempre es el mismo negocio.
+    /// </summary>
+    private static string SceneSlug(string url)
+    {
+        const string raiz = "/negocios/";
+        if (!url.StartsWith(raiz, StringComparison.Ordinal)) return "";
+        var resto = url[raiz.Length..];
+        var corte = resto.IndexOfAny(['/', '?', '#']);
+        return corte < 0 ? resto : resto[..corte];
+    }
+
+    /// <summary>La ficha de ese negocio, que es a donde abre la fotografía de la escena.</summary>
+    private static string SceneProfile(string url)
+        => SceneSlug(url) is { Length: > 0 } slug ? $"/negocios/{slug}" : url;
+
     private static string ContextLine(FeedPiece piece)
     {
         if (!AwaitsMunicipality(piece)) return piece.Detail;

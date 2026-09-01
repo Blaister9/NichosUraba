@@ -13,7 +13,12 @@
    imagen, no lo que mide la sección entera. Sin la envoltura, el degradado se calculaba sobre todo
    el bloque —foto, nombre, descripción y botones— y acababa oscureciendo lo que ya estaba oscuro
    mientras el nombre caía sobre la parte clara de la foto, ilegible. *@
-<section class="ficha-hero" data-tono="@CategoryLook.Tone(Profile.Category.Slug)">
+@* data-escena-vt: el negocio del que habla este encabezado. Cuando quien llega venía mirando la
+   escena de este mismo negocio en Home, el contenedor viaja de una pantalla a la otra en vez de
+   cortarse; con cualquier otro origen no hay nada que continuar y la entrada es limpia. La vista
+   previa administrativa no participa: no es la ficha pública a la que se llega desde Home. *@
+<section class="ficha-hero" data-tono="@CategoryLook.Tone(Profile.Category.Slug)"
+         data-escena-vt="@(Profile.IsPreview ? null : Profile.Slug)">
     <div class="profile-media">
         @if (Cover is not null)
         {

@@ -11,6 +11,10 @@ const retired = ['urabaPreferredMunicipality', 'urabaAhoraFilter'];
 const EASE = 'cubic-bezier(.2,.8,.2,1)';
 const quiet = () => matchMedia('(prefers-reduced-motion: reduce)').matches
   || Boolean(navigator.connection?.saveData);
+/// Si el navegador sabe animar entre dos documentos, la continuidad al abrir un negocio la resuelve
+/// él con las dos pantallas reales —lo dice shared-scene.js y lo describe el CSS—, y esta pantalla
+/// no tiene que hacer nada más que dejarla ir.
+const continuous = () => 'onpageswap' in window;
 
 export function initialize() {
   if (!globalThis.__urabaAhoraScrollBound) {
@@ -64,19 +68,29 @@ function onDocumentClick(event) {
     }));
   } catch { /* La navegación sigue aunque el almacenamiento esté bloqueado. */ }
 
-  document.querySelector('.ahora-home')?.classList.add('is-leaving');
-  // La foto que se venía mirando crece hacia la ficha en vez de cortarse: la continuidad es de la
-  // media, así que es la media la que se lleva el gesto.
-  const media = step?.querySelector('[data-stage-media]');
-  media?.classList.add('is-opening');
-
+  // LA SALIDA. Abrir en otra pestaña, con teclas, o hacia fuera del sitio: eso es del navegador y
+  // aquí no se toca nada. Sin movimiento tampoco: se navega como siempre y no se adorna la salida.
   const plain = event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey
     && !event.altKey && !link.target && link.origin === location.origin;
-  if (plain && !quiet()) {
+  if (!plain || quiet()) return;
+
+  const destination = link.href;
+  if (continuous()) {
+    // Se fuerza la navegación de documento, que es la que este enlace ya hacía. No es un retraso
+    // —se va en el mismo gesto— sino la condición del mecanismo: el enrutador interactivo de Blazor
+    // cambiaría la pantalla sin cambiar de documento, y con un solo documento el navegador no tiene
+    // dos pantallas que animar. Con dos, la continuidad la coreografía él con las reales.
     event.preventDefault();
-    const destination = link.href;
-    setTimeout(() => location.assign(destination), 180);
+    location.assign(destination);
+    return;
   }
+
+  // Sin esa API queda el mecanismo viejo, y sólo aquí: su trabajo es que el toque tenga respuesta
+  // mientras el documento nuevo llega, y por eso sigue siendo una escala con temporizador.
+  document.querySelector('.ahora-home')?.classList.add('is-leaving');
+  step?.querySelector('[data-stage-media]')?.classList.add('is-opening');
+  event.preventDefault();
+  setTimeout(() => location.assign(destination), 180);
 }
 
 const sceneNodes = step => [...step.querySelectorAll('[data-stage-scene]')];
@@ -204,11 +218,9 @@ function apply(step, index, { animate }) {
 
   const action = step.querySelector('[data-stage-action]');
   if (action && data.sceneUrl) action.setAttribute('href', data.sceneUrl);
+  // La fotografía abre la ficha del negocio; el botón se queda con la acción operativa.
   const open = step.querySelector('[data-stage-open]');
-  if (open && data.sceneUrl) {
-    open.setAttribute('href', data.sceneUrl);
-    open.setAttribute('aria-label', data.sceneCta || '');
-  }
+  if (open && data.sceneFicha) open.setAttribute('href', data.sceneFicha);
 
   const badges = step.querySelector('[data-stage-badges]');
   if (badges) badges.innerHTML = badgeMarkup(data);
@@ -222,6 +234,10 @@ function apply(step, index, { animate }) {
 
   const wrap = step.querySelector('[data-testid="feed-piece"]');
   if (wrap && data.sceneCategoria) wrap.dataset.categoria = data.sceneCategoria;
+  // La identidad viaja con la escena: cambiar de negocio aquí cambia con quién se comparte el
+  // contenedor al abrirlo. Si dejara de actualizarse, abrir el tercer negocio intentaría continuar
+  // con la ficha del primero.
+  if (wrap && data.sceneVt) wrap.dataset.escenaVt = data.sceneVt;
 
   // Cambiar de negocio revela tres cosas: quién es, en qué estado está y qué puedes hacer.
   if (animate) reveal([
@@ -320,7 +336,11 @@ function queueScrollRestore() {
     };
     restore();
   };
-  requestAnimationFrame(waitForFeed);
+  // Una tarea, no un fotograma. Recuperar la escena sólo necesita que el feed esté en el DOM, y
+  // colgarlo del pintado ataba una mecánica de datos a que el navegador estuviera dibujando: con el
+  // compositor detenido —una pestaña que no se dibuja, un navegador sin cabeza— la escena que se
+  // estaba mirando no volvía nunca.
+  setTimeout(waitForFeed, 0);
 }
 
 /// Volver de un negocio devuelve la escena que se estaba mirando, no la primera: el contexto es

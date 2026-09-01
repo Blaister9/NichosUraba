@@ -121,6 +121,17 @@
     --mov-panel: .22s;
     --curva: cubic-bezier(.2, .8, .2, 1);
 
+    /* LA ESCENA QUE SE ABRE. Duraciones propias porque esto no es un microfeedback: es un
+       contenedor que cambia de tamaño y de recorte mientras cruza de una pantalla a otra, y con
+       las duraciones cortas de arriba el recorrido se lee como un salto. El fundido termina antes
+       que la caja: el contenido de destino se establece mientras la geometría todavía viaja. */
+    --mov-escena: .42s;
+    --mov-escena-fundido: .22s;
+    --curva-escena: cubic-bezier(.2, .8, .2, 1);
+    /* El radio con el que viaja el contenedor compartido. Lo declaran los dos extremos desde aquí
+       para que la diferencia de esquinas entre Home y la ficha sea un dato y no un número suelto. */
+    --radio-escena: var(--radio-0);
+
     font-family: var(--fuente-ui);
     line-height: 1.5;
     font-synthesis: none;
@@ -3480,6 +3491,7 @@ body:has(.ahora-home) footer strong { color: var(--uc-jungle) }
 /* ESCRITORIO — la composición aprobada: la editorial a la izquierda, la escena a la derecha y el
    contexto accionable montado sobre la fotografía. */
 @media (min-width: 900px) {
+    :root { --radio-escena: var(--radio-lg) }
     .stage-step {
         align-items: start; padding: 1.2rem 1.5rem 2rem;
         grid-template-columns: minmax(17rem, .72fr) minmax(28rem, 1.28fr);
@@ -3491,7 +3503,9 @@ body:has(.ahora-home) footer strong { color: var(--uc-jungle) }
     .stage-switcher { flex-wrap: wrap; margin-top: .5rem; overflow: visible }
     .stage-body { gap: 1rem; grid-column: 2; grid-row: 1 / span 2 }
     .stage-media-wrap { position: relative }
-    .stage-media { height: min(66svh, 620px); border-radius: var(--radio-lg) var(--radio-lg) 0 0 }
+    /* El radio sale del token de la escena compartida: es una de las propiedades que cambia al
+       abrir el negocio, así que se declara donde la lee también la transición. */
+    .stage-media { height: min(66svh, 620px); border-radius: var(--radio-escena) var(--radio-escena) 0 0 }
     .stage-context {
         position: absolute; right: 1rem; bottom: 1rem; left: 1rem; align-items: center; gap: 1rem;
         padding: 1rem; border-radius: var(--radio); background: rgb(12 22 19 / 93%);
@@ -3616,3 +3630,74 @@ body:has(.ahora-home) footer .meta { color: #55635E }
 /* El verde de marca da 4.28:1 sobre papel en texto pequeño. La cifra del contexto local se pinta
    con tinta: lo que la distingue es el peso y su etiqueta, no el color. */
 .stage-rail strong { color: var(--tinta) }
+
+/* ==============================================================================================
+   J-MOTION-03A — LA ESCENA SE ABRE
+
+   Abrir un negocio desde Home no era una transición: era una escala de 1.025 y una espera de 180 ms
+   antes de navegar. Un adorno con temporizador propio, desconectado de la carga real —que en datos
+   móviles son dos segundos— y que terminaba antes de que la pantalla nueva existiera.
+
+   Lo que cambia aquí no es "una imagen": es el MISMO objeto. La escena de Home —la fotografía, su
+   velo, su marca y el bloque oscuro accionable pegado debajo— y el encabezado de la ficha son la
+   misma cosa vista en dos superficies. Así que viaja el CONTENEDOR entero, con su recorte y su
+   radio, y no una foto suelta. El navegador lo resuelve con View Transitions entre documentos: la
+   navegación sigue siendo una navegación completa, sin SPA falsa y sin retrasos inventados.
+
+   Quién participa lo deciden shared-scene.js y el atributo data-escena-vt, que lleva el slug del
+   negocio: sin la misma identidad a los dos lados no hay transición, hay corte limpio.
+   ============================================================================================== */
+/* La declaración que enciende todo esto —@view-transition— NO vive aquí: la escribe App.razor y
+   sólo en las dos pantallas que participan, Home y la ficha. Es una declaración de documento, no de
+   componente, y aplicarla a todo el sitio haría que cada navegación del armazón —el panel, la carta,
+   la fila— entrara en una transición que no tiene nada que continuar. Aquí queda cómo viaja. */
+
+/* EL NOMBRE DEL OBJETO COMPARTIDO. Un único nombre, constante, y un único nodo por documento que
+   pueda llevarlo: el que dice de qué negocio habla. Encenderlo desde una marca en <html> —que pone
+   shared-scene.js, síncrono y antes del primer pintado— es lo que hace imposible que dos nodos se
+   peleen por el mismo nombre o que quede uno vivo cuando ya no hay nada que continuar. Fuera de ese
+   momento el nombre no existe, y con él no existen el contexto de apilamiento ni el bloque
+   contenedor que impondría a un elemento que el resto del tiempo no los necesita. */
+html[data-escena="continua"] [data-escena-vt] { view-transition-name: uc-escena }
+
+/* EL FONDO NO ES LA PROTAGONISTA. Home es papel —body:has(.ahora-home) reescribe la paleta entera—
+   y la ficha es selva. El fundido que el navegador hace por omisión entre las dos raíces se vería
+   como un fogonazo de cambio de tema tapando justamente lo que hay que mirar. Sin animación, la
+   raíz nueva —que se pinta encima de la vieja— sustituye a la anterior en el primer fotograma y
+   toda la atención queda en la geometría que viaja.
+
+   mix-blend-mode: normal no es decorativo: el navegador cruza las dos raíces en plus-lighter, y dos
+   capas opacas sumadas sin animación que las desvanezca dan un blanco lavado durante la
+   transición. */
+::view-transition-old(root),
+::view-transition-new(root) { animation: none; mix-blend-mode: normal }
+
+/* EL CONTENEDOR COMPARTIDO. La caja tarda lo que dura la escena; el contenido se cruza en la mitad
+   del tiempo, así que el destino se establece mientras la geometría todavía está llegando. Al
+   revés —fundido largo sobre caja corta— se ve como una imagen que aparece encima de otra. */
+::view-transition-group(uc-escena) {
+    animation-duration: var(--mov-escena); animation-timing-function: var(--curva-escena);
+}
+::view-transition-old(uc-escena) {
+    animation-duration: var(--mov-escena-fundido); animation-timing-function: var(--curva-escena);
+}
+::view-transition-new(uc-escena) {
+    animation-duration: var(--mov-escena); animation-timing-function: var(--curva-escena);
+}
+/* EL RECORTE VIAJA CON LA CAJA. Por omisión las dos instantáneas se pintan al 100% de ancho y con
+   su alto natural: como la escena de Home y el encabezado de la ficha no tienen la misma
+   proporción, eso aplasta la imagen a mitad de camino. Con cover anclado arriba, lo que se
+   interpola es el ENCUADRE —el contenedor enseña más o menos de la misma escena— que es
+   exactamente lo que hace un container transform. */
+::view-transition-old(uc-escena),
+::view-transition-new(uc-escena) {
+    width: 100%; height: 100%; object-fit: cover; object-position: top center;
+}
+
+/* Sin movimiento no hay transformación: se llega a la ficha directamente. shared-scene.js ya
+   descarta la transición antes de que empiece; esto responde por el caso en que el guion no corra. */
+@media (prefers-reduced-motion: reduce) {
+    ::view-transition-group(root), ::view-transition-old(root), ::view-transition-new(root),
+    ::view-transition-group(uc-escena), ::view-transition-old(uc-escena),
+    ::view-transition-new(uc-escena) { animation: none !important }
+}

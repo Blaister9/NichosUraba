@@ -18,7 +18,20 @@
     @* Síncrono y en el <head> a propósito: si el tema se aplicara después de la primera
        pintura, cada carga en oscuro empezaría con un fogonazo blanco. *@
     <script src="@Assets["theme.js"]"></script>
+    @* La continuidad entre la escena de Home y la ficha del negocio se decide mientras se lee este
+       <head>: el documento que llega se captura en su primer pintado, así que cualquier decisión
+       posterior llega tarde a su propia captura. Síncrono y aquí, por la misma razón que el tema. *@
+    <script src="@Assets["shared-scene.js"]"></script>
     <ResourcePreloader />
+    @* LA TRANSICIÓN ENTRE DOCUMENTOS SE DECLARA AQUÍ Y SÓLO DONDE EXISTE. Los dos documentos tienen
+       que declararla para que el navegador anime entre ellos, y son exactamente dos: la escena de
+       Home y la ficha del negocio. Declararla para todo el sitio metería en una transición a cada
+       navegación del armazón —la fila, la carta, el panel—, que no tienen nada que continuar y a
+       cambio pagarían la espera de montarla. Cómo viaja está en app.css. *@
+    @if (EsPantallaDeEscena)
+    {
+        <style>@@view-transition { navigation: auto }</style>
+    }
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["UrabaConecta.Web.styles.css"]" />
     <HeadOutlet @rendermode="PageRenderMode" />
@@ -57,6 +70,23 @@
     // inmediatamente después de conectar el circuito y evita descartar entradas.
     private IComponentRenderMode? PageRenderMode =>
         HttpContext.AcceptsInteractiveRouting() ? InteractiveServer : null;
+
+    /// <summary>
+    /// Las dos pantallas entre las que un negocio es el mismo objeto: la escena de Home y su ficha.
+    /// Las pantallas operativas del negocio —/negocios/{slug}/turnos, /citas, /pedidos— no enseñan su
+    /// encabezado, así que no hay contenedor que continuar y no declaran nada.
+    /// </summary>
+    private bool EsPantallaDeEscena
+    {
+        get
+        {
+            var ruta = HttpContext.Request.Path.Value ?? "/";
+            if (ruta is "" or "/") return true;
+            if (!ruta.StartsWith("/negocios/", StringComparison.Ordinal)) return false;
+            var negocio = ruta["/negocios/".Length..].TrimEnd('/');
+            return negocio.Length > 0 && !negocio.Contains('/');
+        }
+    }
 
     /// <summary>Los ambientes que no son la operación real de los negocios.</summary>
     private bool EsPiloto => Environment.IsEnvironment("Demo") || Environment.IsDevelopment();
