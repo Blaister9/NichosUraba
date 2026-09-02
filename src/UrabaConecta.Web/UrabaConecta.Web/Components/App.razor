@@ -49,10 +49,13 @@
     <Routes @rendermode="PageRenderMode" />
     <ReconnectModal />
     <script src="@Assets["_framework/blazor.web.js"]"></script>
-    <script src="/site-motion.js" defer></script>
-    <script src="/pwa.js" defer></script>
-    <script src="/push-notifications.js" defer></script>
-    <script src="/order-recovery.js" defer></script>
+    @* Con huella en la ruta. Sin ella el navegador se queda con la copia vieja hasta cuatro
+       horas mientras la hoja de estilos —que sí la lleva— ya es la nueva: una pantalla que
+       mezcla dos despliegues. *@
+    <script src="@Assets["site-motion.js"]" defer></script>
+    <script src="@Assets["pwa.js"]" defer></script>
+    <script src="@Assets["push-notifications.js"]" defer></script>
+    <script src="@Assets["order-recovery.js"]" defer></script>
     <script src="@Assets["Components/Account/Shared/PasskeySubmit.razor.js"]" type="module"></script>
 </body>
 

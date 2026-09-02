@@ -87,6 +87,10 @@ function onScroll() {
 function onResize() {
   ultimoDesplazamiento = -1;
   document.querySelectorAll('.stage-step[data-capitulos="vivo"]').forEach(step => {
+    // Cambiar de viewport sí rehace la geometría de verdad: el estado comprometido deja de tener
+    // sentido y se suelta una vez, para que la primera lectura nueva pueda mandar.
+    step.__actLock = null;
+    step.__chapterLock = null;
     measureCamera(step);
     medirEscena(step);
     updateMotionSection(step);
@@ -114,11 +118,36 @@ function updateMotionSection(step) {
     : firstTop > vh * .58 ? 'heading'
     : endTop > vh * .64 ? 'chapters'
     : 'end';
-  const changed = step.dataset.motionSection !== section;
-  step.dataset.motionSection = section;
+  const current = step.dataset.motionSection;
+  if (section === current) return;
+  if (current !== undefined && !releases(step.__actLock, current, section, ACTS)) return;
+  commitAct(step, section);
   // Cambiar de hero a capítulo cambia la altura intrínseca de la cámara. Una segunda medición en el
   // siguiente frame toma esa geometría ya asentada y alinea focal y texto sin un salto visible.
-  if (changed) requestAnimationFrame(() => updateMotionSection(step));
+  requestAnimationFrame(() => updateMotionSection(step));
+}
+
+/// LA PROPIEDAD DEL ESTADO. Entrar en un acto cambia la altura de la cámara —el contexto se retira,
+/// la media se recorta y la cabecera de escenas pasa a flotar—, así que la misma geometría que
+/// decide el acto se mueve al aplicarlo. Sin dueño, eso es un bucle: junto al handoff el umbral se
+/// vuelve a cruzar solo, un cambio por fotograma, sin que nadie haya tocado la página.
+///
+/// La regla es una sola y sirve para el acto y para el capítulo: un estado comprometido no lo
+/// deshace la geometría, lo deshace una intención. Avanzar exige haber bajado; volver exige haber
+/// subido. Con el recorrido quieto no hay desplazamiento y por tanto no hay cambio posible.
+const ACTS = ['hero', 'heading', 'chapters', 'end'];
+const RELEASE = 24;
+
+function releases(lock, current, candidate, order) {
+  if (!lock || lock.state !== current) return true;
+  const recorrido = window.scrollY - lock.y;
+  const avanza = order ? order.indexOf(candidate) > order.indexOf(current) : candidate > current;
+  return avanza ? recorrido >= RELEASE : -recorrido >= RELEASE;
+}
+
+function commitAct(step, section) {
+  step.dataset.motionSection = section;
+  step.__actLock = { y: window.scrollY, state: section };
 }
 
 /// La cámara mantiene la proporción aprobada dentro de cada acto. Su alto se mide al entrar o cambiar
@@ -158,11 +187,18 @@ function readChapters(step) {
     if (score > mejor) { mejor = score; elegido = index; }
   });
 
-  const caja = chapters[elegido].getBoundingClientRect();
+  // El capítulo que manda cambia el alto del panel y la oferta que se lee, así que la puntuación
+  // que lo eligió también se mueve al aplicarlo. Se comprometa lo que se comprometa, deshacerlo
+  // exige recorrido en sentido contrario y no una variación geométrica.
+  const vigente = Number(step.dataset.activeChapter ?? -1);
+  const indice = vigente >= 0 && vigente < chapters.length && elegido !== vigente
+    && !releases(step.__chapterLock, vigente, elegido) ? vigente : elegido;
+
+  const caja = chapters[indice].getBoundingClientRect();
   const linea = bandTop;
   const avance = Math.max(0, Math.min(1, (linea - caja.top) / Math.max(1, caja.height)));
   const fase = avance < 0.14 ? 'a' : avance < 0.52 ? 'b' : 'c';
-  commitState(step, elegido, fase, avance, { animate: true });
+  commitState(step, indice, fase, avance, { animate: true });
 }
 
 /// El único punto que publica el estado y deriva la composición. Los atributos son también el
@@ -184,6 +220,7 @@ function commitState(step, chapter, phase, progress, { animate }) {
   // relevo ocurre por crossfade, no mediante un recorte o una compactación inventados.
   const activo = scenes.findIndex(x => x.classList.contains('is-active'));
   if (chapter !== activo) {
+    step.__chapterLock = { y: window.scrollY, state: chapter };
     apply(step, chapter, { animate });
     // El capítulo nuevo trae otra altura de panel y otra oferta: la geometría de la que cuelga la
     // composición se vuelve a medir aquí y no en cada fotograma.

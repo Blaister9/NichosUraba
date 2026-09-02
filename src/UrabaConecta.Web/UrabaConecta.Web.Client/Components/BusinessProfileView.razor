@@ -1,4 +1,4 @@
-@implements IAsyncDisposable
+﻿@implements IAsyncDisposable
 @inject IJSRuntime JS
 @inject NavigationManager Nav
 @inject IUrabaConectaApi Api
@@ -313,7 +313,7 @@
         try
         {
             modulo ??= await JS.InvokeAsync<IJSObjectReference>("import",
-                "./Components/BusinessProfileView.razor.js");
+                $"./{Assets["Components/BusinessProfileView.razor.js"]}");
             var resultado = await modulo.InvokeAsync<string>("compartir",
                 Profile.Name, Presentacion, Nav.Uri);
             avisoCompartir = resultado switch

@@ -1,4 +1,4 @@
-using Microsoft.Playwright;
+﻿using Microsoft.Playwright;
 
 namespace UrabaConecta.EndToEndTests;
 
@@ -250,6 +250,104 @@ public sealed class SceneChoreographyJourneyTests(BrowserFixture fixture)
         Assert.True(released!.Y < camara.Y - 80, $"La cámara no se liberó: {camara.Y} → {released.Y}");
     }
 
+    /// <summary>
+    /// LA FRONTERA. Entrar en el cierre cambia la altura de la cámara —el contexto vuelve, la media
+    /// se estira, la cabecera de escenas deja de flotar—, así que la misma geometría que decide el
+    /// acto se mueve al aplicarlo. Sin dueño del estado eso se realimenta: junto al handoff el
+    /// umbral se vuelve a cruzar solo, un cambio por fotograma, con la página quieta.
+    ///
+    /// Aquí se busca dónde está de verdad la frontera —no donde la aritmética ingenua la pondría,
+    /// porque el acto nuevo desplaza su propio umbral— y se recorre píxel a píxel sosteniendo cada
+    /// parada. Lo que se afirma es que quieto no pasa nada, que cruzar compromete una sola vez, y
+    /// que volver sigue siendo posible pero pide recorrido real en sentido contrario.
+    /// </summary>
+    [Theory]
+    [InlineData(1440, 1000)]
+    [InlineData(390, 844)]
+    public async Task The_handoff_threshold_holds_still_when_the_journey_does(int width, int height)
+    {
+        await using var context = await Canvas(width, height);
+        var page = await context.NewPageAsync();
+        await page.GotoAsync(fixture.BaseUrl + DiscoveryUrl);
+        await WaitForStage(page);
+        await Recorder(page);
+
+        var capitulosIniciales = await page.Locator("[data-stage-chapter]").CountAsync();
+
+        // Dónde cae la frontera de verdad: se baja hasta que el cierre toma el mando.
+        var partida = await page.EvaluateAsync<int>("""
+            () => { const s = document.querySelector('.stage-step');
+                    return Math.round(scrollY + s.querySelector('.stage-end').getBoundingClientRect().top
+                                      - innerHeight * .64) - 60; }
+            """);
+        var frontera = -1;
+        for (var y = partida; y <= partida + 900 && frontera < 0; y += 10)
+        {
+            await page.EvaluateAsync("v => window.scrollTo(0, v)", y);
+            await OneFrame(page);
+            await page.WaitForTimeoutAsync(60);
+            if (await Section(page) == "end") frontera = y;
+        }
+        Assert.True(frontera > 0, $"El cierre nunca tomó el mando en {width}×{height}.");
+
+        // T-10 … T+10 alrededor de esa frontera: cada parada se sostiene y se cuenta lo que ocurre
+        // SIN recorrido. Cero es la única respuesta aceptable.
+        foreach (var paso in new[] { -10, -5, -2, -1, 0, 1, 2, 5, 10 })
+        {
+            await page.EvaluateAsync("v => window.scrollTo(0, v)", frontera + paso);
+            await OneFrame(page);
+            await page.WaitForTimeoutAsync(140);
+            await page.EvaluateAsync("() => { window.__frontera.length = 0; }");
+            await page.WaitForTimeoutAsync(420);
+            var quieto = await page.EvaluateAsync<string[]>("() => window.__frontera.slice()");
+            Assert.True(quieto.Length == 0,
+                $"La escena se movió sola en T{paso:+#;-#;+0} ({width}×{height}, y={frontera + paso}): "
+                + $"{quieto.Length} transiciones → {string.Join(" ", quieto.Take(8))}");
+        }
+
+        // Cruzar hacia abajo compromete el cierre una sola vez, y seguir bajando no lo deshace.
+        await page.EvaluateAsync("v => window.scrollTo(0, v)", frontera - 200);
+        await OneFrame(page);
+        await page.WaitForTimeoutAsync(260);
+        // El alto del documento cambia entre actos a propósito —la cámara del cierre lleva contexto
+        // y la de los capítulos no—, así que la referencia se toma dentro del acto que se comparará.
+        Assert.Equal("chapters", await Section(page));
+        var altoEnCapitulos = await page.EvaluateAsync<int>("() => document.documentElement.scrollHeight");
+        await page.EvaluateAsync("() => { window.__frontera.length = 0; }");
+        for (var y = frontera - 200; y <= frontera + 300; y += 10)
+        {
+            await page.EvaluateAsync("v => window.scrollTo(0, v)", y);
+            await OneFrame(page);
+            await page.WaitForTimeoutAsync(45);
+        }
+        await page.WaitForTimeoutAsync(320);
+        var bajada = await page.EvaluateAsync<string[]>("() => window.__frontera.slice()");
+        Assert.Equal("end", await Section(page));
+        Assert.True(bajada.Count(x => x.StartsWith("end|", StringComparison.Ordinal)) == 1,
+            $"El cierre se comprometió {bajada.Count(x => x.StartsWith("end|", StringComparison.Ordinal))} veces "
+            + $"en {width}×{height}: {string.Join(" ", bajada.Take(12))}");
+
+        // Y volver sigue siendo posible: no lo consigue una variación geométrica, lo consigue subir.
+        await page.EvaluateAsync("() => { window.__frontera.length = 0; }");
+        for (var y = frontera + 300; y >= frontera - 400; y -= 10)
+        {
+            await page.EvaluateAsync("v => window.scrollTo(0, v)", y);
+            await OneFrame(page);
+            await page.WaitForTimeoutAsync(45);
+        }
+        await page.WaitForTimeoutAsync(320);
+        var subida = await page.EvaluateAsync<string[]>("() => window.__frontera.slice()");
+        Assert.Equal("chapters", await Section(page));
+        Assert.True(subida.Count(x => x.StartsWith("chapters|", StringComparison.Ordinal)) == 1,
+            $"La vuelta alternó en vez de comprometerse una vez en {width}×{height}: "
+            + $"{string.Join(" ", subida.Take(12))}");
+
+        // Y nada de esto reconstruyó la escena.
+        Assert.Equal(capitulosIniciales, await page.Locator("[data-stage-chapter]").CountAsync());
+        Assert.Equal(altoEnCapitulos, await page.EvaluateAsync<int>("() => document.documentElement.scrollHeight"));
+        Assert.False(await HasHorizontalOverflow(page));
+    }
+
     /// <summary>En teléfono la cámara se compacta, pero la acción y el capítulo siguen siendo útiles.</summary>
     [Theory]
     [InlineData(390, 844)]
@@ -324,6 +422,29 @@ public sealed class SceneChoreographyJourneyTests(BrowserFixture fixture)
     private static async Task<string> Position(IPage page) =>
         await page.EvaluateAsync<string>(
             "() => getComputedStyle(document.querySelector('[data-stage-camera]')).position");
+
+    /// <summary>
+    /// Anota los cambios REALES de acto y capítulo. La escena reescribe sus atributos en cada
+    /// desplazamiento aunque el valor no cambie, y cada escritura es una mutación: contar mutaciones
+    /// mediría el pintado, no el estado. Lo que se mide aquí es cuándo el estado pasa a ser otro.
+    /// </summary>
+    private static Task Recorder(IPage page) => page.EvaluateAsync("""
+        () => {
+            window.__frontera = [];
+            const paso = document.querySelector('.stage-step');
+            let ultimo = paso.dataset.motionSection + '|' + paso.dataset.activeChapter;
+            new MutationObserver(() => {
+                const ahora = paso.dataset.motionSection + '|' + paso.dataset.activeChapter;
+                if (ahora === ultimo) return;
+                ultimo = ahora;
+                window.__frontera.push(ahora);
+            }).observe(paso, { attributes: true,
+                attributeFilter: ['data-motion-section', 'data-active-chapter'] });
+        }
+        """);
+
+    private static async Task<string> Section(IPage page) =>
+        await page.Locator(".stage-step").GetAttributeAsync("data-motion-section") ?? "";
 
     private static Task OneFrame(IPage page) => page.EvaluateAsync("() => new Promise(requestAnimationFrame)");
 

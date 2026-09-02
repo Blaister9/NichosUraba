@@ -1,4 +1,4 @@
-@page "/"
+﻿@page "/"
 @rendermode InteractiveServer
 @implements IAsyncDisposable
 @using System.Globalization
@@ -836,7 +836,11 @@
         {
             try
             {
-                module = await JS.InvokeAsync<IJSObjectReference>("import", "./Pages/Home.razor.js");
+                // Con huella: sin ella el navegador se queda hasta cuatro horas con el módulo viejo mientras
+                // la hoja de estilos —que sí la lleva— ya es la nueva. El "./" es lo que Blazor
+                // resuelve contra el documento; la clave del catálogo va sin él.
+                module = await JS.InvokeAsync<IJSObjectReference>("import",
+                    $"./{Assets["Pages/Home.razor.js"]}");
                 // Deja enganchada la restauración de scroll al volver de una ficha. Ya no lee ninguna
                 // preferencia: eso lo resolvió el servidor antes de pintar.
                 await module.InvokeVoidAsync("initialize");
