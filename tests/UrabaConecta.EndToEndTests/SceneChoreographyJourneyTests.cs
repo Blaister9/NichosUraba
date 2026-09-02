@@ -118,6 +118,19 @@ public sealed class SceneChoreographyJourneyTests(BrowserFixture fixture)
         await Expect(page.Locator("[data-stage-chapter='1']")).ToHaveClassAsync(new System.Text.RegularExpressions.Regex("is-active"));
         await Expect(page.Locator("[data-stage-counter]")).ToHaveTextAsync("2 / 4");
         await Expect(page.Locator(".stage-step")).ToHaveAttributeAsync("data-active-chapter", "1");
+        await Expect(page.Locator(".stage-step")).ToHaveAttributeAsync("data-last-data-impulse", "1");
+
+        var impulso = await page.EvaluateAsync<string>("""
+            () => document.getAnimations()
+                .filter(animation => animation.id === 'chapter-data-impulse')
+                .map(animation => {
+                    const timing = animation.effect.getTiming();
+                    return `${timing.duration}|${timing.easing}`;
+                }).sort().join(',')
+            """);
+        Assert.Contains("320|cubic-bezier(0.2, 0.9, 0.3, 1)", impulso);
+        Assert.Contains("340|cubic-bezier(0.2, 0.9, 0.3, 1)", impulso);
+        Assert.Contains("360|cubic-bezier(0.2, 0.9, 0.3, 1)", impulso);
 
         var coinciden = await page.EvaluateAsync<string>("""
             () => {
@@ -185,6 +198,9 @@ public sealed class SceneChoreographyJourneyTests(BrowserFixture fixture)
         // Y la secuencia sigue avanzando: el capítulo siguiente sigue siendo alcanzable.
         await GoInto(page, 1, 0.25);
         await Expect(page.Locator("[data-stage-counter]")).ToHaveTextAsync("2 / 4");
+        Assert.Null(await page.Locator(".stage-step").GetAttributeAsync("data-last-data-impulse"));
+        Assert.Equal(0, await page.EvaluateAsync<int>(
+            "() => document.getAnimations().filter(x => x.id === 'chapter-data-impulse').length"));
     }
 
     /// <summary>
@@ -209,6 +225,21 @@ public sealed class SceneChoreographyJourneyTests(BrowserFixture fixture)
         var camara = await page.Locator("[data-stage-camera]").BoundingBoxAsync();
         Assert.NotNull(camara);
         Assert.True(camara!.Y < 160, $"La cámara no se quedó sosteniendo la escena: {camara.Y}");
+
+        // En escritorio el rail es texto dentro de la columna, no la tarjeta pegajosa del diseño
+        // productizado. Si el panel vuelve a tomar aquel desplazamiento, el capítulo se queda vacío
+        // y lo que se lee aparece cientos de píxeles más abajo que el capítulo al que pertenece.
+        var encajados = await page.EvaluateAsync<string[]>("""
+            () => [...document.querySelectorAll('[data-stage-chapter]')]
+                .filter(capitulo => {
+                    const caja = capitulo.getBoundingClientRect();
+                    const panel = capitulo.querySelector('.chapter-panel').getBoundingClientRect();
+                    return panel.top < caja.top - 1 || panel.bottom > caja.bottom + 1;
+                })
+                .map(capitulo => capitulo.dataset.stageChapter)
+            """);
+        Assert.True(encajados.Length == 0,
+            $"El panel se salió de su capítulo en: {string.Join(", ", encajados)}");
 
         // Al acabar el track la cámara se libera estructuralmente: no queda fijada sobre herramientas
         // ni pie, y no hay ningún scrollTo continuo intentando retenerla.

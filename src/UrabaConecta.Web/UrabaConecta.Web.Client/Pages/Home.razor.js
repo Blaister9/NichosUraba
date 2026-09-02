@@ -495,6 +495,47 @@ function apply(step, index, { animate }) {
     step.querySelector('.context-facts'),
     step.querySelector('[data-stage-action]')
   ]);
+  if (animate) impulseChapterData(step, index);
+}
+
+// Un cambio de capítulo actualiza datos reales, así que esos datos reciben un único impulso corto.
+// No hay loop ni reloj independiente: el mismo cambio de estado que reemplaza imagen/identidad
+// dispara mark, estado, valor focal y contador; con reduced motion/save-data no se dispara nada.
+function impulseChapterData(step, index) {
+  if (quiet() || step.dataset.motionSection !== 'chapters') return;
+  const chapter = chapterNodes(step)[index];
+  if (!chapter) return;
+
+  const targets = [
+    [chapter.querySelector('.chapter-mark'), 320, 0],
+    [chapter.querySelector('.chapter-state'), 340, 32],
+    [chapter.querySelector('.chapter-offer.is-focus .offer-meta')
+      || chapter.querySelector('.chapter-offer .offer-meta'), 360, 58],
+    [step.querySelector('[data-stage-counter]'), 320, 0]
+  ].filter(([node]) => Boolean(node));
+  if (targets.length === 0) return;
+
+  const token = (Number(step.dataset.dataImpulseToken || 0) + 1) % 1024;
+  step.dataset.dataImpulseToken = String(token);
+  step.dataset.stateImpulse = 'true';
+  step.dataset.lastDataImpulse = String(index);
+  const animations = targets.map(([node, duration, delay]) => {
+    node.getAnimations().filter(animation => animation.id === 'chapter-data-impulse')
+      .forEach(animation => animation.cancel());
+    const animation = node.animate([
+      { opacity: .52, transform: 'translate3d(0, 4px, 0)' },
+      { offset: .64, opacity: 1, transform: 'translate3d(0, -1px, 0)' },
+      { opacity: 1, transform: 'none' }
+    ], {
+      duration, delay, easing: 'cubic-bezier(.2,.9,.3,1)', fill: 'both'
+    });
+    animation.id = 'chapter-data-impulse';
+    return animation;
+  });
+
+  Promise.allSettled(animations.map(animation => animation.finished)).then(() => {
+    if (step.dataset.dataImpulseToken === String(token)) delete step.dataset.stateImpulse;
+  });
 }
 
 function badgeMarkup(data) {

@@ -4223,11 +4223,23 @@ body:has(.stage-step) footer strong, body:has(.stage-step) footer a { color: #ae
     .stage-chapters-heading { padding: 8rem 0 12rem }
     .stage-chapters-heading h2 { font-size: clamp(4rem, 7.5vw, 8rem) }
     .stage-chapter {
-        width: 34.25%; min-height: 72svh; margin-left: 65.75%; align-content: center;
+        width: 34.25%; min-height: 72svh; margin-left: 62%; align-content: center;
         padding: 2.2rem .25rem 2.5rem;
     }
     .stage-chapters-heading + .stage-chapter { margin-top: 0 }
-    .chapter-panel { align-content: center }
+    .chapter-panel {
+        /* El eje necesita un contexto de posicionamiento, pero `relative` reactivaría el `top`
+           pegajoso del panel productizado: aquí el panel es texto en la columna, no una tarjeta. */
+        position: relative; top: auto; max-width: 28rem; align-content: center; padding-left: 1.25rem;
+    }
+    .chapter-panel::before {
+        content: ""; position: absolute; top: .15rem; bottom: .15rem; left: 0; width: 1px;
+        background: rgb(244 240 229 / 20%);
+        transition: width 260ms var(--motionlab-ease-out), background-color 260ms ease;
+    }
+    .stage-chapter.is-active .chapter-panel::before {
+        width: 2px; background: var(--motionlab-lime);
+    }
     .chapter-name { max-width: 24rem; font-size: clamp(1.7rem, 3vw, 3.6rem) }
     .stage-end { min-height: 86svh; padding: 8rem 3rem }
     .stage-end h2 { font-size: clamp(4rem, 7.5vw, 8rem) }
@@ -4251,4 +4263,5 @@ body:has(.stage-step) footer strong, body:has(.stage-step) footer a { color: #ae
     .chapter-handoff, .stage-image { transition: none !important; animation: none !important }
     .stage-lens, .stage-image, .stage-image.is-current, .stage-image.is-leaving { transform: none !important }
     .chapter-offer { opacity: 1; transform: none }
+    .chapter-panel::before { transition: none !important }
 }
