@@ -53,6 +53,9 @@
        horas mientras la hoja de estilos —que sí la lleva— ya es la nueva: una pantalla que
        mezcla dos despliegues. *@
     <script src="@Assets["site-motion.js"]" defer></script>
+    @* Duerme en todas las pantallas menos en la fila: se despierta cuando una región marcada entra
+       al DOM, y sólo observa esa región. Fuera de la fila no hay nada que cambie solo. *@
+    <script src="@Assets["live-state.js"]" defer></script>
     <script src="@Assets["pwa.js"]" defer></script>
     <script src="@Assets["push-notifications.js"]" defer></script>
     <script src="@Assets["order-recovery.js"]" defer></script>

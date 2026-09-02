@@ -121,6 +121,16 @@
     --mov-panel: .22s;
     --curva: cubic-bezier(.2, .8, .2, 1);
 
+    /* ESTADO VIVO — tres pesos, no veinte duraciones. Lo que cambia solo mientras alguien mira
+       tiene que decir cuánto importa lo que cambió: una cifra que baja pesa menos que cambiar de
+       etapa, y cambiar de etapa pesa menos que "es tu turno", que es el final del recorrido. */
+    --motion-live-valor: .2s;
+    --motion-live-estado: .32s;
+    --motion-live-critico: .52s;
+    /* La curva que asienta: sale rápido y llega frenando. Un estado que importa entra y se queda
+       quieto; no rebota. */
+    --curva-live-asienta: cubic-bezier(.2, .9, .3, 1);
+
     /* LA ESCENA QUE SE ABRE. Duraciones propias porque esto no es un microfeedback: es un
        contenedor que cambia de tamaño y de recorte mientras cruza de una pantalla a otra, y con
        las duraciones cortas de arriba el recorrido se lee como un salto. El fundido termina antes
@@ -1250,25 +1260,166 @@ a.card-media { display: block; color: inherit }
 .fila-cifras-linea { display: flex; gap: var(--e5); justify-content: center; margin: 0; color: rgb(255 253 249 / 82%) }
 .fila-cifras-linea strong { color: var(--uc-amber); font-size: var(--t-21); font-variant-numeric: tabular-nums }
 
-/* CAMBIO DE FILA — el número no se sustituye en silencio: cuando la posición cambia, la cifra
-   entra desde abajo. Es el único aviso que tiene quien está mirando la pantalla de reojo. */
-.fila-cifras strong, .fila-cifras-linea strong { animation: cifra-cambia .22s ease-out both }
+/* ==============================================================================================
+   J-MOTION-05 — ESTADO VIVO
 
-/* Llamado: la pantalla entera se vuelve coral cuando toca moverse. Es literalmente el momento en
-   que algo está ocurriendo, que es lo único que este color puede significar. */
-.fila-tablero.mi-turno[data-estado-turno="called"] {
+   La fila es la única pantalla del producto cuyo contenido cambia sin que nadie la toque. Hasta
+   aquí ese cambio era una sustitución de texto: un 3 pasaba a ser un 2 y quien miraba de reojo no
+   sabía si había avanzado, si había retrocedido, o si llevaba diez minutos viendo lo mismo.
+
+   Este bloque escribe tres cosas y ninguna más:
+     QUÉ cambió          — la cifra que se movió se distingue de sus dos vecinas.
+     EN QUÉ DIRECCIÓN    — el valor viejo sale por el lado contrario al que entra el nuevo.
+     QUÉ SIGNIFICA       — la etapa del turno cambia de superficie, no sólo de frase.
+
+   El estado en reposo lo pinta la etapa; el movimiento sólo marca el instante del cruce. Quien
+   vuelve a mirar el teléfono cinco minutos después ve un estado, no una función del tiempo.
+   Quién enciende cada cosa está en live-state.js.
+   ============================================================================================== */
+
+/* Cómo se entera live-state.js de que una región existe: una animación que no pinta nada y cuyo
+   único trabajo es emitir animationstart. Vale igual para una carga completa, para una navegación
+   mejorada y para el enrutador de Blazor, que no avisa de nada. No se apaga con movimiento
+   reducido: sin ella no habría ni siquiera el reemplazo instantáneo del valor. */
+@keyframes uc-live-arma { from { visibility: inherit } to { visibility: inherit } }
+[data-live-state] { animation: uc-live-arma .01s linear }
+[data-live-state="fila"] .fila-estado::before { animation: none }
+[data-live-state="fila"] .fila-puntos { min-height: 1rem }
+[data-live-state="fila"] .fila-cifras strong > [data-live-value] {
+    font: inherit; color: inherit; letter-spacing: inherit;
+}
+[data-live-state="fila"] .fila-cifras small { display: block; margin-top: .2rem }
+[data-live-state="union"] { min-height: 31rem; max-width: 640px; margin-inline: auto; display: flow-root }
+[data-live-state="union"] > .narrow { margin: 0; max-width: none }
+.fila-tablero.narrow { background: var(--uc-jungle) }
+.fila-tablero .push-prompt { background: var(--superficie); color: var(--texto) }
+.fila-tablero .push-prompt .meta { color: var(--texto-suave) }
+.fila-tablero .push-prompt-icon { background: var(--uc-green-solid); color: var(--texto-sobre-verde) }
+
+/* UNA CIFRA QUE CAMBIA. El valor viejo no desaparece: sale, y sale por el lado contrario al que
+   entra el nuevo. Bajar es avanzar en una fila; subir es que entró alguien más.
+   El viejo es el ::after del propio valor —un atributo, no un nodo, porque insertar un elemento
+   dentro de algo que Blazor gobierna le corre los índices al diff— y viaja arrastrado por la
+   misma transformación del elemento: por eso su desplazamiento local es constante y no hay dos
+   relojes que sincronizar. Sólo el fantasma se desvanece; el valor nuevo nunca baja de opacidad,
+   que es lo que pasaría si el grupo entero se atenuara. */
+[data-live-value] { position: relative; display: inline-block; font-variant-numeric: tabular-nums }
+[data-live-value][data-uc-live-antes]::after {
+    content: attr(data-uc-live-antes) / "";
+    position: absolute; inset-inline: 0; top: 0;
+    opacity: 0; pointer-events: none;
+}
+[data-live-value][data-uc-live-sentido="baja"][data-uc-live-antes]::after { transform: translateY(.32em) }
+[data-live-value][data-uc-live-sentido="sube"][data-uc-live-antes]::after { transform: translateY(-.32em) }
+
+@keyframes uc-live-baja { from { transform: translateY(-.32em) } to { transform: none } }
+@keyframes uc-live-sube { from { transform: translateY(.32em) } to { transform: none } }
+@keyframes uc-live-neutro { from { opacity: .2 } to { opacity: 1 } }
+@keyframes uc-live-sale { from { opacity: 1 } to { opacity: 0 } }
+
+[data-live-value][data-uc-live-anim] { animation: uc-live-neutro var(--motion-live-valor) var(--curva) }
+[data-live-value][data-uc-live-anim][data-uc-live-sentido="baja"] { animation-name: uc-live-baja }
+[data-live-value][data-uc-live-anim][data-uc-live-sentido="sube"] { animation-name: uc-live-sube }
+[data-live-value][data-uc-live-anim][data-uc-live-antes]::after {
+    animation: uc-live-sale var(--motion-live-valor) var(--curva);
+}
+
+/* EL ACENTO. Sólo donde la magnitud significa algo para quien mira —cuántos turnos se fueron
+   delante de ti—, nunca en el tablero del negocio, donde ninguna de las tres cifras es tuya.
+   Aparece, se lee y se va: no es un contador, es una noticia. */
+[data-live-value][data-uc-live-delta]::before {
+    content: attr(data-uc-live-delta) / "";
+    position: absolute; left: 100%; top: -.05em; margin-left: .3rem;
+    font-family: var(--fuente-ui); font-size: var(--t-13); font-weight: var(--p-fuerte);
+    line-height: 1.2; letter-spacing: normal; white-space: nowrap;
+    color: #FF9182; opacity: 0; pointer-events: none;
+}
+@keyframes uc-live-acento {
+    0% { opacity: 0; transform: translateY(.4em) }
+    26% { opacity: 1; transform: none }
+    66% { opacity: 1; transform: none }
+    100% { opacity: 0; transform: translateY(-.3em) }
+}
+[data-live-value][data-uc-live-anim][data-uc-live-delta]::before {
+    animation: uc-live-acento calc(var(--motion-live-valor) * 3) var(--curva);
+}
+
+/* UNA FRASE QUE CAMBIA. "Faltan 3 turnos" y "Eres el siguiente" no son el mismo dato con otro
+   número: son dos cosas distintas que hacer. Se reemplaza el contenido, no se desliza. */
+@keyframes uc-live-frase { from { opacity: 0; transform: translateY(5px) } to { opacity: 1; transform: none } }
+[data-live-text][data-uc-live-anim] { animation: uc-live-frase var(--motion-live-estado) var(--curva) }
+
+/* EL MISMO SITIO CON OTRO PROPÓSITO. "Tomar turno" y "Estás en la fila" son el mismo momento del
+   recorrido ocupando el mismo hueco: se anima el contenedor, no dos bloques que aparecen y
+   desaparecen por su cuenta. El hueco reserva su alto para que el relevo no empuje la pantalla. */
+@keyframes uc-live-relevo { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
+[data-live-swap][data-uc-live-anim] { animation: uc-live-relevo var(--motion-live-estado) var(--curva) }
+.fila-accion { min-height: calc(var(--alto-control) + var(--e4)) }
+
+/* QUÉ cambió, en el tablero: la casilla que acaba de moverse se levanta un instante. Sin esto,
+   entre tres cifras hay que adivinar cuál de las tres es la noticia. */
+.fila-cifras div { transition: background-color var(--motion-live-estado) var(--curva) }
+.fila-cifras div:has([data-uc-live-anim]) { background: rgb(255 253 249 / 14%) }
+.fila-cifras .destacada:has([data-uc-live-anim]) { background: rgb(255 91 71 / 30%) }
+
+/* LA ETAPA DEL TURNO. Una sola lectura decide qué es esto ahora, y de ahí cuelgan la superficie y
+   el peso del titular. */
+.fila-tablero.mi-turno {
+    transition: background-color var(--motion-live-estado) var(--curva),
+                box-shadow var(--motion-live-estado) var(--curva);
+}
+
+/* ERES EL SIGUIENTE. Todavía se espera —no es el clímax— pero ya toca empezar a moverse: la
+   tarjeta se recorta en ámbar y el titular deja de ser una cifra más. */
+.fila-tablero.mi-turno[data-live-etapa="siguiente"] { box-shadow: inset 0 0 0 2px rgb(255 203 87 / 55%) }
+.fila-tablero.mi-turno[data-live-etapa="siguiente"] h1 { color: var(--uc-amber) }
+@keyframes uc-live-eleva { from { transform: scale(.985) } to { transform: none } }
+.fila-tablero.mi-turno[data-uc-live-paso="eleva"] {
+    animation: uc-live-eleva var(--motion-live-estado) var(--curva-live-asienta);
+}
+
+/* ES TU TURNO. La pantalla entera se vuelve coral: es literalmente el momento en que algo está
+   ocurriendo, que es lo único que este color puede significar en el producto. La tarjeta se
+   asienta una vez y el aro se abre y se disuelve una vez. Después no queda nada moviéndose: a
+   quien ya llegó no hay que seguir insistiéndole. */
+.fila-tablero.mi-turno[data-live-etapa="llamado"] {
     background: var(--uc-live);
-    animation: llamado 1.6s ease-in-out 3;
+    box-shadow: inset 0 0 0 2px rgb(255 253 249 / 45%);
 }
-.fila-tablero.mi-turno[data-estado-turno="called"] .eyebrow,
-.fila-tablero.mi-turno[data-estado-turno="called"] .ticket-etiqueta { color: rgb(255 253 249 / 82%) }
-.fila-tablero.mi-turno[data-estado-turno="called"] .lead { color: var(--uc-paper) }
-.fila-tablero.mi-turno[data-estado-turno="called"] .ticket-number { color: var(--uc-paper) }
-@keyframes llamado {
-    0%, 100% { box-shadow: 0 0 0 0 rgb(255 91 71 / 40%) }
-    50% { box-shadow: 0 0 0 .5rem rgb(255 91 71 / 22%) }
+.fila-tablero.mi-turno[data-live-etapa="llamado"] .eyebrow,
+.fila-tablero.mi-turno[data-live-etapa="llamado"] .ticket-etiqueta,
+.fila-tablero.mi-turno[data-live-etapa="llamado"] > .meta,
+.fila-tablero.mi-turno[data-live-etapa="llamado"] .lead { color: var(--uc-jungle) }
+.fila-tablero.mi-turno[data-live-etapa="llamado"] h1,
+.fila-tablero.mi-turno[data-live-etapa="llamado"] .ticket-number { color: var(--uc-paper) }
+@keyframes uc-live-climax {
+    0% { transform: scale(1); box-shadow: inset 0 0 0 2px rgb(255 253 249 / 45%), 0 0 0 0 rgb(255 91 71 / 55%) }
+    38% { transform: scale(1.018) }
+    100% { transform: scale(1); box-shadow: inset 0 0 0 2px rgb(255 253 249 / 45%), 0 0 0 1.2rem rgb(255 91 71 / 0%) }
 }
-@keyframes cifra-cambia { from { opacity: .35; transform: translateY(5px) } to { opacity: 1; transform: translateY(0) } }
+.fila-tablero.mi-turno[data-uc-live-paso="climax"] {
+    animation: uc-live-climax var(--motion-live-critico) var(--curva-live-asienta);
+}
+@keyframes uc-live-numero { from { transform: scale(.9) } to { transform: none } }
+.fila-tablero.mi-turno[data-uc-live-paso="climax"] .ticket-number {
+    animation: uc-live-numero var(--motion-live-critico) var(--curva-live-asienta);
+}
+
+/* El titular y su explicación son una sola noticia: se anuncian juntos y ocupan su propio hueco
+   para que reemplazar una frase larga por una corta no mueva lo que hay debajo. */
+.mi-turno-estado { display: grid; justify-items: center; gap: .1rem; width: 100% }
+.mi-turno-estado h1 { min-height: 2.04em; display: grid; align-items: center }
+.mi-turno-estado .lead { min-height: 4.5em; margin-block: .75rem }
+.mi-turno-posicion { width: 100%; min-height: 4.7rem; display: grid; justify-items: center }
+.mi-turno-posicion .fila-cifras-linea { align-self: start }
+.mi-turno-posicion [data-live-value] { min-width: 2ch; text-align: center }
+.mi-turno-posicion [data-live-value]:not([data-live-delta]) { min-width: 4ch }
+
+/* Ahorro de datos usa la misma política instantánea que movimiento reducido. */
+[data-uc-live-quieto], [data-uc-live-quieto] *,
+[data-uc-live-quieto] *::before, [data-uc-live-quieto] *::after {
+    animation: none !important; transition: none !important;
+}
 
 /* Novedades de una operación en el seguimiento del cliente: una línea de tiempo corta, no una
    tabla. Lo más reciente arriba, que es lo que se viene a mirar. */
@@ -1321,10 +1472,21 @@ a.card-media { display: block; color: inherit }
     .aviso-acciones .primary { flex: 1 1 auto }
 }
 
+/* Quien pide menos movimiento recibe el mismo estado: el valor nuevo ya está escrito, la etapa
+   sigue cambiando de superficie y "es tu turno" sigue siendo coral con su aro. Lo que se retira es
+   el viaje, el fantasma del valor viejo, el acento y el asentamiento —nada de eso lleva
+   información que el texto no diga ya—. */
 @media (prefers-reduced-motion: reduce) {
-    .senal-fila::before, .fila-estado[data-estado="open"]::before,
-    .fila-tablero.mi-turno[data-estado-turno="called"], .skeleton { animation: none }
+    .senal-fila::before, .fila-estado[data-estado="open"]::before, .skeleton { animation: none }
     .fila-avance span { transition: none }
+    [data-live-value][data-uc-live-anim],
+    [data-live-text][data-uc-live-anim],
+    [data-live-swap][data-uc-live-anim],
+    .fila-tablero.mi-turno[data-uc-live-paso],
+    .fila-tablero.mi-turno[data-uc-live-paso] .ticket-number { animation: none }
+    [data-live-value][data-uc-live-antes]::after,
+    [data-live-value][data-uc-live-delta]::before { content: none; animation: none }
+    .fila-tablero.mi-turno, .fila-cifras div { transition: none }
 }
 
 .queue-hero {
@@ -2408,8 +2570,8 @@ body:has(.ficha-hero) .back-link { color: rgb(255 253 249 / 78%) }
 /* Quien pide menos movimiento recibe el mismo feed sin una sola animación: ni la entrada
    escalonada, ni el crossfade al cambiar de municipio o de filtro, ni el latido de EN VIVO. */
 @media (prefers-reduced-motion: reduce) {
-    .ahora-home, .feed-entry, .feed-column, .location-backdrop, .location-sheet, .live-badge i,
-    .fila-cifras strong, .fila-cifras-linea strong { animation: none }
+    .ahora-home, .feed-entry, .feed-column, .location-backdrop, .location-sheet,
+    .live-badge i { animation: none }
     .feed-media img, .feed-filters button, .feed-action, .ahora-home { transition: none }
 }
 

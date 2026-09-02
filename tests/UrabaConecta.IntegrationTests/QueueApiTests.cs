@@ -16,6 +16,43 @@ public sealed partial class QueueApiTests(PostgresWebFactory factory) : IClassFi
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     [Fact]
+    public async Task Long_lived_consumer_reads_external_cancellations_without_stale_tracked_entities()
+    {
+        using var writer = Client();
+        await using var circuit = factory.Services.CreateAsyncScope();
+        var consumer = circuit.ServiceProvider.GetRequiredService<IUrabaConectaApi>();
+        const string slug = "barberia-el-corte";
+        var before = (await consumer.GetPublicQueueAsync(slug))!;
+        async Task<QueueTicketCreatedDto> Join(string alias)
+        {
+            using var response = await writer.PostAsJsonAsync($"/api/v1/public/businesses/{slug}/queue/tickets",
+                new CreateQueueTicketRequest { Alias = alias, ConsentAccepted = true,
+                    ConsentNoticeVersion = ConsentPolicyProvider.FallbackVersion });
+            response.EnsureSuccessStatusCode();
+            return (await response.Content.ReadFromJsonAsync<QueueTicketCreatedDto>())!;
+        }
+        var a = await Join("Live A");
+        var b = await Join("Live B");
+        var initial = (await consumer.GetQueueTicketAsync(b.TrackingCode))!;
+        Assert.Equal(before.WaitingCount + 2, (await consumer.GetPublicQueueAsync(slug))!.WaitingCount);
+
+        using var cancelA = await writer.PostAsJsonAsync($"/api/v1/public/queue/tickets/{a.TrackingCode}/cancel",
+            new QueueSessionCommandRequest { Version = 0 });
+        cancelA.EnsureSuccessStatusCode();
+        Assert.Equal(initial.PeopleAhead - 1, (await consumer.GetQueueTicketAsync(b.TrackingCode))!.PeopleAhead);
+        Assert.Equal(before.WaitingCount + 1, (await consumer.GetPublicQueueAsync(slug))!.WaitingCount);
+
+        using var cancelB = await writer.PostAsJsonAsync($"/api/v1/public/queue/tickets/{b.TrackingCode}/cancel",
+            new QueueSessionCommandRequest { Version = 0 });
+        cancelB.EnsureSuccessStatusCode();
+        var final = (await consumer.GetQueueTicketAsync(b.TrackingCode))!;
+        Assert.Equal("Cancelled", final.Status);
+        Assert.False(final.CanCancel);
+        Assert.Equal(1, final.Version);
+        Assert.Equal(before.WaitingCount, (await consumer.GetPublicQueueAsync(slug))!.WaitingCount);
+    }
+
+    [Fact]
     public async Task Public_business_exposes_queue_and_ticket_code_is_never_persisted_plain()
     {
         using var client = Client();

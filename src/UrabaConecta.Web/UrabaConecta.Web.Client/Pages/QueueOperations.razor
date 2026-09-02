@@ -112,9 +112,24 @@ else if (data is not null)
         if (hub is not null) await hub.DisposeAsync();
         hub = new Microsoft.AspNetCore.SignalR.Client.HubConnectionBuilder()
             .WithUrl(Navigation.ToAbsoluteUri("/hubs/queue")).WithAutomaticReconnect().Build();
-        hub.On("OperationsChanged", async () => { await Load(); await InvokeAsync(StateHasChanged); });
-        hub.Reconnected += async _ => { await hub.InvokeAsync("SubscribeOperations", BusinessId); await Load(); };
-        try { await hub.StartAsync(); await hub.InvokeAsync("SubscribeOperations", BusinessId); } catch { }
+        // Esta conexión sale del servidor y no lleva la cookie del navegador. La invalidación
+        // pública no contiene datos privados; Load conserva la autorización del circuito.
+        hub.On("QueueChanged", () => InvokeAsync(async () => { await Load(); StateHasChanged(); }));
+        hub.Reconnected += async _ =>
+        {
+            await hub.InvokeAsync("SubscribePublic", data!.Definition.BusinessSlug);
+            await InvokeAsync(async () => { await Load(); StateHasChanged(); });
+        };
+        if (data is not null)
+        {
+            try
+            {
+                await hub.StartAsync();
+                await hub.InvokeAsync("SubscribePublic", data.Definition.BusinessSlug);
+                await Load();
+            }
+            catch { }
+        }
     }
     private async Task Load() { error = null; try { data = await Api.GetQueueAdminAsync(BusinessId); } catch (ApiException ex) { error = ex.Message; } }
     private Task Open() => Run(() => Api.OpenQueueAsync(BusinessId));

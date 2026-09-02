@@ -113,7 +113,7 @@ public sealed class ContrastAccessibilityTests(BrowserFixture fixture)
     /// Recorre el árbol pintado y devuelve una línea por componente incumplidor, ya agrupada por
     /// clase: veinte filas de la misma lista son un solo problema que arreglar.
     /// </summary>
-    private const string Medidor = """
+    internal const string Medidor = """
         () => {
           const f = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
           const lum = p => 0.2126 * f(p[0]) + 0.7152 * f(p[1]) + 0.0722 * f(p[2]);

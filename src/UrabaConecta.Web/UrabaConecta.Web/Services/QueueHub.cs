@@ -18,6 +18,8 @@ public sealed class QueueHub(IQueueStore store, IPublicCodeService codes) : Hub
         var ticket = await store.FindTicketAsync(codes.Hash(trackingCode), Context.ConnectionAborted)
             ?? throw new HubException("Turno no encontrado.");
         await Groups.AddToGroupAsync(Context.ConnectionId, TicketGroup(ticket.Ticket.Id));
+        // La posición también cambia cuando termina o se cancela un turno anterior.
+        await Groups.AddToGroupAsync(Context.ConnectionId, PublicGroup(ticket.Definition.Id));
     }
 
     public async Task SubscribeOperations(Guid businessId)

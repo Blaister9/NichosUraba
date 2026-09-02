@@ -14,42 +14,51 @@
 else if (error is not null) { <div class="error" role="alert">@error</div> }
 else if (status is not null)
 {
-    <section class="fila-tablero">
+    @* El tablero cambia solo mientras alguien lo mira. Cada cifra dice hacia dónde se movió y la
+       casilla que se movió se distingue de las otras dos: entre tres números grandes, un cambio
+       silencioso no se ve. Se anuncia en cortesía —esto se mira de reojo desde la calle, no es una
+       alarma— y el estado de la jornada se reemplaza como frase, no como número. *@
+    <section class="fila-tablero" data-live-state="fila"
+             data-live-etapa="@status.SessionStatus.ToLowerInvariant()">
         <header>
             <p class="eyebrow">@status.BusinessName</p>
             <h1>@status.QueueName</h1>
-            <span class="fila-estado" data-estado="@status.SessionStatus.ToLowerInvariant()">
+            <span class="fila-estado" data-live-text aria-live="polite" data-estado="@status.SessionStatus.ToLowerInvariant()">
                 @SessionLabel(status.SessionStatus)
             </span>
         </header>
 
-        <div class="fila-cifras">
-            <div class="destacada">
+        <div class="fila-cifras" aria-live="polite">
+            <div class="destacada" aria-atomic="true">
                 <span>Atendiendo ahora</span>
-                <strong>@(status.CurrentNumber?.ToString() ?? "—")</strong>
+                <strong data-live-value>@(status.CurrentNumber?.ToString() ?? "—")</strong>
             </div>
-            <div>
+            <div aria-atomic="true">
                 <span>@(status.WaitingCount == 1 ? "Persona esperando" : "Personas esperando")</span>
-                <strong>@status.WaitingCount</strong>
+                <strong data-live-value>@status.WaitingCount</strong>
             </div>
-            <div>
+            <div aria-atomic="true">
                 <span>Espera aproximada</span>
-                <strong>@status.ApproximateWaitMinutes<small> min</small></strong>
+                @* El "min" queda fuera del valor: lo que viaja es la cifra, y arrastrar la unidad
+                   con ella convertiría una unidad fija en algo que también parece cambiar. *@
+                <strong><span data-live-value>@status.ApproximateWaitMinutes</span><small> min</small></strong>
             </div>
         </div>
 
         @* Una fila de puntos por quien espera: el número dice cuántos, los puntos lo hacen sentir.
            Se acota a doce para que a partir de ahí crezca el resumen y no la tira. *@
-        @if (status.WaitingCount > 0)
-        {
             <p class="fila-puntos" aria-hidden="true">
                 @for (var i = 0; i < Math.Min(status.WaitingCount, 12); i++) { <span></span> }
                 @if (status.WaitingCount > 12) { <em>+@(status.WaitingCount - 12)</em> }
             </p>
-        }
 
         @if (!string.IsNullOrWhiteSpace(status.PublicMessage)) { <p class="fila-mensaje">@status.PublicMessage</p> }
     </section>
+    @* EL MISMO SITIO CON OTRO PROPÓSITO. Pedir el turno y tenerlo son el mismo momento del
+       recorrido ocupando el mismo hueco de la pantalla: tomar → tu número → seguirlo. Es un
+       contenedor que cambia de contenido, no un formulario que se esfuma y una tarjeta que aparece
+       en otro sitio, y por eso el relevo se anima una sola vez sobre el contenedor. *@
+    <div data-live-state="union" data-live-swap data-live-clave="@(created is null ? "tomar" : "confirmado")">
     @if (created is null)
     {
         <EditForm Model="request" OnValidSubmit="Join" FormName="join-queue" class="config-form narrow">
@@ -91,6 +100,7 @@ else if (status is not null)
             <a class="button-link btn-grande" href="/seguimiento/turnos/@created.TrackingCode">Seguir mi turno</a>
         </section>
     }
+    </div>
 }
 
 @code {
@@ -118,16 +128,19 @@ else if (status is not null)
         hub = new Microsoft.AspNetCore.SignalR.Client.HubConnectionBuilder()
             .WithUrl(Navigation.ToAbsoluteUri("/hubs/queue")).WithAutomaticReconnect().Build();
         // The event for our own Join can arrive before JoinAsync returns on a remote database.
-        // Both calls share the circuit DbContext, so reloading here would run a second operation on
-        // it and terminate the UI. Join refreshes once its write has completed.
-        hub.On("QueueChanged", async () =>
+        // Join already refreshes after its write completes; avoid a redundant read while it is busy.
+        hub.On("QueueChanged", () => InvokeAsync(async () =>
         {
             if (busy) return;
             await Load();
-            await InvokeAsync(StateHasChanged);
-        });
-        hub.Reconnected += async _ => { await hub.InvokeAsync("SubscribePublic", Slug); await Load(); };
-        try { await hub.StartAsync(); await hub.InvokeAsync("SubscribePublic", Slug); } catch { /* HTTP remains source of truth. */ }
+            StateHasChanged();
+        }));
+        hub.Reconnected += async _ =>
+        {
+            await hub.InvokeAsync("SubscribePublic", Slug);
+            await InvokeAsync(async () => { await Load(); StateHasChanged(); });
+        };
+        try { await hub.StartAsync(); await hub.InvokeAsync("SubscribePublic", Slug); await Load(); } catch { /* HTTP remains source of truth. */ }
     }
     private async Task Load()
     {

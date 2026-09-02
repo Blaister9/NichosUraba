@@ -12,14 +12,25 @@ else if (ticket is not null)
     @* Esta pantalla se mira de reojo mientras se hace otra cosa, así que tiene que contestar de un
        vistazo y desde lejos: cuánto falta, y si ya toca moverse. El titular cambia con la posición
        —"Faltan 3", "Eres el siguiente", "¡Es tu turno!"— porque un número solo no dice qué hacer. *@
-    <section class="fila-tablero mi-turno narrow" data-estado-turno="@ticket.Status.ToLowerInvariant()">
+    @* La etapa es lo que la pantalla es ahora —espera, siguiente, llamado, atención, cerrado— y de
+       ella cuelgan la superficie, el peso del titular y con cuánta fuerza se anuncia el cambio. Un
+       estado y una hoja de estilos que lo lee, no cinco animaciones parecidas. Quién enciende cada
+       cosa está en live-state.js; qué se ve, en app.css. *@
+    <section class="fila-tablero mi-turno narrow" data-live-state="turno" data-live-etapa="@Etapa"
+             data-estado-turno="@ticket.Status.ToLowerInvariant()">
         <p class="eyebrow">@ticket.BusinessName · @ticket.QueueName</p>
         <span class="ticket-etiqueta">Tu turno</span>
         <strong class="ticket-number">@ticket.Number</strong>
 
-        <h1>@Titular</h1>
-        @if (Subtitulo is { Length: > 0 } subtitulo) { <p class="lead">@subtitulo</p> }
+        @* Titular y explicación son una sola noticia y se anuncian juntos. "Es tu turno" interrumpe
+           lo que el lector de pantalla esté diciendo porque hay que moverse ya; todo lo demás
+           espera su turno para no convertir una espera de veinte minutos en veinte anuncios. *@
+        <div class="mi-turno-estado" aria-live="@Vivacidad" aria-atomic="true">
+            <h1 data-live-text>@Titular</h1>
+            <p class="lead" data-live-text>@Subtitulo</p>
+        </div>
 
+        <div class="mi-turno-posicion" aria-hidden="@(ticket.Status != "Waiting")">
         @if (ticket.Status == "Waiting")
         {
             @* La barra sólo aparece cuando hay contra qué medir: en el primer vistazo no había
@@ -31,11 +42,15 @@ else if (ticket is not null)
                     <span style="width:@(Math.Clamp(100 - ticket.PeopleAhead * 100 / Referencia, 4, 100))%"></span>
                 </div>
             }
+            @* La única cifra del producto que es tuya: cuánta gente te separa de la silla. Por eso
+               es la única que lleva acento —el "−1" que aparece y se va— y la que dice en qué
+               dirección se movió. La espera aproximada acompaña, y viaja igual pero sin acento. *@
             <p class="fila-cifras-linea">
-                <span><strong>@ticket.PeopleAhead</strong> @(ticket.PeopleAhead == 1 ? "turno delante" : "turnos delante")</span>
-                <span><strong>~@ticket.ApproximateWaitMinutes</strong> min</span>
+                <span><strong data-live-value data-live-delta>@ticket.PeopleAhead</strong> @(ticket.PeopleAhead == 1 ? "turno delante" : "turnos delante")</span>
+                <span><strong data-live-value>~@ticket.ApproximateWaitMinutes</strong> min</span>
             </p>
         }
+        </div>
 
         <p class="meta">El tiempo es aproximado y puede cambiar. Esta pantalla se actualiza sola.</p>
 
@@ -49,13 +64,18 @@ else if (ticket is not null)
            conservar, y la persona vuelve a esta pantalla varias veces mientras espera. *@
         <InstallPrompt />
 
-        @if (ticket.CanCancel)
-        {
-            <button class="danger" @onclick="Cancel" disabled="@(!interactiveReady || busy)">
-                @(busy ? "Cancelando…" : "Cancelar mi turno")
-            </button>
-            @if (!interactiveReady) { <p class="notice" role="status">Preparando la cancelación…</p> }
-        }
+        @* La salida de la fila deja de existir en cuanto te llaman, y ese es justo el momento en el
+           que la pantalla no puede dar un tirón: el hueco se reserva y lo que se retira es el
+           botón, no el sitio donde estaba. *@
+        <div class="fila-accion">
+            @if (ticket.CanCancel)
+            {
+                <button class="danger" @onclick="Cancel" disabled="@(!interactiveReady || busy)">
+                    @(busy ? "Cancelando…" : "Cancelar mi turno")
+                </button>
+                @if (!interactiveReady) { <p class="notice" role="status">Preparando la cancelación…</p> }
+            }
+        </div>
     </section>
 }
 
@@ -67,6 +87,7 @@ else if (ticket is not null)
     private string? error;
     private bool busy, interactiveReady;
     private string? subscribedCode;
+    private long loadGeneration;
 
     /// <summary>
     /// Cuántos había delante la primera vez que se miró. Es el punto contra el que se mide el
@@ -74,6 +95,28 @@ else if (ticket is not null)
     /// barra de progreso no puede decir nada honesto.
     /// </summary>
     private int Referencia;
+
+    /// <summary>
+    /// En qué punto del recorrido está esto ahora. El dominio distingue seis estados de turno, pero
+    /// para quien espera sólo hay cinco situaciones distintas, y una de ellas —"eres el siguiente"—
+    /// no es un estado del dominio sino un <c>Waiting</c> sin nadie delante. Esta es la única
+    /// traducción de las dos cosas a una, y de aquí la leen la superficie, el peso del titular y
+    /// con cuánta fuerza se anuncia el cambio.
+    /// </summary>
+    private string Etapa => ticket!.Status switch
+    {
+        "Waiting" when ticket.PeopleAhead == 0 => "siguiente",
+        "Waiting" => "espera",
+        "Called" => "llamado",
+        "InService" => "atencion",
+        _ => "cerrado"
+    };
+
+    /// <summary>
+    /// Interrumpir sólo cuando hay que moverse ya. Una espera larga cambia de cifra muchas veces y
+    /// anunciarlas todas de forma asertiva convierte el lector de pantalla en una alarma.
+    /// </summary>
+    private string Vivacidad => Etapa == "llamado" ? "assertive" : "polite";
 
     /// <summary>Lo que hay que hacer, no sólo dónde se está.</summary>
     private string Titular => ticket!.Status switch
@@ -88,7 +131,7 @@ else if (ticket is not null)
 
     private string? Subtitulo => ticket!.Status switch
     {
-        "Waiting" when ticket.PeopleAhead == 0 => "Acércate al local: entras en cuanto termine la persona actual.",
+        "Waiting" when ticket.PeopleAhead == 0 => "Acércate al local y espera a que te llamen.",
         "Waiting" when ticket.ApproximateWaitMinutes <= 10 => "Ve saliendo, ya falta poco.",
         "Waiting" => "Te avisamos cuando falte poco. No hace falta que esperes en el local.",
         "Called" => "Pasa al mostrador, te están llamando.",
@@ -112,24 +155,32 @@ else if (ticket is not null)
         if (hub is not null) await hub.DisposeAsync();
         hub = new Microsoft.AspNetCore.SignalR.Client.HubConnectionBuilder()
             .WithUrl(Navigation.ToAbsoluteUri("/hubs/queue")).WithAutomaticReconnect().Build();
-        hub.On("TicketChanged", async () => { await Load(); await InvokeAsync(StateHasChanged); });
-        hub.Reconnected += async _ => { await hub.InvokeAsync("SubscribeTicket", Code); await Load(); };
-        try { await hub.StartAsync(); await hub.InvokeAsync("SubscribeTicket", Code); } catch { }
+        // QueueChanged incluye tanto el turno propio como los anteriores, que cambian PeopleAhead.
+        hub.On("QueueChanged", () => InvokeAsync(async () => { await Load(); StateHasChanged(); }));
+        hub.Reconnected += async _ =>
+        {
+            await hub.InvokeAsync("SubscribeTicket", Code);
+            await InvokeAsync(async () => { await Load(); StateHasChanged(); });
+        };
+        try { await hub.StartAsync(); await hub.InvokeAsync("SubscribeTicket", Code); await Load(); } catch { }
         _ = RefreshLoop();
     }
     private async Task Load()
     {
+        var generation = ++loadGeneration;
         error = null;
         try
         {
-            ticket = await Api.GetQueueTicketAsync(Code);
+            var current = await Api.GetQueueTicketAsync(Code);
+            if (generation != loadGeneration) return;
+            ticket = current;
             if (ticket is null) { error = "No encontramos el turno."; return; }
             // La referencia se fija con la primera lectura y sólo puede crecer: si alguien se cuela
             // por delante, la barra retrocedería y parecería un error del sistema en vez de lo que
             // es, un cambio en la fila.
             if (ticket.PeopleAhead > Referencia) Referencia = ticket.PeopleAhead;
         }
-        catch (ApiException ex) { error = ex.Message; }
+        catch (ApiException ex) { if (generation == loadGeneration) error = ex.Message; }
     }
     private async Task Cancel()
     {
@@ -141,7 +192,7 @@ else if (ticket is not null)
     }
     private async Task RefreshLoop()
     {
-        // Red de seguridad, no el mecanismo principal: el hub empuja "TicketChanged" al
+        // Red de seguridad, no el mecanismo principal: el hub empuja "QueueChanged" al
         // instante. Sondear cada dos segundos consultaba la base treinta veces por minuto
         // y por visitante, y la base está en otra región.
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15));
@@ -149,8 +200,7 @@ else if (ticket is not null)
         {
             while (await timer.WaitForNextTickAsync(refreshCancellation.Token))
             {
-                await Load();
-                await InvokeAsync(StateHasChanged);
+                await InvokeAsync(async () => { await Load(); StateHasChanged(); });
             }
         }
         catch (OperationCanceledException) { }

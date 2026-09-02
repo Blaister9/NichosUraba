@@ -7,7 +7,7 @@ using UrabaConecta.Domain;
 
 namespace UrabaConecta.Web.Services;
 
-public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCases queues, IOrderingUseCases orders,
+public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IOrderingUseCases orders,
     IPlatformAdministrationUseCases platform, IAccessInvitationUseCases invitations,
     IBusinessImageUseCases images, IPlatformHealthProvider health, IOptions<LegalOptions> legal,
     IConsentPolicyProvider consentPolicy, IHttpContextAccessor httpContext,
@@ -152,36 +152,36 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
         => await Serialized(async () => await useCases.ListMembershipAuditAsync(await UserId(), businessId, membershipId, cancellationToken), cancellationToken);
 
     public Task<QueuePublicStatusDto?> GetPublicQueueAsync(string slug, CancellationToken cancellationToken = default)
-        => Serialized(() => queues.GetPublicAsync(slug, cancellationToken), cancellationToken);
+        => QueueOperation(queues => queues.GetPublicAsync(slug, cancellationToken), cancellationToken);
     public Task<QueueTicketCreatedDto> JoinQueueAsync(string slug, CreateQueueTicketRequest request,
         CancellationToken cancellationToken = default)
-        => Serialized(() => queues.JoinAsync(slug, request, cancellationToken), cancellationToken);
+        => QueueOperation(queues => queues.JoinAsync(slug, request, cancellationToken), cancellationToken);
     public Task<QueueTicketTrackingDto?> GetQueueTicketAsync(string code, CancellationToken cancellationToken = default)
-        => Serialized(() => queues.TrackAsync(code, cancellationToken), cancellationToken);
+        => QueueOperation(queues => queues.TrackAsync(code, cancellationToken), cancellationToken);
     public Task CancelQueueTicketAsync(string code, long version, CancellationToken cancellationToken = default)
-        => Serialized(() => queues.CancelPublicAsync(code, version, cancellationToken), cancellationToken);
+        => QueueOperation(queues => queues.CancelPublicAsync(code, version, cancellationToken), cancellationToken);
     public async Task<QueueAdminDto> GetQueueAdminAsync(Guid businessId, CancellationToken cancellationToken = default)
-        => await Serialized(async () => await queues.GetAdminAsync(await UserId(), businessId, cancellationToken), cancellationToken);
+        => await QueueOperation(async queues => await queues.GetAdminAsync(await UserId(), businessId, cancellationToken), cancellationToken);
     public async Task<QueueDefinitionDto> SaveQueueDefinitionAsync(Guid businessId, SaveQueueDefinitionRequest request,
         CancellationToken cancellationToken = default)
-        => await Serialized(async () => await queues.SaveDefinitionAsync(await UserId(), businessId, request, cancellationToken), cancellationToken);
+        => await QueueOperation(async queues => await queues.SaveDefinitionAsync(await UserId(), businessId, request, cancellationToken), cancellationToken);
     public async Task<QueueAdminDto> OpenQueueAsync(Guid businessId, CancellationToken cancellationToken = default)
-        => await Serialized(async () => await queues.OpenAsync(await UserId(), businessId, cancellationToken), cancellationToken);
+        => await QueueOperation(async queues => await queues.OpenAsync(await UserId(), businessId, cancellationToken), cancellationToken);
     public async Task<QueueAdminDto> PauseQueueAsync(Guid businessId, long version, CancellationToken cancellationToken = default)
-        => await Serialized(async () => await queues.PauseAsync(await UserId(), businessId, version, cancellationToken), cancellationToken);
+        => await QueueOperation(async queues => await queues.PauseAsync(await UserId(), businessId, version, cancellationToken), cancellationToken);
     public async Task<QueueAdminDto> ResumeQueueAsync(Guid businessId, long version, CancellationToken cancellationToken = default)
-        => await Serialized(async () => await queues.ResumeAsync(await UserId(), businessId, version, cancellationToken), cancellationToken);
+        => await QueueOperation(async queues => await queues.ResumeAsync(await UserId(), businessId, version, cancellationToken), cancellationToken);
     public async Task<QueueAdminDto> CloseQueueAsync(Guid businessId, long version, CancellationToken cancellationToken = default)
-        => await Serialized(async () => await queues.CloseAsync(await UserId(), businessId, version, cancellationToken), cancellationToken);
+        => await QueueOperation(async queues => await queues.CloseAsync(await UserId(), businessId, version, cancellationToken), cancellationToken);
     public async Task<QueueTicketCreatedDto> AddWalkInAsync(Guid businessId, CreateQueueTicketRequest request,
         CancellationToken cancellationToken = default)
-        => await Serialized(async () => await queues.WalkInAsync(await UserId(), businessId, request, cancellationToken), cancellationToken);
+        => await QueueOperation(async queues => await queues.WalkInAsync(await UserId(), businessId, request, cancellationToken), cancellationToken);
     public async Task<QueueAdminDto> CallNextAsync(Guid businessId, long sessionVersion,
         CancellationToken cancellationToken = default)
-        => await Serialized(async () => await queues.CallNextAsync(await UserId(), businessId, sessionVersion, cancellationToken), cancellationToken);
+        => await QueueOperation(async queues => await queues.CallNextAsync(await UserId(), businessId, sessionVersion, cancellationToken), cancellationToken);
     public async Task<QueueAdminDto> ChangeQueueTicketAsync(Guid businessId, Guid ticketId, string action,
         QueueTicketCommandRequest request, CancellationToken cancellationToken = default)
-        => await Serialized(async () => await queues.ChangeTicketAsync(await UserId(), businessId, ticketId, action, request, cancellationToken), cancellationToken);
+        => await QueueOperation(async queues => await queues.ChangeTicketAsync(await UserId(), businessId, ticketId, action, request, cancellationToken), cancellationToken);
 
     public Task<PickupMenuDto?> GetPickupMenuAsync(string slug, CancellationToken cancellationToken = default)
         => Serialized(() => orders.GetMenuAsync(slug, cancellationToken), cancellationToken);
@@ -428,6 +428,23 @@ public sealed class ServerUrabaConectaApi(IUrabaUseCases useCases, IQueueUseCase
         return Task.FromResult(new LegalInfoDto(value.ResponsibleName, value.Identification, value.Address,
             value.PrivacyEmail, value.SupportEmail, consentPolicy.CurrentVersion, value.PolicyEffectiveDate));
     }
+
+    // Una operación de fila debe leer lo que otro circuito acaba de guardar. El contexto del
+    // circuito conservaba tickets Waiting aunque PostgreSQL ya los tuviera Completed/Cancelled.
+    // El scope dura toda la operación (incluida su transacción), igual que en la API HTTP.
+    private Task<T> QueueOperation<T>(Func<IQueueUseCases, Task<T>> operation, CancellationToken ct)
+        => Serialized(async () =>
+        {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            return await operation(scope.ServiceProvider.GetRequiredService<IQueueUseCases>());
+        }, ct);
+
+    private Task QueueOperation(Func<IQueueUseCases, Task> operation, CancellationToken ct)
+        => Serialized(async () =>
+        {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            await operation(scope.ServiceProvider.GetRequiredService<IQueueUseCases>());
+        }, ct);
 
     /// <summary>Misma cola para las operaciones que no devuelven nada.</summary>
     private async Task Serialized(Func<Task> operation, CancellationToken cancellationToken)
