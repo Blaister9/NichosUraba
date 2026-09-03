@@ -131,6 +131,15 @@
        quieto; no rebota. */
     --curva-live-asienta: cubic-bezier(.2, .9, .3, 1);
 
+    /* HISTORIA QUE CRECE — el seguimiento de un pedido no es un valor que cambia, es un relato al
+       que se le añade un hito. Tres pesos, en orden: asentarse pesa menos que entrar, y entrar
+       pesa menos que un estado que pide algo de la persona. Comparten la curva que asienta: esta
+       pantalla se consulta para saber qué pasó con lo tuyo, y eso se lee tranquilo, no
+       cinematográfico. */
+    --motion-history-settle: .22s;
+    --motion-history-insert: .34s;
+    --motion-status-escalate: .5s;
+
     /* LA ESCENA QUE SE ABRE. Duraciones propias porque esto no es un microfeedback: es un
        contenedor que cambia de tamaño y de recorte mientras cruza de una pantalla a otra, y con
        las duraciones cortas de arriba el recorrido se lee como un salto. El fundido termina antes
@@ -1432,6 +1441,64 @@ a.card-media { display: block; color: inherit }
 .novedad-titulo { margin: 0 0 .15rem; font-size: var(--t-15) }
 .novedad-texto { margin: 0 0 .2rem; overflow-wrap: anywhere }
 .lista-novedades .meta { margin: 0 }
+
+/* --- La historia del pedido ---------------------------------------------------------------------
+   Un relato, no una lista de estados. Lo que ya pasó se compacta y se queda; lo de ahora ocupa el
+   sitio y se nombra con palabras. El riel de la izquierda es lo que hace que se lea como una sola
+   historia y no como tarjetas sueltas.
+
+   La forma de la marca distingue el desenlace sin depender del color: círculo mientras el pedido
+   avanza, cuadrado cuando se cierra. Quien no distingue el verde del gris ve igual que terminó. */
+.linea-pedido { margin: var(--e4) 0 0; padding-top: var(--e3); border-top: 1px solid var(--borde) }
+.linea-pedido h2 { font-size: var(--t-17); margin: 0 0 var(--e2) }
+.hitos { display: grid; gap: var(--e2); margin: 0; padding: 0; list-style: none }
+.hito {
+    display: grid; grid-template-columns: 1rem 1fr; gap: var(--e3); align-items: start;
+    position: relative; overflow: hidden;
+}
+/* El riel: une un hito con el siguiente y no sobra por abajo en el último. */
+.hito:not(:last-child)::before {
+    content: ''; position: absolute; left: .4375rem; top: 1.1rem; bottom: calc(var(--e2) * -1);
+    width: 2px; background: var(--borde);
+}
+.hito-marca {
+    width: 1rem; height: 1rem; margin-top: .2rem; border-radius: 50%;
+    border: 2px solid var(--borde); background: var(--superficie);
+    transition: background-color var(--motion-history-settle) var(--curva-live-asienta),
+                border-color var(--motion-history-settle) var(--curva-live-asienta);
+}
+.hito-caja {
+    min-width: 0; padding: .45rem .7rem; border-radius: var(--radio-sm); background: transparent;
+    transition: background-color var(--motion-history-settle) var(--curva-live-asienta);
+}
+.hito-titulo { margin: 0 0 .15rem; font-size: var(--t-15); display: flex; gap: var(--e2); align-items: baseline; flex-wrap: wrap }
+.hito-texto { margin: 0 0 .2rem; overflow-wrap: anywhere }
+.hito .meta { margin: 0 }
+.hito-etiqueta {
+    flex: none; padding: .05rem .4rem; border-radius: 999px; font-size: var(--t-13);
+    background: var(--uc-green-solid); color: var(--texto-sobre-verde);
+}
+/* Lo que ya pasó: sigue legible, deja de competir. */
+.hito[data-timeline-state=historia] .hito-texto { color: var(--texto-suave) }
+.hito[data-timeline-state=actual] .hito-caja { background: var(--superficie-2) }
+.hito[data-timeline-state=actual] .hito-marca { background: var(--uc-green-solid); border-color: var(--uc-green-solid) }
+/* El cierre no es una etapa más: la marca cambia de forma y la caja deja de sugerir continuidad. */
+.hito[data-timeline-outcome=cierre] .hito-marca,
+.hito[data-timeline-outcome=entregado] .hito-marca { border-radius: 3px }
+.hito[data-timeline-outcome=cierre][data-timeline-state=actual] .hito-marca {
+    background: var(--superficie); border-color: var(--texto); border-style: dashed;
+}
+.hito[data-timeline-outcome=cierre][data-timeline-state=actual] .hito-etiqueta {
+    background: var(--superficie-3); color: var(--texto);
+}
+.hito-siguiente { margin: var(--e3) 0 0; color: var(--texto-suave); font-size: var(--t-15) }
+
+/* Quien pide menos movimiento no pierde la novedad: el hito nuevo se queda marcado en el riel,
+   quieto. El módulo ni siquiera llega a animar en ese caso; esto es lo que se ve en su lugar. */
+@media (prefers-reduced-motion: reduce) {
+    .hito, .hito-marca, .hito-caja { transition: none }
+    .hito[data-timeline-new=true] .hito-marca { box-shadow: 0 0 0 3px var(--uc-green-wash) }
+}
 
 /* --- Bandeja de avisos -------------------------------------------------------------------------
    Lista y no tabla: esto se lee en un teléfono, de arriba abajo y con el pulgar. Una fila tiene

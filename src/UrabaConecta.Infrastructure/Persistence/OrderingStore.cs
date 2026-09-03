@@ -75,6 +75,9 @@ public sealed class OrderingStore(AppDbContext db) : IOrderingStore
             x.Status != PickupOrderStatus.Delivered, ct);
     public Task<PickupOrder?> FindByCodeAsync(string hash, CancellationToken ct)
         => db.PickupOrders.Include(x => x.Lines).SingleOrDefaultAsync(x => x.PublicCodeHash == hash, ct);
+    public Task<PickupOrder?> ReadByCodeAsync(string hash, CancellationToken ct)
+        => db.PickupOrders.AsNoTracking().Include(x => x.Lines)
+            .SingleOrDefaultAsync(x => x.PublicCodeHash == hash, ct);
     public Task<PickupOrder?> GetOrderAsync(Guid businessId, Guid orderId, CancellationToken ct)
         => db.PickupOrders.Include(x => x.Lines)
             .SingleOrDefaultAsync(x => x.BusinessId == businessId && x.Id == orderId, ct);

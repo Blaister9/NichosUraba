@@ -383,7 +383,10 @@ public sealed record ProductDto(Guid Id, Guid CategoryId, string Name, string De
 public sealed record PickupMenuDto(string BusinessName, string BusinessSlug, string PublicMessage,
     IReadOnlyList<ProductCategoryDto> Categories, IReadOnlyList<ProductDto> Products,
     string LocationMode = "PublicPhysical", string OrderFulfillmentMode = "PickupAtPublicLocation",
-    string PublicAddress = "", string Municipality = "", string? CustomerInstructions = null);
+    string PublicAddress = "", string Municipality = "", string? CustomerInstructions = null,
+    // El instante en que se creó el pedido. Es el primer hito real de la historia: sin él, el
+    // seguimiento sólo puede contar lo que pasó después de que el negocio lo tocara.
+    DateTimeOffset CreatedAtUtc = default);
 public sealed record PickupSlotDto(DateTimeOffset Start, DateTimeOffset End, int RemainingCapacity);
 public sealed record PickupSlotListDto(string BusinessTimeZone, IReadOnlyList<PickupSlotDto> Slots);
 public sealed record PickupOrderSettingsDto(Guid Id, Guid BusinessId, bool IsEnabled, string PublicMessage,
@@ -475,7 +478,10 @@ public sealed record PickupOrderTrackingDto(int OrderNumber, string Status, stri
     string BusinessName, DateTimeOffset PickupStart, decimal Total, string PhoneMasked,
     IReadOnlyList<PickupOrderLineDto> Lines, bool CanCancel, DateTimeOffset UpdatedAtUtc, long Version,
     string LocationMode = "PublicPhysical", string OrderFulfillmentMode = "PickupAtPublicLocation",
-    string PublicAddress = "", string Municipality = "", string? CustomerInstructions = null);
+    string PublicAddress = "", string Municipality = "", string? CustomerInstructions = null,
+    // El instante en que se creó el pedido. Es el primer hito real de la historia: sin él, el
+    // seguimiento sólo puede contar lo que pasó después de que el negocio lo tocara.
+    DateTimeOffset CreatedAtUtc = default);
 public sealed record PickupOrderAdminDto(Guid Id, int OrderNumber, string Status, string CustomerAlias,
     string Phone, string? Notes, DateTimeOffset PickupStart, decimal Total,
     IReadOnlyList<PickupOrderLineDto> Lines, string? CancellationReason,

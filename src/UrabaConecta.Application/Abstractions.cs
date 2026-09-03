@@ -126,6 +126,13 @@ public interface IOrderingStore
         DateTimeOffset rangeStart, DateTimeOffset rangeEnd, CancellationToken cancellationToken);
     Task<int> CountActiveInSlotAsync(Guid businessId, DateTimeOffset start, CancellationToken cancellationToken);
     Task<PickupOrder?> FindByCodeAsync(string hash, CancellationToken cancellationToken);
+    /// <summary>
+    /// El mismo pedido, pero sin seguimiento de cambios: es para leerlo, no para moverlo. La
+    /// pantalla de seguimiento vive en un circuito de Blazor y su contexto dura lo que dure la
+    /// pestaña abierta; una consulta con seguimiento devuelve la instancia ya cargada y el estado
+    /// se queda congelado en el que tenía al abrir, por más que la base ya diga otra cosa.
+    /// </summary>
+    Task<PickupOrder?> ReadByCodeAsync(string hash, CancellationToken cancellationToken);
     Task<PickupOrder?> GetOrderAsync(Guid businessId, Guid orderId, CancellationToken cancellationToken);
     Task<IReadOnlyList<PickupOrder>> ListOrdersAsync(Guid businessId, string? status, DateOnly? date,
         CancellationToken cancellationToken);

@@ -1,0 +1,142 @@
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@* LA HISTORIA DEL PEDIDO, QUE CRECE.
+
+   POR QUÉ EXISTE. El seguimiento contaba dos cosas por separado: una etiqueta con el estado de
+   ahora y, más abajo, una lista de avisos guardados. Cuando el negocio movía el pedido, la
+   pantalla volvía a preguntar y las dos cosas se sustituían enteras. Quien miraba veía una lista
+   distinta a la de hace un momento y tenía que releerla para saber qué había cambiado. El dato
+   llegaba; la noticia de que algo acababa de ocurrir, no.
+
+   QUÉ HACE. Un solo relato, en orden verdadero, donde el hito anterior no desaparece: se compacta
+   y cede el sitio al que acaba de ocurrir. Tres capas que no se mezclan: dónde está AHORA (el
+   encabezado del seguimiento), QUÉ HA PASADO (esta lista) y QUÉ FALTA (la línea final).
+
+   POR QUÉ EL MOVIMIENTO ESTÁ EN JS Y NO EN BLAZOR. Blazor decide QUÉ hitos hay; el módulo dice
+   cómo se ve que uno acaba de entrar, con una animación de una sola pasada. Interpolar altura
+   desde el circuito sería mandar sesenta renders por un cable. Y al revés: el módulo no inserta ni
+   borra nodos, sólo anima los que Blazor ya pintó, que es lo único que Blazor deja en paz.
+
+   POR QUÉ NO SE PIERDE NINGÚN HITO. La historia no se acumula en memoria del navegador: se vuelve
+   a leer entera del servidor en cada aviso. Si tres cambios ocurren en un segundo y la pantalla
+   sólo alcanza a refrescar una vez, los tres están igual en la lista, porque los tres son filas.
+   Esto es lo contrario de la fila virtual, donde sólo importa el último valor. *@
+
+<section class="linea-pedido" data-testid="order-timeline" @ref="raiz">
+    <h2>Lo que ha pasado</h2>
+
+    @* Sólo el hito nuevo, nunca la historia entera: repetirla en cada cambio convertiría el
+       lector de pantalla en un narrador que empieza desde el principio cada vez. *@
+    <p class="visually-hidden" role="status" aria-live="polite" data-testid="timeline-announce">@anuncio</p>
+
+    <ol class="hitos">
+        @foreach (var hito in hitos)
+        {
+            var actual = hito.Id == hitos[^1].Id;
+            <li class="hito"
+                data-testid="@(hito.Kind is null ? "timeline-milestone" : "tracking-update")"
+                data-kind="@hito.Kind"
+                data-status="@hito.Status"
+                data-timeline-state="@(actual ? "actual" : "historia")"
+                data-timeline-outcome="@Desenlace(hito.Status)"
+                data-timeline-new="@(llegados.Contains(hito.Id) ? "true" : null)"
+                data-timeline-escalate="@(actual && llegados.Contains(hito.Id) && PickupOrderTimeline.EsperaALaPersona(hito.Status) ? "true" : null)">
+                <span class="hito-marca" aria-hidden="true"></span>
+                <div class="hito-caja">
+                    <p class="hito-titulo">
+                        <strong>@hito.Title</strong>
+                        @* El estado actual se nombra con palabras y no sólo con un color o una
+                           posición: un pedido cancelado y uno entregado no pueden distinguirse
+                           únicamente por el tono de un punto. *@
+                        @if (actual)
+                        {
+                            <span class="hito-etiqueta">@(PickupOrderTimeline.EstaCerrado(hito.Status) ? "Cierre" : "Ahora")</span>
+                        }
+                    </p>
+                    <p class="hito-texto">@hito.Body</p>
+                    <p class="meta">
+                        <time datetime="@hito.AtUtc.ToString("o")">@BusinessDateTimeText.DateAndTime(hito.AtUtc, TimeZoneId)</time>
+                    </p>
+                </div>
+            </li>
+        }
+    </ol>
+
+    @if (Sigue is { Length: > 0 })
+    {
+        <p class="hito-siguiente" data-testid="timeline-next">@Sigue</p>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public PickupOrderTrackingDto Order { get; set; } = default!;
+    [Parameter, EditorRequired] public IReadOnlyList<NotificationDto> Updates { get; set; } = [];
+    [Parameter] public string? TimeZoneId { get; set; }
+
+    private ElementReference raiz;
+    private IJSObjectReference? motion;
+    private IReadOnlyList<PickupOrderMilestone> hitos = [];
+    private readonly HashSet<string> vistos = [];
+    private HashSet<string> llegados = [];
+    private string? anuncio;
+    private bool cebado;
+
+    private string? Sigue => PickupOrderTimeline.LoQueSigue(Order.Status);
+
+    private static string? Desenlace(string status) => status switch
+    {
+        "Delivered" => "entregado",
+        "Rejected" or "Cancelled" => "cierre",
+        _ => null
+    };
+
+    /// <summary>
+    /// La primera carga no es una novedad: quien abre el seguimiento por primera vez encuentra una
+    /// historia ya escrita, no cinco hitos entrando a la vez. Sólo se marca lo que llega DESPUÉS.
+    /// </summary>
+    protected override void OnParametersSet()
+    {
+        hitos = PickupOrderTimeline.Construir(Order, Updates);
+        var ids = hitos.Select(x => x.Id).ToList();
+        if (!cebado)
+        {
+            cebado = true;
+            foreach (var id in ids) vistos.Add(id);
+            llegados = [];
+            return;
+        }
+        llegados = ids.Where(id => !vistos.Contains(id)).ToHashSet();
+        foreach (var id in llegados) vistos.Add(id);
+        if (llegados.Count > 0)
+        {
+            var ultimo = hitos.Last(x => llegados.Contains(x.Id));
+            anuncio = $"{ultimo.Title}. {ultimo.Body}";
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (hitos.Count == 0) return;
+        try
+        {
+            motion ??= await JS.InvokeAsync<IJSObjectReference>("import",
+                $"./{Assets["Components/OrderTimeline.razor.js"]}");
+            await motion.InvokeVoidAsync("sync", raiz);
+        }
+        // Sin el módulo la historia sigue completa y en orden: lo único que se pierde es el viaje.
+        catch (JSException) { }
+        catch (JSDisconnectedException) { }
+        catch (InvalidOperationException) { }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (motion is null) return;
+        var cerrando = motion;
+        motion = null;
+        try { await cerrando.InvokeVoidAsync("dispose", raiz); await cerrando.DisposeAsync(); }
+        catch (JSException) { }
+        catch (JSDisconnectedException) { }
+    }
+}

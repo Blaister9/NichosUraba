@@ -29,6 +29,12 @@
             <h2>Tu último pedido</h2>
             <p><strong>@ultimoPedido.BusinessName · Pedido #@ultimoPedido.OrderNumber</strong></p>
             <p>Estado actual: <span class="status @ultimoPedido.Status.ToLowerInvariant()">@ultimoPedido.StatusLabel</span></p>
+            @* La misma frase que cierra la historia en el seguimiento. Aquí no se repite el
+               relato: se dice qué falta y se entra a leerlo. *@
+            @if (PickupOrderTimeline.LoQueSigue(ultimoPedido.Status) is { Length: > 0 } falta)
+            {
+                <p class="meta" data-testid="last-order-next">@falta</p>
+            }
             <a class="button-link btn-grande"
                href="/seguimiento/pedidos/@Uri.EscapeDataString(ultimoCodigo)">Ver seguimiento</a>
         </section>

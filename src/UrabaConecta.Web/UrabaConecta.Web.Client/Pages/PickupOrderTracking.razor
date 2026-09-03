@@ -6,7 +6,11 @@
 <a class="back-link" href="/">← Negocios de Urabá</a>
 @* El estado cambia solo cuando el negocio lo mueve. No sustituye a nada: el código sigue siendo
    la forma de volver aquí y leer lo mismo desde cualquier dispositivo. *@
-<OperationsLive EntityType="PickupOrder" TrackingCode="Code" OnChanged="Load" />
+@* TrackingCode va con arroba: sin ella Blazor pasa la cadena literal "Code" —un parámetro de tipo
+   string toma el atributo tal cual— y la suscripción en vivo se pedía para un código inexistente.
+   El hub respondía "Operación no encontrada", el componente se lo tragaba en su catch y la
+   pantalla sólo se enteraba de los cambios al recargar. EntityType sí es literal, a propósito. *@
+<OperationsLive EntityType="PickupOrder" TrackingCode="@Code" OnChanged="Load" />
 @if (error is not null) { <div class="error" role="alert">@error</div> }
 else if (order is null) { <p class="notice">Consultando pedido…</p> }
 else
@@ -23,7 +27,7 @@ else
         <p class="meta">Celular: @order.PhoneMasked</p>
         @foreach (var line in order.Lines) { <p>@line.Quantity × @line.ProductName <strong>@line.LineTotal.ToString("C0", Colombia)</strong></p> }
         <p class="total-pedido"><span>@Fulfillment.TotalLabel</span><strong>@order.Total.ToString("C0", Colombia)</strong></p>
-        <TrackingUpdates Items="updates" />
+        <OrderTimeline Order="order" Updates="updates" />
         <PushPrompt RegistrationPath="@($"/api/v1/public/orders/{Uri.EscapeDataString(Code)}/push-subscriptions")"
                     Title="Te avisamos cuando esté listo"
                     Description="Activa los avisos para no tener que revisar esta pantalla."
@@ -57,6 +61,7 @@ else
     /// <summary>
     /// Además del estado, las novedades que quedaron guardadas. Ahí está la respuesta a "no me
     /// llegó nada": si el aviso al teléfono se perdió, la novedad sigue escrita aquí con su hora.
+    /// Son también los hitos con los que <see cref="OrderTimeline"/> arma la historia del pedido.
     /// </summary>
     private IReadOnlyList<NotificationDto> updates = [];
 

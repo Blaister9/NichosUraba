@@ -223,6 +223,7 @@ public sealed class PickupSlotAvailabilityTests
         public Task<Product?> GetProductAsync(Guid businessId, Guid id, CancellationToken ct) => throw new NotSupportedException();
         public Task<Business?> GetBusinessAsync(Guid businessId, CancellationToken ct) => throw new NotSupportedException();
         public Task<PickupOrder?> FindByCodeAsync(string hash, CancellationToken ct) => throw new NotSupportedException();
+        public Task<PickupOrder?> ReadByCodeAsync(string hash, CancellationToken ct) => throw new NotSupportedException();
         public Task<PickupOrder?> GetOrderAsync(Guid businessId, Guid orderId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyList<PickupOrder>> ListOrdersAsync(Guid businessId, string? status, DateOnly? date, CancellationToken ct) => throw new NotSupportedException();
         public Task<bool> CanManageOrdersAsync(Guid userId, Guid businessId, CancellationToken ct) => throw new NotSupportedException();

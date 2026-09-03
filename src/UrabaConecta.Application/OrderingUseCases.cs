@@ -133,7 +133,9 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
     public async Task<PickupOrderTrackingDto?> TrackAsync(string code, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(code)) return null;
-        var order = await store.FindByCodeAsync(codes.Hash(code), ct);
+        // Lectura sin seguimiento: mientras la pantalla está abierta, el negocio mueve el pedido y
+        // hay que volver a leer lo que dice la base, no lo que se cargó al abrir.
+        var order = await store.ReadByCodeAsync(codes.Hash(code), ct);
         if (order is null) return null;
         var business = await store.GetBusinessAsync(order.BusinessId, ct);
         return TrackingDto(order, business!);
@@ -310,7 +312,7 @@ public sealed class OrderingUseCases(IOrderingStore store, IPublicCodeService co
             x.Quantity, x.LineTotal, null)).ToList(), o.CanPublicCancel, o.UpdatedAtUtc, o.Version,
         business.LocationMode.ToString(), business.OrderFulfillmentMode.ToString(),
         business.LocationMode == BusinessLocationMode.PublicPhysical ? business.Address : "", "",
-        business.CustomerInstructions);
+        business.CustomerInstructions, o.CreatedAtUtc);
     private PickupOrderLineDto LineDto(PickupOrderLine x) => new(x.ProductId, x.ProductNameSnapshot,
         x.UnitPriceSnapshot, x.Quantity, x.LineTotal,
         x.ProtectedNotes is null ? null : protector.Unprotect(x.ProtectedNotes));
