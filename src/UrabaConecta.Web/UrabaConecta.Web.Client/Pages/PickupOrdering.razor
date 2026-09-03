@@ -1,271 +1,317 @@
 @page "/negocios/{Slug}/pedidos"
 @rendermode InteractiveServer
+@implements IAsyncDisposable
 @inject IUrabaConectaApi Api
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
 <PageTitle>@(menu is null ? "Pedidos" : Fulfillment.PageTitle) | UrabáConecta</PageTitle>
 <a class="back-link" href="/negocios/@Slug">← Volver al negocio</a>
+<div class="pickup-journey" @ref="journey" data-active-product="@activeProduct"
+     data-order-stage="@(created is not null ? "confirmed" : busy ? "submitting" : "choosing")">
 @if (error is not null) { <div class="error" role="alert">@error</div> }
 @if (menu is null && error is null) { <p class="notice">Cargando menú…</p> }
-else if (menu is not null && created is null)
+else if (menu is not null)
 {
-    <div class="panel-header">
-        <p class="eyebrow">@menu.BusinessName</p><h1>@Fulfillment.PageTitle</h1>
-        <p class="meta">@menu.PublicMessage</p>
-        <p class="notice">@Fulfillment.FulfillmentSummary</p>
-    </div>
-    @* Atajos a cada parte de la carta. Con tres categorías sobra desplazarse a ciegas; con ocho es
-       la diferencia entre elegir y rendirse. *@
-    @if (menu.Categories.Count > 1)
-    {
-        <div class="chip-row" role="group" aria-label="Ir a una parte del menú">
-            @foreach (var category in menu.Categories)
-            {
-                <a class="chip" href="@Ancla($"categoria-{category.Id}")">@category.Name</a>
-            }
+    <div inert="@(created is not null)" class="pickup-catalog">
+        <div class="panel-header">
+            <p class="eyebrow">@menu.BusinessName</p><h1>@Fulfillment.PageTitle</h1>
+            <p class="meta">@menu.PublicMessage</p>
+            <p class="notice">@Fulfillment.FulfillmentSummary</p>
         </div>
-    }
-
-    @foreach (var category in menu.Categories)
-    {
-        <section class="bloque" id="categoria-@category.Id">
-            <h2>@category.Name</h2>
-            <div class="catalogo">
-                @foreach (var product in menu.Products.Where(x => x.CategoryId == category.Id))
+        @if (menu.Categories.Count > 1)
+        {
+            <div class="chip-row" role="group" aria-label="Ir a una parte del menú">
+                @foreach (var category in menu.Categories)
                 {
-                    <article class="catalogo-item tienda-producto @(Quantity(product.Id) > 0 ? "en-carrito" : null) @(!product.IsAvailable ? "agotado" : null)"
-                             id="producto-@product.Id" data-testid="product-card" data-tono="producto">
-                        @if (product.ImageUrl is { Length: > 0 } foto)
-                        {
-                            <img class="catalogo-foto" src="@foto" width="184" height="184" loading="lazy"
-                                 alt="@(product.ImageAltText ?? product.Name)" />
-                        }
-                        else
-                        {
-                            <span class="catalogo-foto sin-foto"><Icon Name="bolsa" Size="28" /></span>
-                        }
-                        <div class="catalogo-cuerpo">
-                            <h3>@product.Name</h3>
-                            @if (!string.IsNullOrWhiteSpace(product.Description)) { <p>@product.Description</p> }
-                        </div>
-                        <div class="catalogo-accion">
-                            <span class="precio">@product.ReferencePrice.ToString("C0", Colombia)</span>
+                    <a class="chip" href="@Ancla($"categoria-{category.Id}")">@category.Name</a>
+                }
+            </div>
+        }
+        @foreach (var category in menu.Categories)
+        {
+            <section class="bloque" id="categoria-@category.Id">
+                <h2>@category.Name</h2>
+                <div class="catalogo">
+                    @foreach (var product in menu.Products.Where(x => x.CategoryId == category.Id))
+                    {
+                        var selected = activeProduct == product.Id;
+                        var quantity = Quantity(product.Id);
+                        <article @key="product.Id" class="catalogo-item tienda-producto @(quantity > 0 ? "en-carrito" : null) @(!product.IsAvailable ? "agotado" : null)"
+                                 id="producto-@product.Id" data-testid="product-card" data-product-id="@product.Id"
+                                 data-selected="@(selected ? "true" : "false")" data-quantity="@quantity" data-tono="producto"
+                                 @onkeydown="e => CardKey(e, product.Id)">
+                            <button class="product-choice" type="button" disabled="@(!Ready || !product.IsAvailable)"
+                                    aria-label="Elegir @product.Name" aria-pressed="@(selected ? "true" : "false")"
+                                    aria-describedby="estado-@product.Id" @onclick="() => Select(product.Id)">
+                                @if (product.ImageUrl is { Length: > 0 } foto)
+                                {
+                                    <img class="catalogo-foto" src="@foto" width="184" height="184" loading="lazy"
+                                         alt="@(product.ImageAltText ?? product.Name)" />
+                                }
+                                else
+                                {
+                                    <span class="catalogo-foto sin-foto" aria-hidden="true"><Icon Name="bolsa" Size="28" /></span>
+                                }
+                            </button>
+                            <div class="catalogo-cuerpo">
+                                <h3>@product.Name</h3>
+                                @if (!string.IsNullOrWhiteSpace(product.Description)) { <p>@product.Description</p> }
+                                <span class="product-price">@product.ReferencePrice.ToString("C0", Colombia) <small>/ unidad</small></span>
+                            </div>
+                            <div class="product-state-row">
+                                <span id="estado-@product.Id" class="product-state" data-product-state>
+                                    @(!product.IsAvailable ? "No disponible" : selected ? "Seleccionado" : quantity > 0 ? "En tu pedido" : "Elige tu producto")
+                                </span>
+                                <button class="product-deselect" type="button" hidden="@(!selected)"
+                                        aria-label="Cerrar selección de @product.Name" @onclick="() => Deselect(product.Id)">Cerrar selección</button>
+                            </div>
                             @if (!product.IsAvailable)
                             {
-                                <span class="stock-status">No disponible</span>
-                                <PushPrompt
-                                    RegistrationPath="@($"/api/v1/public/businesses/{Slug}/products/{product.Id}/push-subscriptions")"
-                                    Title="¿Quieres este producto?"
-                                    Description="Te avisamos una sola vez cuando vuelva a estar disponible."
-                                    ActiveDescription="Te avisaremos cuando vuelva. Puedes cancelar cuando quieras."
-                                    ButtonLabel="Avísame cuando vuelva" Compact="true" />
+                                <div class="product-dock">
+                                    <PushPrompt RegistrationPath="@($"/api/v1/public/businesses/{Slug}/products/{product.Id}/push-subscriptions")"
+                                                Title="¿Quieres este producto?" Description="Te avisamos una sola vez cuando vuelva a estar disponible."
+                                                ActiveDescription="Te avisaremos cuando vuelva. Puedes cancelar cuando quieras."
+                                                ButtonLabel="Avísame cuando vuelva" Compact="true" />
+                                </div>
                             }
                             else
                             {
-                            @* Un control de una sola línea. Antes los dos botones ocupaban el ancho
-                               de la tarjeta y la cantidad quedaba suelta entre ellos: tres pisos
-                               para sumar una hamburguesa. *@
-                            <div class="stepper">
-                                <button class="secondary" type="button" aria-label="Quitar uno de @product.Name"
-                                        disabled="@(!Ready || Quantity(product.Id) == 0)" @onclick="() => Change(product.Id, -1)">−</button>
-                                <span class="cantidad" data-testid="quantity">@Quantity(product.Id)</span>
-                                <button class="secondary" type="button" aria-label="Agregar uno de @product.Name"
-                                        disabled="@(!Ready)" @onclick="() => Change(product.Id, 1)">+</button>
-                            </div>
+                                <div class="product-dock" data-testid="product-action" aria-label="Acciones de @product.Name" role="group">
+                                    <div class="stepper" role="group" aria-label="Cantidad de @product.Name">
+                                        <button class="secondary" type="button" aria-label="Quitar uno de @product.Name"
+                                                disabled="@(!Ready || quantity == 0)" @onclick="() => Change(product.Id, -1)">−</button>
+                                        <span class="product-quantity" data-testid="quantity" data-action-value>@quantity</span>
+                                        <button class="secondary" type="button" aria-label="Agregar uno de @product.Name"
+                                                disabled="@(!Ready || quantity == 20)" @onclick="() => Change(product.Id, 1)">+</button>
+                                    </div>
+                                    <span class="product-line-total" data-action-value aria-label="Importe de @product.Name">@((product.ReferencePrice * quantity).ToString("C0", Colombia))</span>
+                                    <a class="button-link primary product-cta" role="@(quantity > 0 ? "link" : "button")"
+                                            href="@(Ready ? Ancla(quantity > 0 ? "tu-pedido" : $"producto-{product.Id}") : null)"
+                                            aria-disabled="@(!Ready ? "true" : "false")" tabindex="@(Ready ? 0 : -1)"
+                                            aria-label="@(quantity > 0 ? $"Continuar con {product.Name}" : $"Agregar {product.Name} al pedido")"
+                                            @onclick="() => ProductAction(product.Id)" @onclick:preventDefault="@(quantity == 0)">
+                                        <span data-action-value>@(quantity > 0 ? "Continuar" : "Agregar al pedido")</span><span aria-hidden="true">→</span>
+                                    </a>
+                                </div>
                             }
-                        </div>
-                    </article>
-                }
-            </div>
-        </section>
-    }
-
-    @* El carrito viaja con quien pide. Sin esto había que bajar hasta el final para saber cuánto
-       llevaba sumado, y volver a subir si quería cambiar algo. *@
-    @if (CartCount > 0)
-    {
-        <div class="carrito-flotante">
-            <div>
-                <strong>@CartCount @(CartCount == 1 ? "unidad" : "unidades")</strong>
-                <span>@CartTotal.ToString("C0", Colombia)</span>
-            </div>
-            <a class="button-link" href="@Ancla("tu-pedido")">Continuar</a>
+                        </article>
+                    }
+                </div>
+            </section>
+        }
+        @* El total conserva espacio; el dock contextual vive en el producto y no tapa el teclado. *@
+        <div class="carrito-flotante" data-testid="cart-overview">
+            <div><strong>@CartCount @(CartCount == 1 ? "unidad" : "unidades")</strong><span data-action-value>@CartTotal.ToString("C0", Colombia)</span></div>
+            <a class="button-link" href="@Ancla("tu-pedido")" @onclick="Review">Continuar</a>
         </div>
-    }
-    <section class="config-form" id="tu-pedido">
-        <h2>Tu pedido</h2>
-        @* El detalle antes del total: quien va a dar su celular quiere confirmar primero que lo que
-           lleva es lo que quería. Un total suelto obliga a subir a revisar. *@
-        @if (CartCount > 0)
+    </div>
+    @* La superficie y sus líneas siguen montadas cuando llega la confirmación. *@
+    <section class="config-form order-composer" id="tu-pedido" data-testid="@(created is null ? "order-composer" : "order-created")" aria-labelledby="order-heading">
+        <div class="order-heading">
+            <div>
+                <p class="eyebrow" hidden="@(created is null)">@menu.BusinessName</p>
+                <h2 id="order-heading" tabindex="-1">@(created is null ? "Tu pedido" : $"Recibimos tu pedido #{created.OrderNumber}")</h2>
+            </div>
+            <button class="secondary" type="button" hidden="@(created is not null)" @onclick="ReturnToProducts">Volver a productos</button>
+        </div>
+        <ul class="resumen-lineas" aria-label="Productos de tu pedido">
+            @foreach (var line in Lines)
+            {
+                <li @key="line.Id" data-summary-product="@line.Id">
+                    <span class="unidades">@line.Quantity ×</span><span class="nombre">@line.Name</span>
+                    <span class="importe">@(line.Total?.ToString("C0", Colombia) ?? "—")</span>
+                </li>
+            }
+        </ul>
+        @if (CartCount == 0) { <p class="summary-empty">Todavía no has agregado nada. Elige algo del menú de arriba.</p> }
+        <p class="total-pedido"><span>@CartCount @(CartCount == 1 ? "unidad" : "unidades")</span><strong data-action-value>@((created?.Total ?? CartTotal).ToString("C0", Colombia))</strong></p>
+        @if (created is null)
         {
-            <ul class="resumen-lineas">
-                @foreach (var linea in Lineas)
-                {
-                    <li>
-                        <span class="unidades">@linea.Cantidad ×</span>
-                        <span class="nombre">@linea.Nombre</span>
-                        <span class="importe">@linea.Total.ToString("C0", Colombia)</span>
-                    </li>
-                }
-            </ul>
+            <p class="meta">@Fulfillment.SlotHelp</p>
+            @if (loadingData) { <p class="notice" role="status">Cargando horarios disponibles…</p> }
+            <EditForm Model="request" OnValidSubmit="Submit" FormName="pickup-order">
+                <fieldset disabled="@(!Ready || busy)">
+                    <DataAnnotationsValidator /><ValidationSummary />
+                    <label>@Fulfillment.SlotLabel
+                        <InputSelect @bind-Value="selectedSlot">
+                            <option value="">Selecciona una franja</option>
+                            @foreach (var slot in slots) { <option value="@slot.Start.ToString("O")">@Local(slot.Start)</option> }
+                        </InputSelect>
+                    </label>
+                    <label>Nombre o alias <InputText @bind-Value="request.CustomerAlias" autocomplete="nickname" /></label>
+                    <label>Celular <InputText @bind-Value="request.Phone" type="tel" inputmode="tel" autocomplete="tel" /></label>
+                    <label>Nota general (opcional) <InputTextArea @bind-Value="request.Notes" /></label>
+                    <label class="check-option"><InputCheckbox @bind-Value="request.ConsentAccepted" /> Acepto el uso de estos datos para preparar el pedido y contactarme.</label>
+                    <p class="meta">Consulta la <a href="/legal/politica-de-datos" target="_blank">política de tratamiento de datos</a>
+                        y el <a href="/legal/aviso-de-privacidad" target="_blank">aviso de privacidad</a>.
+                        Guardamos la fecha de tu aceptación y la versión vigente de la política.</p>
+                    <p class="meta">@Fulfillment.PaymentNotice</p>
+                    @if (!interactiveReady || loadingData) { <p class="notice" role="status">Preparando el formulario…</p> }
+                    <button class="primary btn-grande" disabled="@(!Ready || busy || CartCount == 0 || string.IsNullOrEmpty(selectedSlot))"
+                            aria-busy="@(busy ? "true" : "false")"><span data-action-value>@(busy ? "Enviando pedido…" : "Confirmar pedido")</span></button>
+                </fieldset>
+            </EditForm>
         }
         else
         {
-            <p class="summary-empty">Todavía no has agregado nada. Elige algo del menú de arriba.</p>
+            <div class="order-confirmation">
+                <p class="lead" role="status">Pedido recibido. @Fulfillment.ConfirmationText</p>
+                <p>Recogida: @Local(created.PickupStart)</p>
+                <p>El negocio lo confirma y prepara. Guarda este enlace: con él sigues el estado sin crear cuenta.</p>
+                <p class="order-code">Código de seguimiento <strong data-testid="tracking-code">@created.TrackingCode</strong></p>
+                <p class="notice" data-testid="activity-recovery-copy">Puedes consultar este pedido después en Mi actividad.</p>
+                <div class="ficha-acciones">
+                    <a class="button-link btn-grande" href="/seguimiento/pedidos/@created.TrackingCode">Seguir mi pedido</a>
+                    <a class="button-link secondary btn-grande" href="/seguimiento" data-testid="activity-recovery-cta">Mi actividad</a>
+                </div>
+                <PushPrompt RegistrationPath="@OrderPushPath" Title="Recibe cambios de este pedido"
+                            Description="Activa los avisos para enterarte cuando cambie su estado."
+                            ActiveDescription="Los avisos de este pedido están activos en este dispositivo."
+                            ButtonLabel="Activar avisos de este pedido"
+                            DeniedNote="El pedido queda guardado en Mi actividad aunque no actives avisos." />
+            </div>
         }
-        <p class="total-pedido"><span>@CartCount @(CartCount == 1 ? "unidad" : "unidades")</span><strong>@CartTotal.ToString("C0", Colombia)</strong></p>
-        <p class="meta">@Fulfillment.SlotHelp</p>
-        @* Al hidratar, el circuito crea una instancia nueva y vuelve a pedir menú y franjas: la
-           lista prerenderizada desaparece durante ese segundo. Antes el formulario ya estaba
-           habilitado en esa ventana, así que quien llegaba rápido encontraba el selector de hora
-           vacío y parecía que el pedido no funcionaba. Ahora se espera a tener los datos. *@
-        @if (loadingData) { <p class="notice" role="status">Cargando horarios disponibles…</p> }
-        <EditForm Model="request" OnValidSubmit="Submit" FormName="pickup-order">
-            <fieldset disabled="@(!Ready)">
-            <DataAnnotationsValidator /><ValidationSummary />
-            <label>@Fulfillment.SlotLabel
-                <InputSelect @bind-Value="selectedSlot">
-                    <option value="">Selecciona una franja</option>
-                    @foreach (var slot in slots) { <option value="@slot.Start.ToString("O")">@Local(slot.Start)</option> }
-                </InputSelect>
-            </label>
-            <label>Nombre o alias <InputText @bind-Value="request.CustomerAlias" /></label>
-            <label>Celular <InputText @bind-Value="request.Phone" /></label>
-            <label>Nota general (opcional) <InputTextArea @bind-Value="request.Notes" /></label>
-            <label class="check-option"><InputCheckbox @bind-Value="request.ConsentAccepted" />
-                Acepto el uso de estos datos para preparar el pedido y contactarme.</label>
-            <p class="meta">
-                Consulta la <a href="/legal/politica-de-datos" target="_blank">política de tratamiento de datos</a>
-                y el <a href="/legal/aviso-de-privacidad" target="_blank">aviso de privacidad</a>.
-                Guardamos la fecha de tu aceptación y la versión vigente de la política.
-            </p>
-            <p class="meta">@Fulfillment.PaymentNotice</p>
-            @if (!Ready) { <p class="notice" role="status">Preparando el formulario…</p> }
-            <button class="primary btn-grande" disabled="@(!Ready || busy || CartCount == 0 || string.IsNullOrEmpty(selectedSlot))"
-                    data-cargando="@(busy ? "true" : null)" aria-busy="@(busy ? "true" : null)">@(busy ? "Enviando pedido…" : "Confirmar pedido")</button>
-            </fieldset>
-        </EditForm>
     </section>
 }
-else if (created is not null)
-{
-    @* Una confirmación tiene que decir qué pasó, cuánto es y qué sigue. "Operación exitosa" no
-       le sirve a nadie que esté esperando su comida. *@
-    <section class="narrow" data-testid="order-created">
-        <p class="eyebrow">@menu?.BusinessName</p>
-        <h1>Recibimos tu pedido #@created.OrderNumber</h1>
-        <p class="lead">Total: @created.Total.ToString("C0", Colombia). @Fulfillment.ConfirmationText</p>
-        <p>El negocio lo confirma y prepara. Guarda este enlace: con él sigues el estado sin crear cuenta.</p>
-        <p class="notice" data-testid="activity-recovery-copy">
-            Puedes consultar este pedido después en Mi actividad.
-        </p>
-        <div class="ficha-acciones">
-            <a class="button-link btn-grande" href="/seguimiento/pedidos/@created.TrackingCode">Seguir mi pedido</a>
-            <a class="button-link secondary btn-grande" href="/seguimiento"
-               data-testid="activity-recovery-cta">Mi actividad</a>
-        </div>
-        <PushPrompt RegistrationPath="@OrderPushPath"
-                    Title="Recibe cambios de este pedido"
-                    Description="Activa los avisos para enterarte cuando cambie su estado."
-                    ActiveDescription="Los avisos de este pedido están activos en este dispositivo."
-                    ButtonLabel="Activar avisos de este pedido"
-                    DeniedNote="El pedido queda guardado en Mi actividad aunque no actives avisos." />
-    </section>
-}
+</div>
 
 @code {
     [Parameter] public string Slug { get; set; } = "";
-    private PickupMenuDto? menu; private IReadOnlyList<PickupSlotDto> slots = [];
+    private PickupMenuDto? menu;
+    private IReadOnlyList<PickupSlotDto> slots = [];
     private readonly Dictionary<Guid, int> quantities = [];
     private CreatePickupOrderRequest request = new();
-    private PickupOrderCreatedDto? created; private string selectedSlot = ""; private string? error; private bool busy;
-    private bool interactiveReady, loadingData = true;
-    private PublicOrderFulfillmentCopy Fulfillment => PublicOrderFulfillmentSemantics.For(
-        menu?.OrderFulfillmentMode, menu?.LocationMode, menu?.PublicAddress, menu?.Municipality);
-    /// <summary>El formulario sólo acepta interacción con el circuito vivo y los datos ya cargados.</summary>
-    private bool Ready => interactiveReady && !loadingData;
+    private PickupOrderCreatedDto? created;
+    private IReadOnlyList<Line>? confirmedLines;
+    private string selectedSlot = "";
+    private string? error, loadedSlug, pendingFocus;
+    private bool busy, interactiveReady, loadingData = true, disposed;
+    private Guid? activeProduct;
+    private ElementReference journey;
+    private IJSObjectReference? motion;
+    private PublicOrderFulfillmentCopy Fulfillment => PublicOrderFulfillmentSemantics.For(menu?.OrderFulfillmentMode, menu?.LocationMode, menu?.PublicAddress, menu?.Municipality);
+    private bool Ready => interactiveReady && !loadingData && !busy && created is null;
     private static readonly System.Globalization.CultureInfo Colombia = new("es-CO");
+
     protected override async Task OnParametersSetAsync()
     {
-        // El formulario declara la versión que mostró; el servidor rechaza cualquier otra.
+        if (loadedSlug == Slug) return;
+        loadedSlug = Slug;
+        quantities.Clear(); created = null; confirmedLines = null; activeProduct = null;
+        request = new(); selectedSlot = ""; error = null;
         try { request.ConsentNoticeVersion = (await Api.GetLegalInfoAsync()).PolicyVersion; }
         catch (ApiException) { }
-        // Secuencial a propósito: con InteractiveServer ambas llamadas comparten el AppDbContext
-        // del circuito y lanzarlas en paralelo lo rompería.
+        // El DbContext del circuito es compartido: las lecturas siguen siendo secuenciales.
         loadingData = true;
-        try { menu = await Api.GetPickupMenuAsync(Slug); slots = (await Api.GetPickupSlotsAsync(Slug)).Slots; }
+        try
+        {
+            menu = await Api.GetPickupMenuAsync(Slug);
+            slots = (await Api.GetPickupSlotsAsync(Slug)).Slots;
+            var fragment = new Uri(Navigation.Uri).Fragment;
+            if (fragment.StartsWith("#producto-", StringComparison.Ordinal) && Guid.TryParse(fragment[10..], out var id) && menu?.Products.Any(p => p.Id == id && p.IsAvailable) == true)
+            { activeProduct = id; pendingFocus = $"producto-{id}"; }
+        }
         catch (ApiException ex) { error = ex.Message; }
         catch (Exception) { error = "No pudimos cargar el menú. Recargue la página."; }
         finally { loadingData = false; }
     }
-    protected override void OnAfterRender(bool firstRender)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender) return;
-        interactiveReady = true;
-        StateHasChanged();
+        if (disposed) return;
+        if (firstRender) { interactiveReady = true; StateHasChanged(); return; }
+        try
+        {
+            motion ??= await JS.InvokeAsync<IJSObjectReference>("import", $"./{Assets["Pages/PickupOrdering.razor.js"]}");
+            if (disposed) return;
+            var focus = pendingFocus; pendingFocus = null;
+            await motion.InvokeVoidAsync("sync", journey, focus);
+        }
+        catch (JSException) { }
+        catch (TaskCanceledException) { }
     }
-    @* El documento declara <base href="/">, así que un href que sólo lleva fragmento se resuelve
-       contra la raíz del sitio: "#tu-pedido" apuntaba a la Home. Blazor comparaba rutas, veía dos
-       páginas distintas y navegaba de verdad, así que "Continuar" echaba a la Home y el carrito
-       —que vive en el circuito— se perdía. Colgando el fragmento de la ruta actual, Blazor
-       reconoce el salto dentro de la misma página y sólo desplaza. *@
-    private string Ancla(string fragmento) => $"{new Uri(Navigation.Uri).PathAndQuery}#{fragmento}";
+    private string Ancla(string fragment) => $"{new Uri(Navigation.Uri).PathAndQuery}#{fragment}";
     private int Quantity(Guid id) => quantities.GetValueOrDefault(id);
-    private void Change(Guid id, int delta) => quantities[id] = Math.Clamp(Quantity(id) + delta, 0, 20);
+    private void Select(Guid id) { if (Ready) activeProduct = id; }
+    private void Deselect(Guid id)
+    {
+        if (!Ready) return;
+        activeProduct = null; pendingFocus = $"producto-{id}";
+    }
+    private void CardKey(KeyboardEventArgs e, Guid id) { if (e.Key == "Escape" && activeProduct == id) Deselect(id); }
+    private void Change(Guid id, int delta)
+    {
+        if (!Ready || menu?.Products.Any(p => p.Id == id && p.IsAvailable) != true) return;
+        activeProduct = id; quantities[id] = Math.Clamp(Quantity(id) + delta, 0, 20);
+    }
+    private void ProductAction(Guid id)
+    {
+        if (!Ready) return;
+        activeProduct = id;
+        if (Quantity(id) == 0) Change(id, 1); else Review();
+    }
+    private void Review()
+    {
+        pendingFocus = "order-heading";
+    }
+    private void ReturnToProducts()
+    {
+        var id = activeProduct ?? menu?.Products.FirstOrDefault(p => p.IsAvailable)?.Id;
+        if (id is not null)
+        {
+            pendingFocus = $"producto-{id}";
+            Navigation.NavigateTo(Ancla(pendingFocus));
+        }
+    }
     private int CartCount => quantities.Values.Sum();
     private decimal CartTotal => menu?.Products.Sum(x => x.ReferencePrice * Quantity(x.Id)) ?? 0;
+    private sealed record Line(Guid Id, string Name, int Quantity, decimal? Total);
+    private IEnumerable<Line> Lines => created is not null && confirmedLines is not null ? confirmedLines :
+        menu?.Products.Where(x => Quantity(x.Id) > 0).Select(x => new Line(x.Id, x.Name, Quantity(x.Id), created is null ? x.ReferencePrice * Quantity(x.Id) : null)) ?? [];
 
-    private sealed record Linea(string Nombre, int Cantidad, decimal Total);
-
-    /// <summary>Lo que lleva el carrito, en el orden en que aparece en la carta.</summary>
-    private IEnumerable<Linea> Lineas => menu is null
-        ? []
-        : menu.Products.Where(x => Quantity(x.Id) > 0)
-            .Select(x => new Linea(x.Name, Quantity(x.Id), x.ReferencePrice * Quantity(x.Id)));
     private async Task Submit()
     {
-        // Guarda de doble envío: sin ella un segundo clic creaba un pedido duplicado.
-        if (busy) return;
+        if (!Ready || CartCount == 0) return;
         if (!DateTimeOffset.TryParse(selectedSlot, out var pickup)) { error = "Selecciona una franja."; return; }
         request.PickupStart = pickup;
-        request.Lines = quantities.Where(x => x.Value > 0)
-            .Select(x => new CreatePickupOrderLineRequest { ProductId = x.Key, Quantity = x.Value }).ToList();
+        request.Lines = quantities.Where(x => x.Value > 0).Select(x => new CreatePickupOrderLineRequest { ProductId = x.Key, Quantity = x.Value }).ToList();
         busy = true; error = null;
         try
         {
             created = await Api.CreatePickupOrderAsync(Slug, request);
-            // El tracking token es la credencial mínima de recuperación. No se guarda alias,
-            // teléfono, carrito ni estado: al volver, el estado se consulta al servidor.
-            try { await JS.InvokeVoidAsync("urabaOrderRecovery.save", created.TrackingCode); }
-            catch (JSException) { }
-
-            // Si la persona ya había permitido avisos desde Mi actividad, ahora sí existe el
-            // alcance concreto: se registra la PushSubscription contra ESTE pedido. Sin permiso
-            // previo no se abre un diálogo tardío; el control de la confirmación queda disponible.
-            try { await JS.InvokeAsync<PushState>("urabaPush.subscribeGranted", OrderPushPath); }
-            catch (JSException) { }
+            // La creación sólo devuelve total; las líneas de confirmación vienen del snapshot persistido.
+            // Una lectura fallida después de crear nunca debe habilitar otro envío.
+            try
+            {
+                var snapshot = await Api.GetPickupOrderAsync(created.TrackingCode);
+                if (snapshot is not null) confirmedLines = snapshot.Lines.Select(x => new Line(x.ProductId ?? Guid.Empty, x.ProductName, x.Quantity, x.LineTotal)).ToArray();
+            }
+            catch (Exception) { }
+            pendingFocus = "order-heading";
+            try { await JS.InvokeVoidAsync("urabaOrderRecovery.save", created.TrackingCode); } catch (JSException) { }
+            try { await JS.InvokeAsync<PushState>("urabaPush.subscribeGranted", OrderPushPath); } catch (JSException) { }
         }
         catch (ApiException ex)
         {
-            // Si la franja se llenó mientras el cliente escribía, se recargan las disponibles
-            // para que pueda elegir otra sin perder el carrito.
             error = ex.Message;
             try { slots = (await Api.GetPickupSlotsAsync(Slug)).Slots; } catch (ApiException) { }
         }
         catch (Exception) { error = "No pudimos crear el pedido. Intente de nuevo."; }
         finally { busy = false; }
     }
-    private static string Local(DateTimeOffset value) =>
-        TimeZoneInfo.ConvertTime(value, TimeZoneInfo.FindSystemTimeZoneById("America/Bogota"))
-            .ToString("ddd d MMM, h:mm tt", Colombia);
-
-    private string OrderPushPath => created is null ? "" :
-        $"/api/v1/public/orders/{Uri.EscapeDataString(created.TrackingCode)}/push-subscriptions";
-
+    private static string Local(DateTimeOffset value) => TimeZoneInfo.ConvertTime(value, TimeZoneInfo.FindSystemTimeZoneById("America/Bogota")).ToString("ddd d MMM, h:mm tt", Colombia);
+    private string OrderPushPath => created is null ? "" : $"/api/v1/public/orders/{Uri.EscapeDataString(created.TrackingCode)}/push-subscriptions";
     private sealed class PushState
     {
         public bool Active { get; set; }
         public string Permission { get; set; } = "default";
+    }
+    public async ValueTask DisposeAsync()
+    {
+        disposed = true;
+        if (motion is null) return;
+        try { await motion.InvokeVoidAsync("dispose", journey); await motion.DisposeAsync(); }
+        catch (JSException) { }
+        catch (TaskCanceledException) { }
     }
 }

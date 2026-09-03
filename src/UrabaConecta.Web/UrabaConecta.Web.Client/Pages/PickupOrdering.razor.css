@@ -1,0 +1,57 @@
+.pickup-journey { max-width: 880px; margin-inline: auto; }
+.pickup-journey [hidden] { display: none !important; }
+.pickup-journey .catalogo-item {
+    grid-template-columns: 84px minmax(0, 1fr); gap: 12px;
+    padding: 16px; overflow: clip; transition: none;
+    scroll-margin-block: 100px calc(var(--alto-nav) + 20px);
+}
+.pickup-journey .catalogo-item[data-selected=true] {
+    border-color: var(--marca-600); box-shadow: inset 0 0 0 1px var(--marca-600);
+    background: var(--marca-050);
+}
+.product-choice {
+    border: 0; padding: 0; background: transparent; border-radius: 12px;
+    width: 84px; height: 84px; min-height: 0; overflow: clip;
+}
+.product-choice .catalogo-foto { width: 84px; height: 84px; display: block; border-radius: 12px; }
+.product-choice .sin-foto { display: grid; }
+.product-choice:disabled { opacity: 1; }
+.product-price { font-weight: 800; color: var(--uc-amber-ink); font-variant-numeric: tabular-nums; }
+.product-price small { font-size: 12px; font-weight: 400; color: var(--texto-suave); }
+.product-state-row { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; min-height: 44px; gap: 8px; }
+.product-state { color: var(--texto-suave); font-size: 13px; }
+[data-selected=true] .product-state { font-weight: 700; color: var(--marca-700); }
+.product-deselect { min-height: 44px; padding: 6px 0 6px 8px; background: transparent; border: 0; color: var(--texto-suave); font-size: 12px; text-decoration: underline; }
+.product-dock { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center; border-top: 1px solid var(--borde); padding-top: 12px; }
+.product-dock .stepper { margin: 0; gap: 0; }
+.product-dock .product-quantity { width: 36px; min-width: 36px; text-align: center; font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.product-line-total { justify-self: end; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.product-cta { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 44px; }
+.product-cta span { display: inline-block; }
+.pickup-journey .carrito-flotante { position: static; margin-block: 24px; animation: none; background: var(--uc-jungle); color: var(--uc-paper); }
+.pickup-journey .order-composer { width: 100%; max-width: 680px; min-height: var(--order-reserved-height, 0px); align-content: start; margin-inline: auto; scroll-margin-top: 100px; animation: none; }
+.order-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 112px; margin-bottom: 20px; }
+.order-heading h2 { margin: 0; }
+.order-heading button { font-size: 13px; }
+.order-heading h1 { margin: 0; font-size: clamp(24px, 5vw, 34px); }
+[data-order-stage=confirmed] .order-heading { display: flex; flex-direction: column; align-items: start; justify-content: center; gap: 8px; }
+[data-order-stage=confirmed] .order-heading .eyebrow { margin: 0; }
+.pickup-journey .resumen-lineas li { align-items: baseline; padding-block: 12px; }
+.pickup-journey .resumen-lineas .nombre { min-width: 0; overflow-wrap: anywhere; }
+.order-code { display: grid; gap: 6px; font-size: 13px; }
+.order-code strong { overflow-wrap: anywhere; letter-spacing: .03em; font-size: 15px; }
+.pickup-journey :focus-visible { outline: 3px solid var(--marca-600); outline-offset: 3px; }
+.pickup-journey ::deep input, .pickup-journey ::deep select, .pickup-journey ::deep textarea { font-size: 16px; scroll-margin-block: 100px calc(var(--alto-nav) + 24px); }
+.pickup-journey ::deep fieldset { min-width: 0; }
+.pickup-journey ::deep button { scroll-margin-bottom: calc(var(--alto-nav) + 20px); }
+@media (min-width: 760px) {
+    .pickup-journey .catalogo-item { grid-template-columns: 96px minmax(0, 1fr) 288px; column-gap: 20px; }
+    .product-choice { grid-row: 1 / 3; width: 96px; height: 96px; }
+    .product-choice .catalogo-foto { width: 96px; height: 96px; }
+    .catalogo-cuerpo { grid-row: 1 / 3; }
+    .product-state-row { grid-column: 3; grid-row: 1; }
+    .product-dock { grid-column: 3; grid-row: 2; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .pickup-journey, .pickup-journey *, .pickup-journey ::deep * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
