@@ -1,0 +1,20 @@
+@inherits InputText
+
+@* CurrentValueAsString conserva el binding y las notificaciones de EditContext de
+   InputBase. El texto queda validable con input, sin depender de un change posterior. *@
+@if (Multiline)
+{
+    <textarea @attributes="AdditionalAttributes" name="@NameAttributeValue" class="@CssClass"
+              @bind="CurrentValueAsString" @bind:event="oninput" @onchange="Changed"></textarea>
+}
+else
+{
+    <input @attributes="AdditionalAttributes" name="@NameAttributeValue" class="@CssClass"
+           @bind="CurrentValueAsString" @bind:event="oninput" @onchange="Changed" />
+}
+
+@code {
+    [Parameter] public bool Multiline { get; set; }
+    // También admite clientes/autocompletado que sólo notifican change.
+    private void Changed(ChangeEventArgs args) => CurrentValueAsString = args.Value?.ToString();
+}

@@ -139,9 +139,9 @@ else if (menu is not null)
                             @foreach (var slot in slots) { <option value="@slot.Start.ToString("O")">@Local(slot.Start)</option> }
                         </InputSelect>
                     </label>
-                    <label>Nombre o alias <InputText @bind-Value="request.CustomerAlias" autocomplete="nickname" /></label>
-                    <label>Celular <InputText @bind-Value="request.Phone" type="tel" inputmode="tel" autocomplete="tel" /></label>
-                    <label>Nota general (opcional) <InputTextArea @bind-Value="request.Notes" /></label>
+                    <label>Nombre o alias <PickupOrderTextInput @bind-Value="request.CustomerAlias" autocomplete="nickname" /></label>
+                    <label>Celular <PickupOrderTextInput @bind-Value="request.Phone" type="tel" inputmode="tel" autocomplete="tel" /></label>
+                    <label>Nota general (opcional) <PickupOrderTextInput Multiline="true" @bind-Value="request.Notes" /></label>
                     <label class="check-option"><InputCheckbox @bind-Value="request.ConsentAccepted" /> Acepto el uso de estos datos para preparar el pedido y contactarme.</label>
                     <p class="meta">Consulta la <a href="/legal/politica-de-datos" target="_blank">política de tratamiento de datos</a>
                         y el <a href="/legal/aviso-de-privacidad" target="_blank">aviso de privacidad</a>.
